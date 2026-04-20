@@ -179,7 +179,9 @@ const CourtDetails: React.FC = () => {
       const { data: gamesData } = await supabase
         .from('games')
         .select('id, slot_id')
-        .in('slot_id', slotIds);
+        .in('slot_id', slotIds)
+        .not('status', 'in', '("expired","cancelled")')
+        .eq('is_open', true);
       (gamesData ?? []).forEach(g => { if (g.slot_id) gameBySlotId[g.slot_id] = g.id; });
     }
 

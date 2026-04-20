@@ -73,6 +73,13 @@ serve(async (req) => {
         .from('slots')
         .update({ is_available: true })
         .eq('id', booking.slot_id);
+
+      // Expire any game linked to this slot that wasn't already finished
+      await supabase
+        .from('games')
+        .update({ status: 'expired', is_open: false })
+        .eq('slot_id', booking.slot_id)
+        .not('status', 'in', '("completed","expired")');
     }
 
     // Notify the player
