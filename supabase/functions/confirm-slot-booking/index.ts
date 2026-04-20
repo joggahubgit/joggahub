@@ -31,11 +31,12 @@ serve(async (req) => {
     if (!slot.is_available) throw new Error('Este horário já foi reservado.');
 
     // Block if slot is linked to an active game (open or private)
-    // Cancelled open games have is_open=false and booking_id=null — allow those through
+    // Expired/cancelled games are ignored — their slot is considered free
     const { data: linkedGame } = await supabase
       .from('games')
       .select('id, is_open, booking_id')
       .eq('slot_id', slotId)
+      .not('status', 'in', '("expired","cancelled")')
       .maybeSingle();
 
     if (linkedGame) {
