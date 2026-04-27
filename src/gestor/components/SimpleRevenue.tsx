@@ -13,22 +13,30 @@ export function SimpleRevenue({ venueId }: SimpleRevenueProps) {
   useEffect(() => {
     if (!venueId) return;
     async function load() {
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
+
       // 1. Courts for this venue
       const { data: courtRows } = await supabase
         .from('courts').select('id').eq('venue_id', venueId);
       if (!courtRows?.length) return;
 
-      // 2. Slots for those courts
+      // 2. Slots for those courts this month
       const { data: slotRows } = await supabase
-        .from('slots').select('id').in('court_id', courtRows.map(c => c.id));
+        .from('slots').select('id')
+        .in('court_id', courtRows.map(c => c.id))
+        .gte('start_time', monthStart)
+        .lte('start_time', monthEnd);
       if (!slotRows?.length) return;
 
-      // 3. Confirmed bookings for those slots
+      // 3. Paid bookings for those slots
       const { data: bookingRows } = await supabase
         .from('bookings')
         .select('total_price')
         .in('slot_id', slotRows.map(s => s.id))
-        .eq('status', 'confirmed');
+        .eq('payment_status', 'paid')
+        .neq('status', 'cancelled');
 
       if (bookingRows) {
         const total = bookingRows.reduce((sum, b) => sum + (b.total_price || 0), 0);
@@ -39,8 +47,8 @@ export function SimpleRevenue({ venueId }: SimpleRevenueProps) {
     load();
   }, [venueId]);
 
-  const commission = grossRevenue * 0.15;
-  const netRevenue = grossRevenue - commission;
+  // Taxa cobrada do jogador (não deduzida do gestor)
+  const platformFee = grossRevenue * 0.08 + totalBookings * 2.50;
   const avgTicket = totalBookings > 0 ? Math.round(grossRevenue / totalBookings) : 0;
 
   return (
@@ -68,12 +76,13 @@ export function SimpleRevenue({ venueId }: SimpleRevenueProps) {
               <TrendingUp className="w-6 h-6 text-orange-600" />
             </div>
             <div>
-              <p className="text-sm text-gray-600">Comissão JoggaHub (15%)</p>
+              <p className="text-sm text-gray-600">Taxa JoggaHub ao Jogador (8% + R$ 2,50/reserva)</p>
               <p className="text-3xl font-bold text-orange-600">
-                - R$ {commission.toLocaleString('pt-BR')}
+                R$ {platformFee.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
           </div>
+          <p className="text-xs text-gray-400 mt-1">Cobrado do jogador — não deduzido do clube</p>
         </div>
 
         <div className="bg-gradient-to-br from-purple-600 to-purple-700 rounded-xl p-6 shadow-lg">
@@ -82,9 +91,9 @@ export function SimpleRevenue({ venueId }: SimpleRevenueProps) {
               <Wallet className="w-6 h-6 text-white" />
             </div>
             <div>
-              <p className="text-sm text-purple-200">Receita Líquida Estimada</p>
+              <p className="text-sm text-purple-200">A Receber pelo Clube</p>
               <p className="text-4xl font-bold text-white">
-                R$ {netRevenue.toLocaleString('pt-BR')}
+                R$ {grossRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
           </div>

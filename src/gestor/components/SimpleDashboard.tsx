@@ -27,6 +27,8 @@ export function SimpleDashboard({ venueId, onCreateAvailability, onNavigate }: P
   useEffect(() => {
     if (!venueId) return;
     fetchTodayBookings();
+    const interval = setInterval(fetchTodayBookings, 30_000);
+    return () => clearInterval(interval);
   }, [venueId]);
 
   async function fetchTodayBookings() {
