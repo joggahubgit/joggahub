@@ -53,7 +53,7 @@ export default function OpenGameReview() {
     return null;
   }
 
-  const { serviceFee, total } = calcFees(state.pricePerPlayer);
+  const { fee: serviceFee, total } = calcFees(state.pricePerPlayer);
 
   async function handleConfirm() {
     setCreating(true);
@@ -179,7 +179,7 @@ export default function OpenGameReview() {
               <span className="font-semibold text-gray-900">R$ {state.pricePerPlayer.toFixed(2)}/pessoa</span>
             </div>
             <div className="flex justify-between text-sm text-gray-600">
-              <span>Taxa de serviço (15%)</span>
+              <span>Taxa de serviço (8% + R$ 2,50)</span>
               <span className="font-semibold text-gray-900">R$ {serviceFee.toFixed(2)}</span>
             </div>
             <div className="border-t border-gray-100 pt-3 flex items-center justify-between">

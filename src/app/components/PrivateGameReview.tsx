@@ -6,13 +6,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-
-const SERVICE_FEE_PERCENT = 0.15;
-
-function calcFees(base: number) {
-  const fee = Math.ceil(base * SERVICE_FEE_PERCENT * 100) / 100;
-  return { base, fee, total: base + fee };
-}
+import { calcFees } from '@/app/lib/checkout';
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('pt-BR', {
@@ -227,7 +221,7 @@ export default function PrivateGameReview() {
               </div>
             )}
             <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Taxa de serviço (15%)</span>
+              <span className="text-gray-600">Taxa de serviço (8% + R$ 2,50)</span>
               <span className="font-semibold text-gray-900">R$ {fee.toFixed(2)}</span>
             </div>
             <div className="flex justify-between pt-3 mt-1 border-t border-gray-100">

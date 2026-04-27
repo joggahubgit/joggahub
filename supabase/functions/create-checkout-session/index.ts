@@ -56,7 +56,7 @@ serve(async (req) => {
             unit_amount: Math.round(serviceFee * 100),
             product_data: {
               name: 'Taxa de serviço JoggaHub',
-              description: '15% sobre o valor da vaga',
+              description: '8% + R$2,50 por transação',
             },
           },
           quantity: 1,

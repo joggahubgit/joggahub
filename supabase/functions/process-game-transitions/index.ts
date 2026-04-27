@@ -46,6 +46,8 @@ const PENDING_RESULTS_DELAY_MINUTES = 5;
 const RESULT_WINDOW_HOURS = 12;
 const XP_PARTICIPATION = 15;
 const XP_MVP_BONUS = 30;
+const PLATFORM_FEE_PERCENT = 0.08;
+const PLATFORM_FEE_FIXED = 2.50;
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -329,7 +331,7 @@ serve(async (req) => {
           continue;
         }
 
-        const capturePerPlayer = (courtPriceOpen / N) * 1.15;
+        const capturePerPlayer = (courtPriceOpen / N) * (1 + PLATFORM_FEE_PERCENT) + PLATFORM_FEE_FIXED;
 
         const { data: players } = await supabase
           .from('game_players')
@@ -416,16 +418,16 @@ serve(async (req) => {
 
         const N = game.current_players ?? 1; // total players incl. organizer
 
-        // Per-joiner capture amount (capped at what they authorized: courtPrice/10 * 1.15)
-        const joinerShare = (courtPriceVal / Math.max(N, 10)) * 1.15;
+        // Per-joiner capture (capped at hold: courtPrice/10 * 1.08 + 2.50)
+        const joinerShare = (courtPriceVal / Math.max(N, 10)) * (1 + PLATFORM_FEE_PERCENT) + PLATFORM_FEE_FIXED;
 
-        // Organizer capture = total court cost minus all joiners' shares
+        // Organizer capture = their court share + platform fee
         const joinersCount = N - 1;
         let organizerCapture: number;
         if (N >= 10) {
-          organizerCapture = (courtPriceVal / N) * 1.15;
+          organizerCapture = (courtPriceVal / N) * (1 + PLATFORM_FEE_PERCENT) + PLATFORM_FEE_FIXED;
         } else {
-          organizerCapture = courtPriceVal * 1.15 * (11 - N) / 10;
+          organizerCapture = (courtPriceVal * (11 - N) / 10) * (1 + PLATFORM_FEE_PERCENT) + PLATFORM_FEE_FIXED;
         }
 
         try {

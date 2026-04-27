@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { X, Clock, Users, MapPin, ShieldCheck, ChevronDown, ChevronUp, Loader2, CheckCircle, Lock } from 'lucide-react';
-import { redirectToCheckout } from '@/app/lib/checkout';
+import { redirectToCheckout, calcFees } from '@/app/lib/checkout';
 import { supabase } from '@/lib/supabase';
 import { notifyGamePlayers } from '@/app/lib/notify';
 
@@ -60,6 +60,7 @@ export default function JoinGameReview() {
 
   const isSelf = state.mode === 'join_self';
   const isFree = state.gamePayMode === 'full' || state.pricePerPlayer === 0;
+  const { fee, total: priceTotal } = calcFees(state.pricePerPlayer);
 
   async function handleConfirmFree() {
     setConfirming(true);
@@ -211,16 +212,28 @@ export default function JoinGameReview() {
 
         {/* Price */}
         <div className="bg-white rounded-2xl border border-gray-200 p-5">
+          {!isFree && (
+            <div className="space-y-2 mb-3">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Valor da vaga</span>
+                <span className="font-semibold text-gray-900">R$ {state.pricePerPlayer.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Taxa de serviço (8% + R$ 2,50)</span>
+                <span className="font-semibold text-gray-900">R$ {fee.toFixed(2)}</span>
+              </div>
+            </div>
+          )}
           <div className="border-t border-gray-100 pt-3 flex items-center justify-between">
             <div>
               <p className="font-bold text-gray-900">Total</p>
               <p className="text-xs text-gray-400 mt-0.5">
-                {isFree ? 'Organizador pagou a quadra completa' : 'Valor da vaga'}
+                {isFree ? 'Organizador pagou a quadra completa' : 'Inclui taxa de serviço'}
               </p>
             </div>
             {isFree
               ? <p className="text-2xl font-bold text-green-600">Grátis</p>
-              : <p className="text-2xl font-bold text-violet-600">R$ {state.pricePerPlayer}</p>
+              : <p className="text-2xl font-bold text-violet-600">R$ {priceTotal.toFixed(2)}</p>
             }
           </div>
         </div>
@@ -264,8 +277,8 @@ export default function JoinGameReview() {
             : isFree
               ? <><CheckCircle className="w-5 h-5" /> Confirmar entrada · Grátis</>
               : isSelf
-                ? <><CheckCircle className="w-5 h-5" /> Pagar minha parte · R$ {state.pricePerPlayer}</>
-                : <><CheckCircle className="w-5 h-5" /> Pagar vaga de {state.playerName.split(' ')[0]} · R$ {state.pricePerPlayer}</>}
+                ? <><CheckCircle className="w-5 h-5" /> Pagar minha parte · R$ {priceTotal.toFixed(2)}</>
+                : <><CheckCircle className="w-5 h-5" /> Pagar vaga de {state.playerName.split(' ')[0]} · R$ {priceTotal.toFixed(2)}</>}
         </button>
       </div>
     </div>

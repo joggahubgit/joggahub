@@ -1,11 +1,9 @@
 import { supabase } from '@/lib/supabase';
+import { PLATFORM_FEE_PERCENT, PLATFORM_FEE_FIXED } from './gameConfig';
 
-const SERVICE_FEE_PERCENT = 0.15;
-
-export function calcFees(vagaPrice: number) {
-  const serviceFee = Math.ceil(vagaPrice * SERVICE_FEE_PERCENT * 100) / 100;
-  const total = vagaPrice + serviceFee;
-  return { vagaPrice, serviceFee, total };
+export function calcFees(base: number) {
+  const fee = Math.ceil((base * PLATFORM_FEE_PERCENT + PLATFORM_FEE_FIXED) * 100) / 100;
+  return { base, fee, total: base + fee };
 }
 
 interface CheckoutParams {
@@ -31,7 +29,7 @@ interface CheckoutParams {
 }
 
 export async function redirectToCheckout(params: CheckoutParams) {
-  const { serviceFee, total } = calcFees(params.vagaPrice);
+  const { fee: serviceFee, total } = calcFees(params.vagaPrice);
 
   const origin = window.location.origin;
   const slotParam = params.slotId ? `&slotId=${params.slotId}` : '';

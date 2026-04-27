@@ -8,6 +8,10 @@
  * or remove the futsal-specific override in PaymentSuccess.tsx.
  */
 
+/** Platform fee applied to every transaction. */
+export const PLATFORM_FEE_PERCENT = 0.08;
+export const PLATFORM_FEE_FIXED = 2.50;
+
 /** Minimum players required to confirm any game. */
 export const DEFAULT_MIN_PLAYERS = 10;
 
