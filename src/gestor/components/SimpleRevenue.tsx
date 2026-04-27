@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { DollarSign, TrendingUp, Wallet } from 'lucide-react';
+import { DollarSign, Wallet } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
 
 interface SimpleRevenueProps {
@@ -47,8 +47,6 @@ export function SimpleRevenue({ venueId }: SimpleRevenueProps) {
     load();
   }, [venueId]);
 
-  // Taxa cobrada do jogador (não deduzida do gestor)
-  const platformFee = grossRevenue * 0.08 + totalBookings * 2.50;
   const avgTicket = totalBookings > 0 ? Math.round(grossRevenue / totalBookings) : 0;
 
   return (
@@ -70,28 +68,13 @@ export function SimpleRevenue({ venueId }: SimpleRevenueProps) {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border-2 border-gray-100 p-6">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-              <TrendingUp className="w-6 h-6 text-orange-600" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Taxa JoggaHub ao Jogador (8% + R$ 2,50/reserva)</p>
-              <p className="text-3xl font-bold text-orange-600">
-                R$ {platformFee.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </p>
-            </div>
-          </div>
-          <p className="text-xs text-gray-400 mt-1">Cobrado do jogador — não deduzido do clube</p>
-        </div>
-
         <div className="bg-gradient-to-br from-purple-600 to-purple-700 rounded-xl p-6 shadow-lg">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-12 h-12 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
               <Wallet className="w-6 h-6 text-white" />
             </div>
             <div>
-              <p className="text-sm text-purple-200">A Receber pelo Clube</p>
+              <p className="text-sm text-purple-200">A Receber</p>
               <p className="text-4xl font-bold text-white">
                 R$ {grossRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
