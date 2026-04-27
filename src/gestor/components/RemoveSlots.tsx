@@ -4,7 +4,7 @@ import {
   CalendarIcon, Users, CreditCard, Bell,
   ChevronRight, XCircle,
 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase-gestor';
 
 interface Props {
   onClose: () => void;

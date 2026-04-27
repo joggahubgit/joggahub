@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { X, Clock, Users, MapPin, ShieldCheck, ChevronDown, ChevronUp, Loader2, CheckCircle } from 'lucide-react';
+import { X, Clock, Users, MapPin, ShieldCheck, ChevronDown, ChevronUp, Loader2, CheckCircle, Lock } from 'lucide-react';
 import { redirectToCheckout } from '@/app/lib/checkout';
+import { supabase } from '@/lib/supabase';
+import { notifyGamePlayers } from '@/app/lib/notify';
 
 interface JoinState {
   gameId: string;
@@ -14,6 +16,11 @@ interface JoinState {
   time: string;
   endTime: string;
   pricePerPlayer: number;
+  mode?: 'join_self' | 'join_other';
+  isPrivate?: boolean;
+  currentPlayers?: number;
+  maxPlayers?: number;
+  gamePayMode?: 'split' | 'full';
 }
 
 const SPORT_LABELS: Record<string, string> = {
@@ -51,7 +58,64 @@ export default function JoinGameReview() {
       : `${Math.floor(durationMins / 60)}h${durationMins % 60}min`
     : '';
 
-  async function handleConfirm() {
+  const isSelf = state.mode === 'join_self';
+  const isFree = state.gamePayMode === 'full' || state.pricePerPlayer === 0;
+
+  async function handleConfirmFree() {
+    setConfirming(true);
+    setError('');
+    try {
+      // Check if already in game
+      const { data: existing } = await supabase
+        .from('game_players')
+        .select('id')
+        .eq('game_id', state.gameId)
+        .eq('player_id', state.playerId)
+        .maybeSingle();
+
+      if (existing) {
+        navigate(`/open-game/${state.gameId}`, { replace: true });
+        return;
+      }
+
+      // Add player directly (no payment needed)
+      const { error: insertErr } = await supabase.from('game_players').insert({
+        game_id: state.gameId,
+        player_id: state.playerId,
+        player_name: state.playerName,
+        paid: true,
+      });
+      if (insertErr) throw new Error(insertErr.message);
+
+      // Increment current_players
+      const { data: game } = await supabase
+        .from('games')
+        .select('current_players, max_players')
+        .eq('id', state.gameId)
+        .single();
+      const newCount = (game?.current_players ?? 1) + 1;
+      await supabase
+        .from('games')
+        .update({ current_players: newCount })
+        .eq('id', state.gameId);
+
+      // Notify all other players
+      await notifyGamePlayers(
+        state.gameId,
+        state.playerId,
+        'game_joined',
+        'Novo jogador entrou!',
+        `${state.playerName} entrou na partida. Agora são ${newCount}/${game?.max_players ?? state.maxPlayers} jogadores.`,
+      );
+
+      navigate(`/open-game/${state.gameId}`, { replace: true });
+    } catch (e: any) {
+      setError(e.message);
+      setConfirming(false);
+    }
+  }
+
+  async function handleConfirmPaid() {
     setConfirming(true);
     setError('');
     try {
@@ -65,7 +129,7 @@ export default function JoinGameReview() {
         date: state.date,
         time: state.time,
         vagaPrice: state.pricePerPlayer,
-        mode: 'join_other',
+        mode: isSelf ? 'join_self' : 'join_other',
       });
     } catch (e: any) {
       setError(e.message);
@@ -85,13 +149,36 @@ export default function JoinGameReview() {
 
       <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
 
-        {/* Player being added */}
+        {/* Private game status */}
+        {state.isPrivate && (
+          <div className="bg-gray-900 rounded-2xl px-5 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Lock className="w-4 h-4 text-gray-400" />
+              <span className="text-sm font-bold text-white">Partida Privada</span>
+            </div>
+            {state.currentPlayers !== undefined && state.maxPlayers !== undefined && (
+              <div className="flex items-center gap-1.5">
+                <Users className="w-4 h-4 text-gray-400" />
+                <span className="text-sm font-semibold text-gray-300">
+                  {state.currentPlayers}/{state.maxPlayers} jogadores
+                </span>
+                {state.maxPlayers - state.currentPlayers > 0 && (
+                  <span className="ml-1 text-xs bg-amber-400 text-gray-900 font-bold px-2 py-0.5 rounded-full">
+                    {state.maxPlayers - state.currentPlayers} {state.maxPlayers - state.currentPlayers === 1 ? 'vaga' : 'vagas'}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Player */}
         <div className="bg-white rounded-2xl border border-gray-200 px-5 py-4 flex items-center gap-4">
           <div className="w-12 h-12 bg-violet-600 rounded-full flex items-center justify-center text-white font-bold text-xl flex-shrink-0">
             {state.playerName.charAt(0).toUpperCase()}
           </div>
           <div>
-            <p className="text-xs text-gray-400 mb-0.5">Adicionando jogador</p>
+            <p className="text-xs text-gray-400 mb-0.5">{isSelf ? 'Confirmando sua entrada' : 'Adicionando jogador'}</p>
             <p className="font-bold text-gray-900">{state.playerName}</p>
           </div>
         </div>
@@ -127,9 +214,14 @@ export default function JoinGameReview() {
           <div className="border-t border-gray-100 pt-3 flex items-center justify-between">
             <div>
               <p className="font-bold text-gray-900">Total</p>
-              <p className="text-xs text-gray-400 mt-0.5">Valor da vaga</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {isFree ? 'Organizador pagou a quadra completa' : 'Valor da vaga'}
+              </p>
             </div>
-            <p className="text-2xl font-bold text-violet-600">R$ {state.pricePerPlayer}</p>
+            {isFree
+              ? <p className="text-2xl font-bold text-green-600">Grátis</p>
+              : <p className="text-2xl font-bold text-violet-600">R$ {state.pricePerPlayer}</p>
+            }
           </div>
         </div>
 
@@ -163,13 +255,17 @@ export default function JoinGameReview() {
       {/* CTA */}
       <div className="px-5 py-5 bg-white border-t border-gray-100">
         <button
-          onClick={handleConfirm}
+          onClick={isFree ? handleConfirmFree : handleConfirmPaid}
           disabled={confirming}
           className="w-full bg-violet-600 text-white py-4 rounded-2xl font-bold text-base hover:bg-violet-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
         >
           {confirming
             ? <><Loader2 className="w-5 h-5 animate-spin" /> Confirmando...</>
-            : <><CheckCircle className="w-5 h-5" /> Pagar vaga de {state.playerName.split(' ')[0]} · R$ {state.pricePerPlayer}</>}
+            : isFree
+              ? <><CheckCircle className="w-5 h-5" /> Confirmar entrada · Grátis</>
+              : isSelf
+                ? <><CheckCircle className="w-5 h-5" /> Pagar minha parte · R$ {state.pricePerPlayer}</>
+                : <><CheckCircle className="w-5 h-5" /> Pagar vaga de {state.playerName.split(' ')[0]} · R$ {state.pricePerPlayer}</>}
         </button>
       </div>
     </div>

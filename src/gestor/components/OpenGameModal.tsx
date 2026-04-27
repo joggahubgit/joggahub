@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, Users, MapPin, Clock, DollarSign, CheckCircle, AlertCircle, Loader2, ChevronLeft, Trophy, XCircle, ShieldCheck, Hourglass, Star } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase-gestor';
 import { getMinPlayersForSport } from '@/app/lib/gameConfig';
 
 interface Props {

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle, Loader2, Share2, Copy } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { notify } from '@/app/lib/notify';
+import { notify, notifyGamePlayers } from '@/app/lib/notify';
 import { getMinPlayersForSport } from '@/app/lib/gameConfig';
 
 export default function PaymentSuccess() {
@@ -34,6 +34,8 @@ export default function PaymentSuccess() {
   const courtPrice = Number(params.get('courtPrice') ?? '0');
   const organizerShare = Number(params.get('organizerShare') ?? '0');
   const sessionId = params.get('session_id') ?? '';
+  // organizer open game
+  const totalPrice = Number(params.get('totalPrice') ?? '0');
 
   const [createdGameId, setCreatedGameId] = useState('');
 
@@ -111,13 +113,16 @@ export default function PaymentSuccess() {
               slot_id: slotId || null,
               booking_id: bookingId,
               scheduled_at: scheduledAt,
-              max_players: maxPlayers,
+              max_players: payMode === 'split' ? 18 : maxPlayers,
               current_players: 1,
-              price_per_player: payMode === 'split' ? courtPrice / maxPlayers : courtPrice,
+              price_per_player: payMode === 'split' ? courtPrice / 10 : 0,
+              court_price: courtPrice || null,
+              pay_mode: payMode ?? 'full',
               sport_type: courtSport || null,
               is_open: false,
               status: 'confirmed_booking',
               game_type: 'casual',
+              ...(payMode === 'split' && sessionId ? { stripe_session_id: sessionId } : {}),
             })
             .select('id')
             .single();
@@ -147,17 +152,6 @@ export default function PaymentSuccess() {
             setPrivateGameId(gameRow.id);
           }
 
-          // 5. For split: partially capture only the organizer's share — the rest stays as a hold
-          if (payMode === 'split' && sessionId && organizerShare > 0) {
-            const { error: captureErr } = await supabase.functions.invoke('capture-partial-payment', {
-              body: { sessionId, captureAmount: organizerShare },
-            });
-            if (captureErr) {
-              console.error('[PaymentSuccess] partial capture error:', captureErr);
-              // Non-fatal: booking and game record are already created
-            }
-          }
-
           setDone(true);
           return;
         }
@@ -179,6 +173,7 @@ export default function PaymentSuccess() {
               max_players: maxPlayers,
               current_players: 1,
               price_per_player: pricePerPlayer,
+              court_price: totalPrice || null,
               sport_type: courtSport || null,
               is_open: true,
               game_type: 'casual',
@@ -215,6 +210,39 @@ export default function PaymentSuccess() {
           return;
         }
 
+        // ── PAY RESERVATION MODE — organizer paying for a gestor-created booking ──
+        if (mode === 'pay_reservation') {
+          // Mark player as paid in game_players (row already exists, just flip paid flag)
+          const { error: updateErr } = await supabase
+            .from('game_players')
+            .update({ paid: true })
+            .eq('game_id', gameId)
+            .eq('player_id', playerId);
+
+          if (updateErr) {
+            setError(`Erro ao confirmar pagamento: ${updateErr.message}`);
+            return;
+          }
+
+          // Also mark the linked booking as paid
+          const { data: g } = await supabase
+            .from('games')
+            .select('booking_id')
+            .eq('id', gameId)
+            .single();
+
+          if (g?.booking_id) {
+            await supabase
+              .from('bookings')
+              .update({ payment_status: 'paid' })
+              .eq('id', g.booking_id);
+          }
+
+          setCreatedGameId(gameId);
+          setDone(true);
+          return;
+        }
+
         // Fetch game to get current count + sport_type for confirmation check
         const { data: game } = await supabase
           .from('games')
@@ -223,8 +251,17 @@ export default function PaymentSuccess() {
           .single();
 
         if (!game) { setError('Partida não encontrada.'); return; }
-        if (game.status === 'expired' || !game.is_open) { setError('Esta partida foi encerrada ou cancelada. Não é possível confirmar o pagamento.'); return; }
+        if (game.status === 'expired' || game.status === 'cancelled') { setError('Esta partida foi encerrada ou cancelada. Não é possível confirmar o pagamento.'); return; }
         if (game.current_players >= game.max_players) { setError('Partida já está completa.'); return; }
+
+        // For split private game joiners: resolve payment_intent_id from Stripe session
+        let stripePaymentIntentId: string | null = null;
+        if (payMode === 'split' && sessionId) {
+          const { data: siData } = await supabase.functions.invoke('get-stripe-session', {
+            body: { sessionId },
+          });
+          stripePaymentIntentId = siData?.paymentIntentId ?? null;
+        }
 
         // Add player to game_players
         const { error: insertErr } = await supabase.from('game_players').insert({
@@ -232,6 +269,7 @@ export default function PaymentSuccess() {
           player_id: playerId,
           player_name: playerName,
           paid: true,
+          ...(stripePaymentIntentId ? { stripe_payment_intent_id: stripePaymentIntentId } : {}),
         });
 
         if (insertErr && insertErr.code !== '23505') {
@@ -255,14 +293,14 @@ export default function PaymentSuccess() {
           })
           .eq('id', gameId);
 
-        // Notify organizer
-        if (game.organizer_id && game.organizer_id !== playerId) {
-          const label = mode === 'join_other'
-            ? `${playerName} foi adicionado à sua partida.`
-            : `${playerName} entrou na sua partida. Agora são ${newCount}/${game.max_players} jogadores.`;
-
-          await notify(game.organizer_id, 'game_joined', 'Novo jogador confirmado!', label, gameId);
-        }
+        // Notify all existing players (except the one who just joined)
+        await notifyGamePlayers(
+          gameId,
+          playerId,
+          'game_joined',
+          'Novo jogador entrou!',
+          `${playerName} entrou na partida. Agora são ${newCount}/${game.max_players} jogadores.`,
+        );
 
         // Notify organizer of confirmation when minimum reached
         if (shouldConfirm && game.organizer_id) {
@@ -290,6 +328,7 @@ export default function PaymentSuccess() {
     if (mode === 'slot') confirm();
     else if (mode === 'private_game') confirm();
     else if (mode === 'organizer' && playerId) confirm();
+    else if (mode === 'pay_reservation' && playerId && gameId) confirm();
     else if (playerId && gameId) confirm();
     else setError('Parâmetros inválidos.');
   }, []);
@@ -449,7 +488,7 @@ export default function PaymentSuccess() {
             : 'Você está inscrito na partida. Boa sorte!'}
         </p>
         <button
-          onClick={() => navigate(`/open-game/${createdGameId}`, { replace: true })}
+          onClick={() => navigate(`/open-game/${createdGameId || gameId}`, { replace: true })}
           className="w-full bg-violet-600 text-white py-4 rounded-2xl font-bold hover:bg-violet-700 transition-colors"
         >
           Ver partida

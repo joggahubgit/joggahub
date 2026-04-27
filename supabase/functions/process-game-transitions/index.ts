@@ -58,7 +58,9 @@ serve(async (req) => {
   );
 
   const results = {
+    expiredPendingPayments: [] as string[],
     autoCancelled: [] as string[],
+    openGameCaptured: [] as string[],
     retroactivelyConfirmed: [] as string[],
     retroactivelyExpired: [] as string[],
     transitionedToPendingResults: [] as string[],
@@ -67,14 +69,84 @@ serve(async (req) => {
   };
 
   // Helper: resolve min players for a sport type
-  function resolveMinPlayers(sportType: string | null): number {
-    if (sportType === 'futsal') return 2; // FUTSAL_TEMP_MIN_PLAYERS
-    return 8; // DEFAULT_MIN_PLAYERS
+  function resolveMinPlayers(_sportType: string | null): number {
+    return 10;
   }
 
   // Helper: format fill rate as readable percentage
   function fillLabel(current: number, min: number): string {
     return `${Math.round((current / min) * 100)}%`;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // -2. PENDING PAYMENT EXPIRY: gestor-created private bookings unpaid > 2h
+  //     Cancels the game + booking and frees the slot.
+  // ─────────────────────────────────────────────────────────────────────
+  {
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+
+    // Private games linked to a booking, still active, created > 2h ago
+    const { data: unpaidGames, error: unpaidErr } = await supabase
+      .from('games')
+      .select('id, slot_id, booking_id, organizer_id')
+      .eq('is_open', false)
+      .in('status', ['confirmed_booking', 'scheduled'])
+      .not('booking_id', 'is', null)
+      .lt('created_at', twoHoursAgo);
+
+    if (unpaidErr) {
+      results.errors.push(`pending-payment fetch: ${unpaidErr.message}`);
+    } else {
+      for (const game of unpaidGames ?? []) {
+        // Skip if organizer already paid
+        const { data: orgEntry } = await supabase
+          .from('game_players')
+          .select('paid')
+          .eq('game_id', game.id)
+          .eq('player_id', game.organizer_id)
+          .maybeSingle();
+
+        if (orgEntry?.paid === true) continue;
+
+        // Cancel game
+        const { error: gameErr } = await supabase
+          .from('games')
+          .update({ status: 'cancelled' })
+          .eq('id', game.id)
+          .in('status', ['confirmed_booking', 'scheduled']); // idempotent guard
+
+        if (gameErr) {
+          results.errors.push(`expire-payment cancel game ${game.id}: ${gameErr.message}`);
+          continue;
+        }
+
+        // Cancel booking
+        if (game.booking_id) {
+          await supabase
+            .from('bookings')
+            .update({ status: 'cancelled' })
+            .eq('id', game.booking_id);
+        }
+
+        // Free slot
+        if (game.slot_id) {
+          await supabase.from('slots').update({ is_available: true }).eq('id', game.slot_id);
+        }
+
+        // Notify player
+        if (game.organizer_id) {
+          await supabase.from('notifications').insert({
+            user_id: game.organizer_id,
+            type: 'game_cancelled',
+            title: 'Reserva expirada',
+            message: 'Sua reserva foi cancelada pois o pagamento não foi realizado dentro de 2 horas. Entre em contato com o clube para reagendar.',
+            game_id: game.id,
+          });
+        }
+
+        results.expiredPendingPayments.push(game.id);
+      }
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────
@@ -169,13 +241,23 @@ serve(async (req) => {
           .update({ is_available: true })
           .eq('id', game.slot_id);
 
-        // Notify all enrolled players
+        // Release Stripe holds for all players who authorized one
+        const stripeKeyCancelAuto = Deno.env.get('STRIPE_SECRET_KEY') ?? '';
         const { data: gamePlayers } = await supabase
           .from('game_players')
-          .select('player_id')
+          .select('player_id, stripe_payment_intent_id')
           .eq('game_id', game.id);
 
-        const playerIds = (gamePlayers ?? []).map(p => p.player_id);
+        for (const gp of gamePlayers ?? []) {
+          if (gp.stripe_payment_intent_id) {
+            await fetch(`https://api.stripe.com/v1/payment_intents/${gp.stripe_payment_intent_id}/cancel`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${stripeKeyCancelAuto}` },
+            });
+          }
+        }
+
+        const playerIds = (gamePlayers ?? []).map((p: { player_id: string }) => p.player_id);
 
         if (playerIds.length > 0) {
           await supabase.from('notifications').insert(
@@ -206,6 +288,214 @@ serve(async (req) => {
   }
 
   // ─────────────────────────────────────────────────────────────────────
+  // O. OPEN GAME CAPTURE: 2h before game start
+  //
+  //    For confirmed open games (is_open=true, stripe_split_captured=false):
+  //    - Hold per player was court_price / 10 * 1.15
+  //    - Capture court_price / N * 1.15 from each player's PI (less if N > 10)
+  //    Games with N < 10 were already auto-cancelled by block -1.
+  // ─────────────────────────────────────────────────────────────────────
+  {
+    const stripeKeyOpen = Deno.env.get('STRIPE_SECRET_KEY') ?? '';
+
+    const { data: openConfirmed, error: openConfirmedErr } = await supabase
+      .from('games')
+      .select('id, current_players, court_price, price_per_player, slot_id')
+      .eq('is_open', true)
+      .eq('status', 'confirmed_booking')
+      .eq('stripe_split_captured', false)
+      .not('slot_id', 'is', null);
+
+    if (openConfirmedErr) {
+      results.errors.push(`open-capture fetch: ${openConfirmedErr.message}`);
+    } else {
+      for (const game of openConfirmed ?? []) {
+        const { data: slot } = await supabase
+          .from('slots')
+          .select('start_time')
+          .eq('id', game.slot_id)
+          .single();
+
+        if (!slot?.start_time) continue;
+
+        // Trigger at 2h before start
+        const cutoffMs = new Date(slot.start_time).getTime() - 2 * 60 * 60 * 1000;
+        if (Date.now() < cutoffMs) continue;
+
+        const N = game.current_players ?? 1;
+        const courtPriceOpen: number = game.court_price ?? (game.price_per_player ?? 0) * 18;
+        if (courtPriceOpen <= 0) {
+          await supabase.from('games').update({ stripe_split_captured: true }).eq('id', game.id);
+          continue;
+        }
+
+        const capturePerPlayer = (courtPriceOpen / N) * 1.15;
+
+        const { data: players } = await supabase
+          .from('game_players')
+          .select('player_id, stripe_payment_intent_id')
+          .eq('game_id', game.id)
+          .not('stripe_payment_intent_id', 'is', null);
+
+        let captureErrors = 0;
+        for (const p of players ?? []) {
+          const res = await fetch(
+            `https://api.stripe.com/v1/payment_intents/${p.stripe_payment_intent_id}/capture`,
+            {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${stripeKeyOpen}`,
+                'Content-Type': 'application/x-www-form-urlencoded',
+              },
+              body: `amount_to_capture=${Math.round(capturePerPlayer * 100)}`,
+            },
+          );
+          const data = await res.json();
+          if (data.error) {
+            results.errors.push(`open-capture player ${p.player_id} game ${game.id}: ${data.error.message}`);
+            captureErrors++;
+          }
+        }
+
+        if (captureErrors === 0) {
+          await supabase.from('games').update({ stripe_split_captured: true }).eq('id', game.id);
+          results.openGameCaptured.push(game.id);
+        }
+      }
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // S. SPLIT PAYMENT CAPTURE: 12h before game start (cancel cutoff)
+  //
+  //    For each split private game where cutoff has been reached:
+  //    - Each joiner: capture court_price / max(N,10) * 1.15
+  //    - Organizer:   capture the remainder so total = court_price * 1.15
+  //      → if N >= 10: court_price / N * 1.15
+  //      → if N <  10: court_price * 1.15 * (11 - N) / 10  (covers shortfall)
+  //
+  //    Joiner PIs stored in game_players.stripe_payment_intent_id.
+  //    Organizer PI resolved from games.stripe_session_id via Stripe API.
+  // ─────────────────────────────────────────────────────────────────────
+  {
+    const stripeKey = Deno.env.get('STRIPE_SECRET_KEY') ?? '';
+
+    const { data: splitGames, error: splitErr } = await supabase
+      .from('games')
+      .select('id, max_players, current_players, court_price, price_per_player, stripe_session_id, slot_id, organizer_id')
+      .eq('is_open', false)
+      .eq('pay_mode', 'split')
+      .eq('stripe_split_captured', false)
+      .not('stripe_session_id', 'is', null)
+      .in('status', ['confirmed_booking', 'scheduled']);
+
+    if (splitErr) {
+      results.errors.push(`split-capture fetch: ${splitErr.message}`);
+    } else {
+      for (const game of splitGames ?? []) {
+        if (!game.slot_id) continue;
+
+        const { data: slot } = await supabase
+          .from('slots')
+          .select('start_time')
+          .eq('id', game.slot_id)
+          .single();
+
+        if (!slot?.start_time) continue;
+
+        // Trigger at 12h before start (cancel cutoff)
+        const cutoffMs = new Date(slot.start_time).getTime() - 12 * 60 * 60 * 1000;
+        if (Date.now() < cutoffMs) continue;
+
+        // court_price: authoritative column, fallback to price_per_player * 10
+        const courtPriceVal: number = game.court_price ?? (game.price_per_player ?? 0) * 10;
+        if (courtPriceVal <= 0) {
+          await supabase.from('games').update({ stripe_split_captured: true }).eq('id', game.id);
+          continue;
+        }
+
+        const N = game.current_players ?? 1; // total players incl. organizer
+
+        // Per-joiner capture amount (capped at what they authorized: courtPrice/10 * 1.15)
+        const joinerShare = (courtPriceVal / Math.max(N, 10)) * 1.15;
+
+        // Organizer capture = total court cost minus all joiners' shares
+        const joinersCount = N - 1;
+        let organizerCapture: number;
+        if (N >= 10) {
+          organizerCapture = (courtPriceVal / N) * 1.15;
+        } else {
+          organizerCapture = courtPriceVal * 1.15 * (11 - N) / 10;
+        }
+
+        try {
+          // 1. Capture each joiner's hold
+          const { data: joiners } = await supabase
+            .from('game_players')
+            .select('player_id, stripe_payment_intent_id')
+            .eq('game_id', game.id)
+            .neq('player_id', game.organizer_id)
+            .not('stripe_payment_intent_id', 'is', null);
+
+          for (const joiner of joiners ?? []) {
+            const captureRes = await fetch(
+              `https://api.stripe.com/v1/payment_intents/${joiner.stripe_payment_intent_id}/capture`,
+              {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${stripeKey}`,
+                  'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `amount_to_capture=${Math.round(joinerShare * 100)}`,
+              },
+            );
+            const captureData = await captureRes.json();
+            if (captureData.error) {
+              results.errors.push(`split-capture joiner ${joiner.player_id} game ${game.id}: ${captureData.error.message}`);
+            }
+          }
+
+          // 2. Capture organizer's share from their session hold
+          if (organizerCapture > 0) {
+            const sessionRes = await fetch(
+              `https://api.stripe.com/v1/checkout/sessions/${game.stripe_session_id}`,
+              { headers: { Authorization: `Bearer ${stripeKey}` } },
+            );
+            const sessionData = await sessionRes.json();
+            const orgPaymentIntentId = sessionData?.payment_intent;
+
+            if (!orgPaymentIntentId) {
+              results.errors.push(`split-capture game ${game.id}: no payment_intent on session`);
+              continue;
+            }
+
+            const orgCaptureRes = await fetch(
+              `https://api.stripe.com/v1/payment_intents/${orgPaymentIntentId}/capture`,
+              {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${stripeKey}`,
+                  'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `amount_to_capture=${Math.round(organizerCapture * 100)}`,
+              },
+            );
+            const orgCaptureData = await orgCaptureRes.json();
+            if (orgCaptureData.error) {
+              results.errors.push(`split-capture organizer game ${game.id}: ${orgCaptureData.error.message}`);
+              continue;
+            }
+          }
+
+          await supabase.from('games').update({ stripe_split_captured: true }).eq('id', game.id);
+        } catch (e: any) {
+          results.errors.push(`split-capture game ${game.id}: ${e.message}`);
+        }
+      }
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
   // 0. scheduled → confirmed_booking OR expired
   //    Handles games the client never retroactively confirmed:
   //    any `scheduled` game whose slot has already ended.
@@ -229,16 +519,7 @@ serve(async (req) => {
       if (!slot?.end_time) continue;
       if (new Date() < new Date(slot.end_time)) continue; // slot hasn't ended yet
 
-      // Determine minimum players using court.sport_type (authoritative)
-      let minPlayers = 8; // DEFAULT_MIN_PLAYERS
-      if (game.court_id) {
-        const { data: court } = await supabase
-          .from('courts')
-          .select('sport_type')
-          .eq('id', game.court_id)
-          .single();
-        if (court?.sport_type === 'futsal') minPlayers = 2; // FUTSAL_TEMP_MIN_PLAYERS
-      }
+      const minPlayers = 10;
 
       const hasEnoughPlayers = (game.current_players ?? 0) >= minPlayers;
       const newStatus = hasEnoughPlayers ? 'confirmed_booking' : 'expired';

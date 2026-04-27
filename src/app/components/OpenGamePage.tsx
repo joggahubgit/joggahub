@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { ArrowLeft, Share2, MessageCircle, Calendar, CheckCircle, Copy, Loader2, MapPin, Search, X, Crown, Trash2, Zap, Shield, Clock, Lock } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { notify } from '@/app/lib/notify';
+import { notify, notifyGamePlayers } from '@/app/lib/notify';
 import { redirectToCheckout, calcFees } from '@/app/lib/checkout';
 import { PLAYER_CANCEL_CUTOFF_HOURS, getMinPlayersForSport } from '@/app/lib/gameConfig';
 
@@ -38,6 +38,7 @@ interface Player {
   name: string;
   isOrganizer?: boolean;
   paid?: boolean;
+  isCurrentUser?: boolean;
 }
 
 export default function OpenGamePage() {
@@ -59,9 +60,11 @@ export default function OpenGamePage() {
   const [isEnrolled, setIsEnrolled] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [gameUnavailable, setGameUnavailable] = useState<'cancelled' | 'inactive' | null>(null);
   const [isOrganizer, setIsOrganizer] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [showPlayerLeaveConfirm, setShowPlayerLeaveConfirm] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState('');
   const [leaving, setLeaving] = useState(false);
@@ -69,7 +72,13 @@ export default function OpenGamePage() {
   const [gameStatus, setGameStatus] = useState<'scheduled' | 'confirmed_booking' | 'pending_results' | 'completed' | 'expired'>('scheduled');
   const [gameStartTime, setGameStartTime] = useState<string | null>(null); // ISO UTC from slots.start_time
   const [withinCancelCutoff, setWithinCancelCutoff] = useState(false); // true = player cannot self-cancel
+  const [withinJoinCutoff, setWithinJoinCutoff] = useState(false); // true = no new players allowed (< 15 min)
   const [isPrivate, setIsPrivate] = useState(false);
+  const [gamePayMode, setGamePayMode] = useState<'split' | 'full'>('split');
+  const [courtPrice, setCourtPrice] = useState(0);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [organizerPaid, setOrganizerPaid] = useState(true);
+  const [payingReservation, setPayingReservation] = useState(false);
 
 
   // Display values — from passed state (creator flow) or fetched
@@ -95,11 +104,21 @@ export default function OpenGamePage() {
 
       // Fetch live game data
       const { data: game } = await supabase.from('games').select('*').eq('id', id).single();
-      if (!game) { setLoading(false); return; }
+      if (!game) { navigate('/home', { replace: true }); return; }
+
+      // Mark as unavailable if cancelled, expired, or no players left
+      const terminalStatuses = ['cancelled', 'expired'];
+      if (terminalStatuses.includes(game.status) || (game.current_players ?? 0) === 0) {
+        setGameUnavailable(game.status === 'cancelled' ? 'cancelled' : 'inactive');
+        setLoading(false);
+        return;
+      }
       setCurrentPlayers(game.current_players ?? 1);
       setPricePerPlayer(game.price_per_player);
       setMaxPlayers(game.max_players);
+      setCourtPrice(game.court_price ?? (game.price_per_player * 18));
 
+      if (user) setCurrentUserId(user.id);
       // Is current user the organizer? Use local var to avoid stale state reads
       const userIsOrganizer = !!user && game.organizer_id === user.id;
       if (userIsOrganizer) {
@@ -117,13 +136,16 @@ export default function OpenGamePage() {
         .from('game_players')
         .select('player_name, paid, player_id')
         .eq('game_id', id)
-        .order('joined_at');
+        .order('id');
 
-      // Exclude organizer from joined list (they're always shown separately as slot 0)
+      // Exclude organizer from joined list (they're shown separately as slot 0)
+      const organizerEntry = (gamePlayers ?? []).find(p => p.player_id === game.organizer_id);
+      const orgIsPaid = organizerEntry?.paid ?? true; // default true for existing bookings
+      if (userIsOrganizer) setOrganizerPaid(orgIsPaid);
       const joined = (gamePlayers ?? [])
         .filter(p => p.player_id !== game.organizer_id)
-        .map(p => ({ name: p.player_name, paid: p.paid }));
-      setPlayers([{ name, isOrganizer: true, paid: true }, ...joined]);
+        .map(p => ({ name: p.player_name, paid: p.paid, isCurrentUser: user ? p.player_id === user.id : false }));
+      setPlayers([{ name, isOrganizer: true, paid: orgIsPaid }, ...joined]);
 
       // Mark non-organizer player as enrolled only if payment confirmed
       if (user && !userIsOrganizer) {
@@ -175,6 +197,7 @@ export default function OpenGamePage() {
       }
       setGameStatus(resolvedStatus as typeof gameStatus);
       setIsPrivate(!game.is_open && !!game.booking_id);
+      setGamePayMode((game.pay_mode as 'split' | 'full') ?? 'split');
 
       // Always fetch slot times (needed for cancel cutoff check regardless of passed state)
       if (game.slot_id) {
@@ -188,6 +211,7 @@ export default function OpenGamePage() {
           setGameStartTime(slot.start_time);
           const msUntilStart = new Date(slot.start_time).getTime() - Date.now();
           setWithinCancelCutoff(msUntilStart < PLAYER_CANCEL_CUTOFF_HOURS * 60 * 60 * 1000);
+          setWithinJoinCutoff(msUntilStart < 15 * 60 * 1000);
         }
       }
     }
@@ -241,6 +265,7 @@ export default function OpenGamePage() {
   }
 
   async function handleJoin() {
+    if (withinJoinCutoff) return;
     setJoining(true);
     setJoinError('');
     const { data: { user } } = await supabase.auth.getUser();
@@ -259,8 +284,10 @@ export default function OpenGamePage() {
         sport: sportLabel(courtSport),
         date,
         time,
-        vagaPrice: pricePerPlayer,
+        vagaPrice: courtPrice / 10,
         mode: 'join_self',
+        captureManual: true,
+        payMode: 'split',
       });
     } catch (e: any) {
       setJoinError(e.message);
@@ -285,6 +312,7 @@ export default function OpenGamePage() {
   }
 
   function handleSelectPlayer(p: { id: string; name: string }) {
+    if (withinJoinCutoff) return;
     setShowAddPlayer(false);
     setSearchQuery('');
     setSearchResults([]);
@@ -355,6 +383,43 @@ export default function OpenGamePage() {
     }
 
     await supabase.from('games').update({ current_players: currentPlayers - 1 }).eq('id', id);
+
+    // Notify remaining players that organizer left
+    if (currentUserId) {
+      await notifyGamePlayers(
+        id!,
+        currentUserId,
+        'game_left',
+        'Organizador saiu da partida',
+        `O organizador saiu da partida de ${sportLabel(courtSport)} em ${courtName}. Agora são ${currentPlayers - 1}/${maxPlayers} jogadores.`,
+      );
+    }
+
+    setLeaving(false);
+    navigate('/home', { replace: true });
+  }
+
+  async function handleLeaveAsPlayer() {
+    if (withinCancelCutoff || !currentUserId) return;
+    setLeaving(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setLeaving(false); return; }
+
+    const { data: prof } = await supabase.from('profiles').select('name').eq('id', user.id).single();
+    const firstName = prof?.name?.split(' ')[0] ?? 'Jogador';
+
+    const { error: delErr } = await supabase.from('game_players').delete().eq('game_id', id).eq('player_id', user.id);
+    if (delErr) { setLeaving(false); setShowPlayerLeaveConfirm(false); return; }
+    await supabase.from('games').update({ current_players: currentPlayers - 1 }).eq('id', id);
+
+    await notifyGamePlayers(
+      id!,
+      user.id,
+      'game_left',
+      'Jogador saiu da partida',
+      `${firstName} saiu da partida de ${sportLabel(courtSport)} em ${courtName}. Agora são ${currentPlayers - 1}/${maxPlayers} jogadores.`,
+    );
+
     setLeaving(false);
     navigate('/home', { replace: true });
   }
@@ -383,15 +448,81 @@ export default function OpenGamePage() {
         `Você foi removido da partida de ${sportLabel(courtSport)} em ${courtName}${date ? ` (${new Date(date + 'T00:00:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })})` : ''}. O estorno será processado conforme as políticas do JoggaHub.`,
         id,
       );
+      // Notify remaining players
+      await notifyGamePlayers(
+        id!,
+        gp.player_id,
+        'game_left',
+        'Jogador saiu da partida',
+        `${player.name.split(' ')[0]} foi removido da partida. Agora são ${currentPlayers - 1}/${maxPlayers} jogadores.`,
+      );
     }
 
     setPlayers(prev => prev.filter((_, pi) => pi !== index));
     setCurrentPlayers(p => p - 1);
   }
 
-  function handleCircleClick() {
-    if (gameStatus !== 'scheduled') return; // partida encerrada, sem novas inscrições
-    if (isPrivate && !isEnrolled && !isOrganizer) return; // private game: only enrolled players can interact
+  async function handleCircleClick() {
+    if (gameStatus === 'completed' || gameStatus === 'expired' || gameStatus === 'pending_results') return;
+    if (withinJoinCutoff) return;
+    if (isPrivate && !isEnrolled && !isOrganizer) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setJoinError('Você precisa estar logado para entrar.'); return; }
+      const { data: profile } = await supabase.from('profiles').select('name').eq('id', user.id).single();
+      const playerName = profile?.name ?? 'Jogador';
+
+      if (gamePayMode === 'full') {
+        // Free join — organizer already paid the full court price
+        setJoining(true);
+        const { error: insertErr } = await supabase.from('game_players').insert({
+          game_id: id,
+          player_id: user.id,
+          player_name: playerName,
+          paid: true,
+        });
+        if (insertErr && insertErr.code !== '23505') {
+          setJoinError('Erro ao entrar na partida. Tente novamente.');
+          setJoining(false);
+          return;
+        }
+        const newCount = currentPlayers + 1;
+        await supabase.from('games').update({ current_players: newCount }).eq('id', id);
+        await notifyGamePlayers(
+          id!,
+          user.id,
+          'game_joined',
+          'Novo jogador entrou!',
+          `${playerName} entrou na partida. Agora são ${newCount}/${maxPlayers} jogadores.`,
+        );
+        setPlayers(prev => [...prev, { name: playerName, paid: true, isCurrentUser: true }]);
+        setCurrentPlayers(newCount);
+        setIsEnrolled(true);
+        setJoining(false);
+      } else {
+        // Split — each joiner authorizes a hold for their minimum share
+        setJoining(true);
+        try {
+          await redirectToCheckout({
+            gameId: id!,
+            playerId: user.id,
+            playerName,
+            courtName,
+            venueName,
+            sport: sportLabel(courtSport),
+            date,
+            time,
+            vagaPrice: courtPrice / 10,
+            mode: 'join_self',
+            captureManual: true,
+            payMode: 'split',
+          });
+        } catch (e: any) {
+          setJoinError(e.message);
+          setJoining(false);
+        }
+      }
+      return;
+    }
     if (isEnrolled || isOrganizer) {
       setShowAddPlayer(true);
     } else {
@@ -399,7 +530,62 @@ export default function OpenGamePage() {
     }
   }
 
+  async function handlePayReservation() {
+    if (!currentUserId) return;
+    setPayingReservation(true);
+    try {
+      await redirectToCheckout({
+        gameId: id!,
+        playerId: currentUserId,
+        playerName: organizerName,
+        courtName,
+        venueName,
+        sport: sportLabel(courtSport),
+        date,
+        time,
+        vagaPrice: pricePerPlayer,
+        mode: 'pay_reservation',
+      });
+    } catch (e: any) {
+      setJoinError(e.message);
+      setPayingReservation(false);
+    }
+  }
+
   const spotsLeft = maxPlayers - currentPlayers;
+
+  if (gameUnavailable) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+        <div className="flex items-center px-5 pt-12 pb-4 border-b border-gray-100 bg-white">
+          <button onClick={() => navigate('/home')} className="p-2 hover:bg-gray-100 rounded-full transition-colors mr-2">
+            <ArrowLeft className="w-6 h-6 text-gray-700" />
+          </button>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center px-6 text-center gap-4">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+            <X className="w-8 h-8 text-red-500" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">
+              {gameUnavailable === 'cancelled' ? 'Partida cancelada' : 'Partida encerrada'}
+            </h2>
+            <p className="text-sm text-gray-500 leading-relaxed">
+              {gameUnavailable === 'cancelled'
+                ? 'Esta partida foi cancelada e não está mais disponível.'
+                : 'Esta partida não tem mais jogadores ativos e não está mais disponível.'}
+            </p>
+          </div>
+          <button
+            onClick={() => navigate('/home')}
+            className="mt-4 bg-violet-600 text-white px-6 py-3 rounded-2xl font-semibold text-sm hover:bg-violet-700 transition-colors"
+          >
+            Voltar ao início
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white">
@@ -439,6 +625,33 @@ export default function OpenGamePage() {
               <p className="text-sm font-bold text-amber-800">Vote no melhor jogador!</p>
               <p className="text-xs text-amber-600 mt-0.5">Você tem até 12h para votar. O MVP ganha +30 XP.</p>
             </div>
+          </div>
+        )}
+
+        {/* Pending payment banner — organizer of a gestor-created booking */}
+        {isOrganizer && !organizerPaid && pricePerPlayer > 0 && (
+          <div className="mx-5 mt-4 bg-amber-50 border border-amber-300 rounded-2xl px-4 py-4">
+            <div className="flex items-start gap-3 mb-3">
+              <Clock className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-amber-800">Pagamento pendente</p>
+                <p className="text-sm text-amber-700 mt-0.5">
+                  O clube reservou este horário para você. Complete o pagamento para confirmar sua vaga. Você tem 2 horas a partir da reserva.
+                </p>
+              </div>
+            </div>
+            {joinError && (
+              <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 mb-2 border border-red-100">{joinError}</p>
+            )}
+            <button
+              onClick={handlePayReservation}
+              disabled={payingReservation}
+              className="w-full bg-amber-500 text-white py-3 rounded-xl font-bold hover:bg-amber-600 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+            >
+              {payingReservation
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Aguarde...</>
+                : <>Pagar R$ {calcFees(pricePerPlayer).total.toFixed(2)} e confirmar vaga</>}
+            </button>
           </div>
         )}
 
@@ -503,7 +716,7 @@ export default function OpenGamePage() {
           {gameStatus === 'scheduled' && (
             <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 rounded-2xl px-3 py-2">
               <Clock className="w-3.5 h-3.5 text-amber-600" />
-              <span className="text-xs font-bold text-amber-700">Agendada</span>
+              <span className="text-xs font-bold text-amber-700">{isPrivate ? 'Agendada' : 'Aguardando jogadores'}</span>
             </div>
           )}
           {gameStatus === 'confirmed_booking' && (
@@ -551,6 +764,7 @@ export default function OpenGamePage() {
               const player = players[i];
               const filled = i < currentPlayers;
               const canRemove = isOrganizer && filled && player && !player.isOrganizer && !withinCancelCutoff;
+              const canSelfLeave = !isOrganizer && filled && player?.isCurrentUser && !withinCancelCutoff && (gameStatus === 'scheduled' || gameStatus === 'confirmed_booking');
               return (
                 <div key={i} className="flex flex-col items-center gap-1">
                   <div className="relative">
@@ -577,6 +791,15 @@ export default function OpenGamePage() {
                             <X className="w-3 h-3 text-white" />
                           </button>
                         )}
+                        {/* Self-leave button for enrolled non-organizer */}
+                        {canSelfLeave && (
+                          <button
+                            onClick={() => setShowPlayerLeaveConfirm(true)}
+                            className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+                          >
+                            <X className="w-3 h-3 text-white" />
+                          </button>
+                        )}
                       </>
                     ) : filled ? (
                       <div className="w-12 h-12 bg-gray-300 rounded-full flex items-center justify-center text-white font-bold text-lg">
@@ -585,12 +808,9 @@ export default function OpenGamePage() {
                     ) : (
                       <button
                         onClick={handleCircleClick}
-                        disabled={isPrivate && !isEnrolled && !isOrganizer}
-                        className={`w-12 h-12 rounded-full border-2 border-dashed flex items-center justify-center transition-colors ${isPrivate && !isEnrolled && !isOrganizer ? 'border-gray-200 cursor-default' : 'border-violet-300 hover:border-violet-500 hover:bg-violet-50 active:bg-violet-100'}`}
+                        className="w-12 h-12 rounded-full border-2 border-dashed border-violet-300 flex items-center justify-center transition-colors hover:border-violet-500 hover:bg-violet-50 active:bg-violet-100"
                       >
-                        <span className={`text-xl font-light ${isPrivate && !isEnrolled && !isOrganizer ? 'text-gray-300' : 'text-violet-400'}`}>
-                          {isPrivate && !isEnrolled && !isOrganizer ? <Lock className="w-4 h-4 text-gray-300" /> : '+'}
-                        </span>
+                        <span className="text-xl font-light text-violet-400">+</span>
                       </button>
                     )}
                   </div>
@@ -749,6 +969,58 @@ export default function OpenGamePage() {
               >
                 {cancelling ? <><Loader2 className="w-4 h-4 animate-spin" /> Cancelando...</> : 'Confirmar cancelamento'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Leave as player confirmation */}
+      {showPlayerLeaveConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-50" onClick={() => setShowPlayerLeaveConfirm(false)}>
+          <div className="bg-white rounded-t-3xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-5" />
+            <div className="flex flex-col items-center text-center mb-6">
+              {withinCancelCutoff ? (
+                <>
+                  <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                    <Shield className="w-7 h-7 text-red-500" />
+                  </div>
+                  <h3 className="font-bold text-gray-900 text-xl mb-2">Cancelamento bloqueado</h3>
+                  <p className="text-sm text-gray-500 leading-relaxed">
+                    Faltam menos de <strong className="text-gray-700">{PLAYER_CANCEL_CUTOFF_HOURS}h</strong> para o início da partida. O cancelamento não é permitido nesse período.
+                  </p>
+                  <p className="text-sm text-gray-500 mt-2 leading-relaxed">
+                    Para sair, entre em contato diretamente com o organizador ou clube.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                    <X className="w-7 h-7 text-red-500" />
+                  </div>
+                  <h3 className="font-bold text-gray-900 text-xl mb-2">Sair da partida?</h3>
+                  <p className="text-sm text-gray-500 leading-relaxed">
+                    Você será removido da partida e os outros jogadores serão notificados.
+                  </p>
+                </>
+              )}
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowPlayerLeaveConfirm(false)}
+                className="flex-1 py-4 rounded-2xl border-2 border-gray-200 font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Voltar
+              </button>
+              {!withinCancelCutoff && (
+                <button
+                  onClick={handleLeaveAsPlayer}
+                  disabled={leaving}
+                  className="flex-1 py-4 rounded-2xl bg-red-500 text-white font-bold hover:bg-red-600 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  {leaving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saindo...</> : 'Confirmar saída'}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -916,15 +1188,22 @@ export default function OpenGamePage() {
               <p className="text-sm text-red-500 bg-red-50 rounded-xl px-4 py-3 mb-4 border border-red-100">{joinError}</p>
             )}
 
-            <button
-              onClick={handleJoin}
-              disabled={joining}
-              className="w-full bg-violet-600 text-white py-4 rounded-2xl font-bold text-base hover:bg-violet-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
-            >
-              {joining
-                ? <><Loader2 className="w-5 h-5 animate-spin" /> Entrando...</>
-                : <><CheckCircle className="w-5 h-5" /> Pagar minha parte · R$ {(pricePerPlayer * 1.15).toFixed(2)}</>}
-            </button>
+            {withinJoinCutoff ? (
+              <div className="w-full flex items-center justify-center gap-2 bg-gray-100 text-gray-500 py-4 rounded-2xl font-semibold text-sm">
+                <Shield className="w-4 h-4 flex-shrink-0" />
+                Entradas encerradas (menos de 15 min)
+              </div>
+            ) : (
+              <button
+                onClick={handleJoin}
+                disabled={joining}
+                className="w-full bg-violet-600 text-white py-4 rounded-2xl font-bold text-base hover:bg-violet-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {joining
+                  ? <><Loader2 className="w-5 h-5 animate-spin" /> Entrando...</>
+                  : <><CheckCircle className="w-5 h-5" /> Pagar minha parte · R$ {(pricePerPlayer * 1.15).toFixed(2)}</>}
+              </button>
+            )}
             <button onClick={() => setShowJoin(false)} className="w-full mt-3 py-3 text-sm text-gray-500 font-semibold">
               Cancelar
             </button>

@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase-gestor';
 import { Camera, X, Check, ChevronRight, ChevronLeft, Upload } from 'lucide-react';
 
 interface LoginPageProps {

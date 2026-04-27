@@ -25,6 +25,8 @@ interface UpcomingGame {
   maxPlayers: number;
   players: { name: string; paid: boolean }[];
   isOrganizer: boolean;
+  isOpen: boolean;
+  organizerPaid: boolean;
   status: string;
 }
 
@@ -91,9 +93,10 @@ export default function Home() {
       async function fetchUpcomingGames() {
         const now = new Date().toISOString();
 
+        const activeStatuses = ['scheduled', 'confirmed_booking'];
         const [{ data: asOrganizer }, { data: asPlayer }] = await Promise.all([
           supabase.from('games').select('id, court_id, scheduled_at, current_players, max_players, organizer_id, is_open, status')
-            .eq('organizer_id', userId).eq('is_open', true).gte('scheduled_at', now).order('scheduled_at'),
+            .eq('organizer_id', userId).in('status', activeStatuses).gte('scheduled_at', now).order('scheduled_at'),
           supabase.from('game_players').select('game_id').eq('player_id', userId),
         ]);
 
@@ -104,11 +107,13 @@ export default function Home() {
         if (playerGameIds.length > 0) {
           const { data } = await supabase.from('games')
             .select('id, court_id, scheduled_at, current_players, max_players, organizer_id, is_open, status')
-            .in('id', playerGameIds).eq('is_open', true).gte('scheduled_at', now).order('scheduled_at');
+            .in('id', playerGameIds).in('status', activeStatuses).gte('scheduled_at', now).order('scheduled_at');
           playerGames = data ?? [];
         }
 
-        const allGames = [...(asOrganizer ?? []), ...playerGames.filter(g => !organizerGameIds.has(g.id))];
+        const seenIds = new Set<string>();
+        const allGames = [...(asOrganizer ?? []), ...playerGames.filter(g => !organizerGameIds.has(g.id))]
+          .filter(g => { if (seenIds.has(g.id)) return false; seenIds.add(g.id); return true; });
 
         if (allGames.length > 0) {
           const courtIds = [...new Set(allGames.map(g => g.court_id).filter(Boolean))];
@@ -121,12 +126,18 @@ export default function Home() {
           const venueMap = Object.fromEntries((venueRows ?? []).map((v: any) => [v.id, v]));
 
           const { data: gamePlayers } = await supabase.from('game_players')
-            .select('game_id, player_name, paid').in('game_id', allGames.map(g => g.id)).order('joined_at');
+            .select('game_id, player_id, player_name, paid').in('game_id', allGames.map(g => g.id)).order('joined_at');
 
           const playersByGame: Record<string, { name: string; paid: boolean }[]> = {};
+          const orgPaidMap: Record<string, boolean> = {};
           (gamePlayers ?? []).forEach((p: any) => {
             if (!playersByGame[p.game_id]) playersByGame[p.game_id] = [];
             playersByGame[p.game_id].push({ name: p.player_name, paid: p.paid });
+            // Track organizer paid status per game
+            const parentGame = allGames.find(g => g.id === p.game_id);
+            if (parentGame && p.player_id === parentGame.organizer_id) {
+              orgPaidMap[p.game_id] = p.paid;
+            }
           });
 
           const organizerIds = [...new Set(allGames.map(g => g.organizer_id).filter(Boolean))];
@@ -138,7 +149,8 @@ export default function Home() {
             const venue = court ? venueMap[court.venue_id] : null;
             const orgName = orgNameMap[g.organizer_id] ?? 'Organizador';
             const joined = playersByGame[g.id] ?? [];
-            const allPlayers = [{ name: orgName, paid: true }, ...joined];
+            const orgPaid = g.id in orgPaidMap ? orgPaidMap[g.id] : true;
+            const allPlayers = [{ name: orgName, paid: orgPaid }, ...joined.filter(p => p.name !== orgName)];
             const sportType = court?.sport_type ?? '';
 
             // Retroactive confirmation: if a futsal game already has enough players
@@ -165,6 +177,8 @@ export default function Home() {
               maxPlayers: g.max_players,
               players: allPlayers,
               isOrganizer: g.organizer_id === userId,
+              isOpen: g.is_open ?? true,
+              organizerPaid: orgPaid,
               status: gameStatus,
             };
           });
@@ -196,8 +210,17 @@ export default function Home() {
           .eq('status', 'confirmed')
           .not('slot_id', 'is', null);
 
+        if (!rawBookingRows?.length) { setUpcomingBookings([]); return; }
+
+        // Exclude bookings that belong to a private game (shown as game card instead)
+        const rawIds = rawBookingRows.map((b: any) => b.id);
+        const { data: privateGameBookings } = await supabase
+          .from('games').select('booking_id').in('booking_id', rawIds).not('booking_id', 'is', null);
+        const privateSet = new Set((privateGameBookings ?? []).map((g: any) => g.booking_id));
+
         const seenSlots = new Set<string>();
-        const bookingRows = (rawBookingRows ?? []).filter((b: any) => {
+        const bookingRows = rawBookingRows.filter((b: any) => {
+          if (privateSet.has(b.id)) return false;
           if (seenSlots.has(b.slot_id)) return false;
           seenSlots.add(b.slot_id);
           return true;
@@ -426,64 +449,68 @@ export default function Home() {
               const dateLabel = dt.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
               const timeLabel = dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
               const isFull = game.currentPlayers >= game.maxPlayers;
-              const isConfirmed = isFull || game.status === 'confirmed_booking';
+              const isPendingPayment = !game.isOpen && game.isOrganizer && !game.organizerPaid;
+              const isConfirmed = (isFull || game.status === 'confirmed_booking') && !isPendingPayment;
               const isPendingResults = game.status === 'pending_results';
+
+              const SPORT_LABELS: Record<string, string> = { football: 'Society', society: 'Society', futsal: 'Futsal' };
+              const spotsLeft = game.maxPlayers - game.currentPlayers;
 
               return (
                 <div
                   key={game.id}
                   onClick={() => navigate(`/open-game/${game.id}`)}
-                  className="flex-shrink-0 w-72 bg-white rounded-2xl border border-gray-200 overflow-hidden cursor-pointer active:scale-[0.99] transition-transform"
+                  className="flex-shrink-0 w-72 bg-white rounded-2xl border border-gray-200 p-4 cursor-pointer active:scale-[0.99] transition-transform"
                 >
-                  <div className="p-4 flex flex-col gap-3">
-                    {/* Top — date + venue */}
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="text-sm font-bold text-gray-900">{dateLabel} · {timeLabel}</p>
-                        <p className="text-sm font-semibold text-gray-700">{game.venueName}</p>
-                        <p className="text-xs text-gray-400">{game.courtName}</p>
-                      </div>
-                      <div className={`px-2 py-1 rounded-full text-[10px] font-bold ${
-                        isPendingResults ? 'bg-orange-100 text-orange-700' :
-                        isConfirmed ? 'bg-green-100 text-green-700' :
-                        'bg-amber-100 text-amber-700'
-                      }`}>
-                        {isPendingResults ? 'Aguardando dados' : isConfirmed ? 'Confirmada' : 'Aguardando'}
-                      </div>
-                    </div>
-
-                    {/* Players row — up to 4 avatars + overflow */}
-                    <div className="flex items-center gap-1.5">
-                      {game.players.slice(0, 4).map((p, i) => (
-                        <div key={i} className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0 ${p.paid ? 'bg-violet-600' : 'bg-gray-400'}`}>
-                          {p.name.charAt(0).toUpperCase()}
-                        </div>
-                      ))}
-                      {game.players.length > 4 && (
-                        <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 flex-shrink-0">
-                          +{game.players.length - 4}
-                        </div>
-                      )}
-                      {Array.from({ length: Math.max(0, Math.min(4, game.maxPlayers) - Math.min(game.players.length, 4)) }).map((_, i) => (
-                        <div key={`empty-${i}`} className="w-9 h-9 rounded-full border-2 border-dashed border-gray-200 flex items-center justify-center flex-shrink-0">
-                          <span className="text-gray-300 text-base font-light">+</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Progress bar + count */}
+                  {/* Sport + venue + status */}
+                  <div className="flex items-start justify-between mb-3">
                     <div>
-                      <div className="flex justify-between text-xs text-gray-500 mb-1">
-                        <span>{game.currentPlayers} de {game.maxPlayers} jogadores</span>
-                        <span>{game.maxPlayers - game.currentPlayers} {game.maxPlayers - game.currentPlayers === 1 ? 'vaga' : 'vagas'}</span>
-                      </div>
-                      <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all ${isFull ? 'bg-green-500' : 'bg-violet-500'}`}
-                          style={{ width: `${(game.currentPlayers / game.maxPlayers) * 100}%` }}
-                        />
-                      </div>
+                      <p className="text-xs text-violet-600 font-semibold uppercase tracking-wide mb-0.5">
+                        {SPORT_LABELS[game.sportType] ?? game.sportType}
+                      </p>
+                      <p className="font-bold text-gray-900">{game.venueName}</p>
+                      <p className="text-sm text-gray-500">{game.courtName}</p>
                     </div>
+                    <div className={`px-2 py-1 rounded-full text-[10px] font-bold flex-shrink-0 ml-2 ${
+                      isPendingResults ? 'bg-orange-100 text-orange-700' :
+                      isPendingPayment ? 'bg-amber-100 text-amber-700' :
+                      isConfirmed ? 'bg-green-100 text-green-700' :
+                      'bg-amber-100 text-amber-700'
+                    }`}>
+                      {isPendingResults ? 'Aguardando dados' : isPendingPayment ? 'Pagamento pendente' : isConfirmed ? 'Confirmada' : 'Aguardando'}
+                    </div>
+                  </div>
+
+                  {/* Date + time */}
+                  <div className="flex items-center gap-1.5 text-sm text-gray-600 mb-3">
+                    <Calendar className="w-4 h-4" />
+                    <span>{dateLabel} · {timeLabel}</span>
+                  </div>
+
+                  {/* Players count + vagas badge */}
+                  <div className="flex items-center justify-between text-sm mb-2">
+                    <div className="flex items-center gap-2">
+                      <Users className="w-4 h-4 text-gray-400" />
+                      <span className="font-semibold text-gray-900">{game.currentPlayers}/{game.maxPlayers}</span>
+                      <span className="text-gray-500">jogadores</span>
+                    </div>
+                    {spotsLeft > 0 ? (
+                      <span className="px-2.5 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full">
+                        {spotsLeft} {spotsLeft === 1 ? 'vaga' : 'vagas'}
+                      </span>
+                    ) : (
+                      <span className="px-2.5 py-1 bg-red-100 text-red-600 text-xs font-bold rounded-full">Completo</span>
+                    )}
+                  </div>
+
+                  {/* Segmented progress bar */}
+                  <div className="flex gap-1">
+                    {Array.from({ length: game.maxPlayers }).map((_, i) => (
+                      <div
+                        key={i}
+                        className={`flex-1 h-1.5 rounded-full ${i < game.currentPlayers ? (isFull ? 'bg-green-500' : 'bg-violet-600') : 'bg-gray-200'}`}
+                      />
+                    ))}
                   </div>
                 </div>
               );

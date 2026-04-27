@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, Check, Loader2, ChevronLeft } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase-gestor';
 
 interface CreateAvailabilityProps {
   onClose: () => void;
@@ -177,24 +177,14 @@ export function CreateAvailability({ onClose, onSaved, venueId, prefill }: Creat
     setError('');
     const endISO = `${singleDate}T${addMinutes(singleStart, duration)}:00`;
 
+    // Check for overlap with any existing slot on this day (never delete existing slots in single mode)
     const { data: existing } = await supabase.from('slots').select('id, start_time, end_time')
       .eq('court_id', courtId)
       .gte('start_time', `${singleDate}T00:00:00`)
       .lte('start_time', `${singleDate}T23:59:59`);
     const existingSlots = existing ?? [];
-    if (existingSlots.length) {
-      const ids = existingSlots.map(s => s.id);
-      const { data: booked } = await supabase.from('bookings').select('slot_id').in('slot_id', ids).neq('status', 'cancelled');
-      const { data: games } = await supabase.from('games').select('slot_id').in('slot_id', ids);
-      const protectedIds = new Set([...(booked ?? []).map(b => b.slot_id), ...(games ?? []).map(g => g.slot_id)]);
-      const toDelete = ids.filter(id => !protectedIds.has(id));
-      if (toDelete.length) await supabase.from('slots').delete().in('id', toDelete);
-      // check if new slot overlaps with a protected one
-      const overlaps = existingSlots
-        .filter(s => protectedIds.has(s.id))
-        .some(s => startISO < s.end_time && endISO > s.start_time);
-      if (overlaps) { setError('Existe uma reserva ou partida ativa nesse horário. Não é possível criar um slot aqui.'); setSaving(false); return; }
-    }
+    const overlaps = existingSlots.some(s => startISO < s.end_time && endISO > s.start_time);
+    if (overlaps) { setError('Já existe um slot nesse horário. Escolha outro horário ou remova o existente primeiro.'); setSaving(false); return; }
 
     const { error: err } = await supabase.from('slots').insert({
       court_id: courtId,

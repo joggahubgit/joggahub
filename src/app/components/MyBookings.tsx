@@ -19,6 +19,7 @@ interface Item {
   courtName: string;
   venueName: string;
   startTime: string;
+  createdAt: string;
   endTime: string | null;
   price: number;
   paymentStatus: string;
@@ -74,7 +75,7 @@ export default function MyBookings() {
     ]);
 
     const merged = [...slotItems, ...gameItems].sort(
-      (a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
     setItems(merged);
     setHistoryPage(1);
@@ -86,7 +87,7 @@ export default function MyBookings() {
   async function fetchSlotBookings(userId: string): Promise<Item[]> {
     const { data: rawBookings } = await supabase
       .from('bookings')
-      .select('id, slot_id, total_price, payment_status, status')
+      .select('id, slot_id, total_price, payment_status, status, created_at')
       .eq('created_by', userId)
       .not('slot_id', 'is', null);
 
@@ -132,6 +133,7 @@ export default function MyBookings() {
           courtName: court?.name ?? 'Quadra',
           venueName: venue?.name ?? '',
           startTime: slot.start_time,
+          createdAt: b.created_at ?? slot.start_time,
           endTime: slot.end_time ?? null,
           price: b.total_price ?? 0,
           paymentStatus: b.payment_status ?? 'pending',
@@ -144,7 +146,7 @@ export default function MyBookings() {
   // ── Open games (organizer + player) ──────────────────────────────────────
 
   async function fetchGameItems(userId: string): Promise<Item[]> {
-    const gameFields = 'id, court_id, slot_id, scheduled_at, price_per_player, max_players, current_players, is_open, status, sport_type, booking_id';
+    const gameFields = 'id, court_id, slot_id, scheduled_at, price_per_player, max_players, current_players, is_open, status, sport_type, booking_id, created_at';
 
     const [{ data: asOrganizer }, { data: asPlayerRows }] = await Promise.all([
       supabase.from('games').select(gameFields).eq('organizer_id', userId),
@@ -155,6 +157,7 @@ export default function MyBookings() {
     const playerGameIds = (asPlayerRows ?? [])
       .map(p => p.game_id)
       .filter(id => !organizerGameIds.has(id));
+
 
     let playerGames: any[] = [];
     if (playerGameIds.length > 0) {
@@ -218,6 +221,7 @@ export default function MyBookings() {
         courtName: court?.name ?? 'Quadra',
         venueName: venue?.name ?? '',
         startTime: g.scheduled_at,
+        createdAt: g.created_at ?? g.scheduled_at,
         endTime: null,
         price: g.price_per_player ?? 0,
         paymentStatus: isPaid ? 'paid' : 'pending',

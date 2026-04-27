@@ -8,11 +8,8 @@
  * or remove the futsal-specific override in PaymentSuccess.tsx.
  */
 
-/** Minimum players required to auto-confirm a futsal game (TEMPORARY — test only). */
-export const FUTSAL_TEMP_MIN_PLAYERS = 2;
-
-/** Default minimum players for all other sport types. */
-export const DEFAULT_MIN_PLAYERS = 8;
+/** Minimum players required to confirm any game. */
+export const DEFAULT_MIN_PLAYERS = 10;
 
 /** Hours before game start within which a player cannot self-cancel. */
 export const PLAYER_CANCEL_CUTOFF_HOURS = 12;
@@ -30,7 +27,6 @@ export const XP_PARTICIPATION = 15;
 export const XP_MVP_BONUS = 30;
 
 /** Returns the minimum players needed to confirm a game by sport type. */
-export function getMinPlayersForSport(sportType: string): number {
-  if (sportType === 'futsal') return FUTSAL_TEMP_MIN_PLAYERS;
+export function getMinPlayersForSport(_sportType: string): number {
   return DEFAULT_MIN_PLAYERS;
 }

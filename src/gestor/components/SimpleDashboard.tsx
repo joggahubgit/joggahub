@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { DollarSign, Calendar, Clock, TrendingUp, AlertCircle, ArrowRight, Eye, CheckCircle } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase-gestor';
 
 interface Props {
   venueId: string;

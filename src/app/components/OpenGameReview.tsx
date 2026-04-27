@@ -15,6 +15,7 @@ interface GameState {
   endTime: string;        // HH:MM
   totalPrice: number;
   maxPlayers: number;
+  minPlayers: number;
   pricePerPlayer: number;
 }
 
@@ -81,6 +82,7 @@ export default function OpenGameReview() {
       maxPlayers: String(state.maxPlayers),
       pricePerPlayer: String(state.pricePerPlayer),
       courtSport: state.courtSport,
+      totalPrice: String(state.totalPrice),
     });
 
     try {
@@ -173,7 +175,7 @@ export default function OpenGameReview() {
               <span className="font-semibold text-gray-900">R$ {state.totalPrice}</span>
             </div>
             <div className="flex justify-between text-sm text-gray-600">
-              <span>Dividido por {state.maxPlayers} jogadores</span>
+              <span>Dividido por {state.minPlayers} jogadores (mínimo)</span>
               <span className="font-semibold text-gray-900">R$ {state.pricePerPlayer.toFixed(2)}/pessoa</span>
             </div>
             <div className="flex justify-between text-sm text-gray-600">

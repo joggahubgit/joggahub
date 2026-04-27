@@ -47,23 +47,24 @@ export default function PrivateGameReview() {
   }
 
   const courtPrice = Number(price) || 0;
-  const players = Number(maxPlayers) || 2;
+  const players = Number(maxPlayers) || 18;
 
-  // If split: organizer pays only their share, but we hold the full court price on their card
-  const myShare = payMode === 'split' ? courtPrice / players : courtPrice;
+  // Split: organizer authorizes full court price as hold; display shows minimum share (÷ 10)
+  const MIN_SPLIT_PLAYERS = 10;
+  const myShare = payMode === 'split' ? courtPrice / MIN_SPLIT_PLAYERS : courtPrice;
   const { base, fee, total } = calcFees(myShare);
-  // For split: the hold = full court price + service fee (authorized but not fully captured)
+  // For split: the hold = full court price + service fee
   const { total: holdTotal } = payMode === 'split' ? calcFees(courtPrice) : { total };
   const formattedDate = date ? formatDate(date) : '';
   const origin = window.location.origin;
 
-  // Deadline = 2 hours after the slot end time
+  // Cutoff = 12 hours before the slot start time
   const deadlineLabel = (() => {
-    if (!date) return '';
-    const base = new Date(date + 'T' + (endTime ? endTime + ':00' : '00:00:00'));
-    base.setHours(base.getHours() + 2);
-    const dayMonth = base.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' });
-    const hhmm = `${String(base.getHours()).padStart(2, '0')}:${String(base.getMinutes()).padStart(2, '0')}`;
+    if (!date || !time) return '';
+    const start = new Date(date + 'T' + time + ':00');
+    start.setHours(start.getHours() - 12);
+    const dayMonth = start.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' });
+    const hhmm = `${String(start.getHours()).padStart(2, '0')}:${String(start.getMinutes()).padStart(2, '0')}`;
     return `${dayMonth} às ${hhmm}`;
   })();
 
@@ -194,9 +195,11 @@ export default function PrivateGameReview() {
                   <Users className="w-4 h-4 text-violet-600" />
                 </div>
                 <div>
-                  <span className="text-sm font-semibold text-gray-800">{players} jogadores</span>
+                  <span className="text-sm font-semibold text-gray-800">
+                    {payMode === 'split' ? 'Mínimo 10 · Máximo 18 jogadores' : `${players} jogadores`}
+                  </span>
                   <p className="text-xs text-gray-400 mt-0.5">
-                    {payMode === 'split' ? `Divisão em ${players} partes iguais` : 'Você paga o valor completo'}
+                    {payMode === 'split' ? 'Mais jogadores = menos por pessoa' : 'Você paga o valor completo'}
                   </p>
                 </div>
               </div>
@@ -213,7 +216,7 @@ export default function PrivateGameReview() {
                   <span className="font-semibold text-gray-900">R$ {courtPrice.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Sua parte (÷ {players})</span>
+                  <span className="text-gray-600">Sua parte mínima (÷ 10)</span>
                   <span className="font-semibold text-gray-900">R$ {base.toFixed(2)}</span>
                 </div>
               </>
@@ -244,11 +247,11 @@ export default function PrivateGameReview() {
         {payMode === 'split' && (
           <div className="bg-blue-50 rounded-2xl p-3.5 border border-blue-100 space-y-1.5">
             <p className="text-xs text-blue-900 leading-relaxed">
-              Para garantir a reserva, retemos temporariamente <strong>R$ {holdTotal.toFixed(2)}</strong> no seu cartão até duas horas após o fim da partida.
+              Retemos <strong>R$ {holdTotal.toFixed(2)}</strong> no seu cartão como garantia. Outros jogadores entram via link e cada um autoriza sua parte mínima.
             </p>
             {deadlineLabel && (
               <p className="text-xs text-blue-700 leading-relaxed">
-                Cada jogador deve pagar até <strong>{deadlineLabel}</strong>. Partes não pagas serão descontadas do valor retido.
+                12h antes do jogo (<strong>{deadlineLabel}</strong>) o valor é ajustado pelo número real de jogadores e cobrado de cada um.
               </p>
             )}
           </div>

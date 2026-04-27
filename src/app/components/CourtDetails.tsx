@@ -65,7 +65,7 @@ const CourtDetails: React.FC = () => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   const weekDays = buildWeekDays();
-  const [selectedDate, setSelectedDate] = useState(weekDays[0].date);
+  const [selectedDate, setSelectedDate] = useState(weekDays[1].date);
   const weekScrollRef = useRef<HTMLDivElement>(null);
   const slotPanelRef = useRef<HTMLDivElement>(null);
 
@@ -96,24 +96,27 @@ const CourtDetails: React.FC = () => {
   // Open-games tab state
   const [openGamesBySlot, setOpenGamesBySlot] = useState<Record<string, any>>({});
   const [selectedOpenSlot, setSelectedOpenSlot] = useState<SelectedSlot | null>(null);
-  const [openMaxPlayers, setOpenMaxPlayers] = useState(4);
+  const OPEN_MAX_PLAYERS = 18;
+  const OPEN_MIN_PLAYERS = 10;
 
   // Private game booking state
-  const [privateMaxPlayers, setPrivateMaxPlayers] = useState(4);
+  const PRIVATE_MAX_PLAYERS = 18;
   const [privatePayMode, setPrivatePayMode] = useState<'full' | 'split'>('full');
 
-  function minPlayersForCourt(courtId: string) {
-    const sport = venueCourts.find(c => c.id === courtId)?.sport_type ?? '';
-    if (sport === 'futsal') return 10;
-    if (sport === 'football' || sport === 'society') return 12;
-    return 2;
+  function minPlayersForCourt(_courtId: string) {
+    return 10;
   }
 
   function maxPlayersForCourt(courtId: string) {
     const sport = venueCourts.find(c => c.id === courtId)?.sport_type ?? '';
-    if (sport === 'futsal') return 15;
-    if (sport === 'football' || sport === 'society') return 18;
+    if (sport === 'football' || sport === 'society' || sport === 'futsal') return 18;
     return 8;
+  }
+
+  function defaultPrivatePlayersForCourt(courtId: string) {
+    const sport = venueCourts.find(c => c.id === courtId)?.sport_type ?? '';
+    if (sport === 'football' || sport === 'society' || sport === 'futsal') return 10;
+    return 4;
   }
 
   // ── Fetch court + venue ───────────────────────────────────
@@ -263,7 +266,7 @@ const CourtDetails: React.FC = () => {
 
   function handleCreateOpenGame() {
     if (!selectedOpenSlot) return;
-    const pricePerPlayer = Math.ceil(selectedOpenSlot.price / openMaxPlayers);
+    const pricePerPlayer = selectedOpenSlot.price / OPEN_MIN_PLAYERS;
     const courtSport = venueCourts.find(c => c.id === selectedOpenSlot.courtId)?.sport_type ?? '';
     navigate('/open-game-review', {
       state: {
@@ -276,7 +279,8 @@ const CourtDetails: React.FC = () => {
         time: selectedOpenSlot.time,
         endTime: selectedOpenSlot.endTime,
         totalPrice: selectedOpenSlot.price,
-        maxPlayers: openMaxPlayers,
+        maxPlayers: OPEN_MAX_PLAYERS,
+        minPlayers: OPEN_MIN_PLAYERS,
         pricePerPlayer,
       },
     });
@@ -553,27 +557,6 @@ const CourtDetails: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Player count */}
-                <div>
-                  <p className="text-sm font-semibold text-gray-700 mb-2">Número de jogadores</p>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => setPrivateMaxPlayers(p => Math.max(2, p - 1))}
-                      className="w-9 h-9 rounded-xl border-2 border-gray-200 flex items-center justify-center font-bold text-lg hover:border-violet-400 transition-colors"
-                    >
-                      <Minus className="w-4 h-4" />
-                    </button>
-                    <span className="text-xl font-bold w-8 text-center">{privateMaxPlayers}</span>
-                    <button
-                      onClick={() => setPrivateMaxPlayers(p => Math.min(maxPlayersForCourt(selectedSlot.courtId), p + 1))}
-                      className="w-9 h-9 rounded-xl border-2 border-gray-200 flex items-center justify-center font-bold text-lg hover:border-violet-400 transition-colors"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                    <span className="text-sm text-gray-400 ml-1">jogadores</span>
-                  </div>
-                </div>
-
                 {/* Payment mode */}
                 <div>
                   <p className="text-sm font-semibold text-gray-700 mb-2">Como deseja pagar?</p>
@@ -599,7 +582,7 @@ const CourtDetails: React.FC = () => {
                         <p className="text-xs text-gray-500">Cada jogador paga sua parte</p>
                       </div>
                       <span className="text-sm font-bold text-gray-900 flex-shrink-0">
-                        R$ {(selectedSlot.price / privateMaxPlayers).toFixed(2)}<span className="text-xs font-normal text-gray-500">/pessoa</span>
+                        R$ {(selectedSlot.price / 10).toFixed(2)}<span className="text-xs font-normal text-gray-500">/pessoa</span>
                       </span>
                     </button>
 
@@ -607,11 +590,11 @@ const CourtDetails: React.FC = () => {
                     {privatePayMode === 'split' && (
                       <div className="bg-blue-50 rounded-xl p-3.5 border border-blue-100 space-y-2">
                         <p className="text-sm text-blue-900 leading-relaxed">
-                          Para garantir a reserva, retemos temporariamente o valor total da quadra —{' '}
-                          <strong>R$ {(selectedSlot.price * 1.15).toFixed(2)}</strong> — no seu cartão, até duas horas após o fim da partida.
+                          A quadra abre para até <strong>18 jogadores</strong>. Cada um autoriza{' '}
+                          <strong>R$ {((selectedSlot.price / 10) * 1.15).toFixed(2)}</strong> no cartão — quanto mais jogadores entrarem, menos cada um paga.
                         </p>
                         <p className="text-sm text-blue-900 leading-relaxed">
-                          Cada jogador deve pagar sua parte até o início da partida. Caso alguma parte não seja paga, o valor será descontado do valor retido.
+                          12 horas antes do jogo o valor é ajustado e cobrado automaticamente.
                         </p>
                       </div>
                     )}
@@ -637,7 +620,7 @@ const CourtDetails: React.FC = () => {
                         courtName: selectedSlot.courtName,
                         venueName: court.venueName,
                         date: selectedDate,
-                        maxPlayers: privateMaxPlayers,
+                        maxPlayers: PRIVATE_MAX_PLAYERS,
                         payMode: privatePayMode,
                         courtSport: venueCourts.find(c => c.id === selectedSlot.courtId)?.sport_type ?? '',
                       },
@@ -721,7 +704,6 @@ const CourtDetails: React.FC = () => {
                                 } else if (!game && slot.available) {
                                   const min = minPlayersForCourt(c.id);
                                   setSelectedOpenSlot(isSelected ? null : { slotId: slot.id, courtId: c.id, courtName: c.name, time: slot.time, endTime: slot.endTime, price: slot.price });
-                                  setOpenMaxPlayers(min);
                                 }
                               }}
                               disabled={!slot.available && !game || isFull}
@@ -773,36 +755,13 @@ const CourtDetails: React.FC = () => {
                       <p className="text-sm opacity-70 mt-0.5">{selectedOpenSlot.courtName} · {new Date(selectedDate).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-2xl font-bold">R$ {Math.ceil(selectedOpenSlot.price / openMaxPlayers)}</p>
+                      <p className="text-2xl font-bold">R$ {(selectedOpenSlot.price / OPEN_MIN_PLAYERS).toFixed(2)}</p>
                       <p className="text-xs opacity-60">por jogador</p>
                     </div>
                   </div>
                 </div>
 
                 <div className="p-5 space-y-5">
-                  {/* Max players selector */}
-                  <div>
-                    <p className="text-sm font-semibold text-gray-700 mb-3">Número de jogadores</p>
-                    <div className="flex items-center justify-between bg-gray-50 rounded-xl p-3">
-                      <button
-                        onClick={() => setOpenMaxPlayers(p => Math.max(minPlayersForCourt(selectedOpenSlot!.courtId), p - 1))}
-                        className="w-9 h-9 rounded-full bg-white shadow border border-gray-200 flex items-center justify-center hover:bg-gray-100 transition-colors"
-                      >
-                        <Minus className="w-4 h-4 text-gray-700" />
-                      </button>
-                      <div className="text-center">
-                        <p className="text-3xl font-bold text-gray-900">{openMaxPlayers}</p>
-                        <p className="text-xs text-gray-400">jogadores</p>
-                      </div>
-                      <button
-                        onClick={() => setOpenMaxPlayers(p => Math.min(maxPlayersForCourt(selectedOpenSlot!.courtId), p + 1))}
-                        className="w-9 h-9 rounded-full bg-white shadow border border-gray-200 flex items-center justify-center hover:bg-gray-100 transition-colors"
-                      >
-                        <Plus className="w-4 h-4 text-gray-700" />
-                      </button>
-                    </div>
-                  </div>
-
                   {/* Summary */}
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between text-gray-600">
@@ -810,20 +769,20 @@ const CourtDetails: React.FC = () => {
                       <span className="font-semibold text-gray-900">R$ {selectedOpenSlot.price}</span>
                     </div>
                     <div className="flex justify-between text-gray-600">
-                      <span>Dividido por {openMaxPlayers} jogadores</span>
-                      <span className="font-semibold text-gray-900">= R$ {Math.ceil(selectedOpenSlot.price / openMaxPlayers)}/pessoa</span>
+                      <span>Dividido por {OPEN_MIN_PLAYERS} jogadores (mínimo)</span>
+                      <span className="font-semibold text-gray-900">= R$ {(selectedOpenSlot.price / OPEN_MIN_PLAYERS).toFixed(2)}/pessoa</span>
                     </div>
                     <div className="border-t border-gray-100 pt-2 flex justify-between font-bold text-gray-900">
                       <span>Você paga agora</span>
-                      <span className="text-violet-600">R$ {Math.ceil(selectedOpenSlot.price / openMaxPlayers)}</span>
+                      <span className="text-violet-600">R$ {(selectedOpenSlot.price / OPEN_MIN_PLAYERS).toFixed(2)}</span>
                     </div>
                   </div>
 
                   {/* Spots preview */}
                   <div>
-                    <p className="text-xs text-gray-500 mb-2">{openMaxPlayers - 1} vagas abertas para outros jogadores</p>
+                    <p className="text-xs text-gray-500 mb-2">{OPEN_MAX_PLAYERS - 1} vagas abertas para outros jogadores</p>
                     <div className="flex gap-2">
-                      {Array.from({ length: openMaxPlayers }).map((_, i) => (
+                      {Array.from({ length: OPEN_MAX_PLAYERS }).map((_, i) => (
                         <div key={i} className={`flex-1 h-1.5 rounded-full ${i === 0 ? 'bg-gray-900' : 'bg-gray-200'}`} />
                       ))}
                     </div>

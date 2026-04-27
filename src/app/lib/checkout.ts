@@ -18,8 +18,12 @@ interface CheckoutParams {
   date: string;
   time: string;
   vagaPrice: number;
-  mode: 'organizer' | 'join_self' | 'join_other';
+  mode: 'organizer' | 'join_self' | 'join_other' | 'pay_reservation';
   slotId?: string;
+  /** When true, Stripe authorizes but does not capture immediately (split join hold) */
+  captureManual?: boolean;
+  /** Passed through to PaymentSuccess so it can handle split vs full flows */
+  payMode?: 'split' | 'full';
   /** Override the auto-built success URL (used by organizer flow) */
   successUrl?: string;
   /** Override the auto-built cancel URL (used by organizer flow) */
@@ -31,8 +35,11 @@ export async function redirectToCheckout(params: CheckoutParams) {
 
   const origin = window.location.origin;
   const slotParam = params.slotId ? `&slotId=${params.slotId}` : '';
+  const payModeParam = params.payMode ? `&payMode=${params.payMode}` : '';
+  // Include session_id for manual-capture checkouts so PaymentSuccess can store the payment_intent_id
+  const sessionParam = params.captureManual ? '&session_id={CHECKOUT_SESSION_ID}' : '';
   const successUrl = params.successUrl
-    ?? `${origin}/payment-success?gameId=${params.gameId ?? ''}&playerId=${params.playerId}&playerName=${encodeURIComponent(params.playerName)}&mode=${params.mode}${slotParam}`;
+    ?? `${origin}/payment-success?gameId=${params.gameId ?? ''}&playerId=${params.playerId}&playerName=${encodeURIComponent(params.playerName)}&mode=${params.mode}${slotParam}${payModeParam}${sessionParam}`;
   const cancelUrl = params.cancelUrl
     ?? `${origin}/open-game/${params.gameId ?? ''}`;
 
@@ -43,6 +50,7 @@ export async function redirectToCheckout(params: CheckoutParams) {
       totalPrice: total,
       successUrl,
       cancelUrl,
+      captureManual: params.captureManual ?? false,
     },
   });
 

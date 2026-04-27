@@ -27,6 +27,7 @@ serve(async (req) => {
       successUrl,
       cancelUrl,
       mode,           // 'join_self' | 'join_other'
+      captureManual,  // when true: authorize hold, do not capture immediately
     } = await req.json();
 
     const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', {
@@ -36,6 +37,7 @@ serve(async (req) => {
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       mode: 'payment',
+      ...(captureManual ? { payment_intent_data: { capture_method: 'manual' } } : {}),
       line_items: [
         {
           price_data: {

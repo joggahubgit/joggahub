@@ -14,7 +14,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   getMinPlayersForSport,
-  FUTSAL_TEMP_MIN_PLAYERS,
   DEFAULT_MIN_PLAYERS,
   PLAYER_CANCEL_CUTOFF_HOURS,
   PENDING_RESULTS_DELAY_MINUTES,
@@ -64,8 +63,8 @@ function shouldConfirmGame(sportType: string, currentStatus: string, newPlayerCo
 // =============================================================================
 
 describe('getMinPlayersForSport', () => {
-  it('returns FUTSAL_TEMP_MIN_PLAYERS for futsal', () => {
-    expect(getMinPlayersForSport('futsal')).toBe(FUTSAL_TEMP_MIN_PLAYERS);
+  it('returns DEFAULT_MIN_PLAYERS for futsal', () => {
+    expect(getMinPlayersForSport('futsal')).toBe(DEFAULT_MIN_PLAYERS);
   });
 
   it('returns DEFAULT_MIN_PLAYERS for football', () => {
@@ -82,24 +81,24 @@ describe('getMinPlayersForSport', () => {
 });
 
 describe('Game confirmation — minimum players rule', () => {
-  it('confirms futsal when FUTSAL_TEMP_MIN_PLAYERS is reached', () => {
-    expect(shouldConfirmGame('futsal', 'scheduled', FUTSAL_TEMP_MIN_PLAYERS)).toBe(true);
+  it('confirms futsal when DEFAULT_MIN_PLAYERS is reached', () => {
+    expect(shouldConfirmGame('futsal', 'scheduled', DEFAULT_MIN_PLAYERS)).toBe(true);
   });
 
-  it('does not confirm futsal below FUTSAL_TEMP_MIN_PLAYERS', () => {
-    expect(shouldConfirmGame('futsal', 'scheduled', FUTSAL_TEMP_MIN_PLAYERS - 1)).toBe(false);
+  it('does not confirm futsal below DEFAULT_MIN_PLAYERS', () => {
+    expect(shouldConfirmGame('futsal', 'scheduled', DEFAULT_MIN_PLAYERS - 1)).toBe(false);
   });
 
-  it('confirms futsal above FUTSAL_TEMP_MIN_PLAYERS', () => {
-    expect(shouldConfirmGame('futsal', 'scheduled', FUTSAL_TEMP_MIN_PLAYERS + 1)).toBe(true);
+  it('confirms futsal above DEFAULT_MIN_PLAYERS', () => {
+    expect(shouldConfirmGame('futsal', 'scheduled', DEFAULT_MIN_PLAYERS + 1)).toBe(true);
   });
 
   it('does not re-confirm an already confirmed_booking game', () => {
-    expect(shouldConfirmGame('futsal', 'confirmed_booking', FUTSAL_TEMP_MIN_PLAYERS + 1)).toBe(false);
+    expect(shouldConfirmGame('futsal', 'confirmed_booking', DEFAULT_MIN_PLAYERS + 1)).toBe(false);
   });
 
   it('does not confirm a completed game', () => {
-    expect(shouldConfirmGame('futsal', 'completed', FUTSAL_TEMP_MIN_PLAYERS + 1)).toBe(false);
+    expect(shouldConfirmGame('futsal', 'completed', DEFAULT_MIN_PLAYERS + 1)).toBe(false);
   });
 
   it('does not confirm football below DEFAULT_MIN_PLAYERS', () => {
@@ -232,23 +231,24 @@ describe('XP distribution rules', () => {
   });
 });
 
-describe('Full lifecycle — regression: other sports not affected', () => {
-  it('football min players is not affected by futsal override', () => {
-    const footballMin = getMinPlayersForSport('football');
-    const futsalMin = getMinPlayersForSport('futsal');
-    expect(footballMin).not.toBe(futsalMin);
-    expect(footballMin).toBe(DEFAULT_MIN_PLAYERS);
+describe('Full lifecycle — all sports use same minimum', () => {
+  it('futsal min players equals DEFAULT_MIN_PLAYERS', () => {
+    expect(getMinPlayersForSport('futsal')).toBe(DEFAULT_MIN_PLAYERS);
   });
 
-  it('society min players is not affected by futsal override', () => {
+  it('football min players equals DEFAULT_MIN_PLAYERS', () => {
+    expect(getMinPlayersForSport('football')).toBe(DEFAULT_MIN_PLAYERS);
+  });
+
+  it('society min players equals DEFAULT_MIN_PLAYERS', () => {
     expect(getMinPlayersForSport('society')).toBe(DEFAULT_MIN_PLAYERS);
   });
 
-  it('padel min players is not affected by futsal override', () => {
+  it('padel min players equals DEFAULT_MIN_PLAYERS', () => {
     expect(getMinPlayersForSport('padel')).toBe(DEFAULT_MIN_PLAYERS);
   });
 
-  it('tennis min players is not affected by futsal override', () => {
+  it('tennis min players equals DEFAULT_MIN_PLAYERS', () => {
     expect(getMinPlayersForSport('tennis')).toBe(DEFAULT_MIN_PLAYERS);
   });
 });

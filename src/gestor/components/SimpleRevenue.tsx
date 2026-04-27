@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { DollarSign, TrendingUp, Wallet } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase-gestor';
 
 interface SimpleRevenueProps {
   venueId: string | null;

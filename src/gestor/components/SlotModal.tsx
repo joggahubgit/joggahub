@@ -2,9 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import {
   X, Ban, CheckCircle, AlertCircle, DollarSign, Search,
   Phone, Loader2, Trash2, CalendarCheck, Unlock, ChevronLeft,
-  XCircle, Bell, CreditCard,
+  XCircle, Bell, CreditCard, Users, Lock, ShieldCheck, Hourglass, Star,
 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase-gestor';
 
 interface Booking {
   id: string;
@@ -39,21 +39,57 @@ interface Props {
 type View = 'main' | 'reserve' | 'cancel' | 'delete_slot';
 
 function formatDateTime(iso: string) {
-  const d = new Date(iso);
+  // Parse date part directly to avoid timezone shifts on date display
+  const [datePart] = iso.split('T');
+  const [year, month, day] = datePart.split('-').map(Number);
+  const d = new Date(year, month - 1, day); // local midnight, no UTC conversion
   return {
     date: d.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }),
-    time: d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+    time: iso.substring(11, 16), // raw string — consistent with calendar grid
   };
 }
 
 function formatEndTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return iso.substring(11, 16);
 }
 
 function getStatus(slot: Slot): 'available' | 'booked' | 'blocked' {
   if (slot.booking) return 'booked';
   if (!slot.is_available) return 'blocked';
   return 'available';
+}
+
+function initials(name: string) {
+  return name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase();
+}
+
+function GameStatusBadge({ status }: { status: string }) {
+  if (status === 'confirmed_booking') return (
+    <span className="flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+      <ShieldCheck className="w-3 h-3" /> Confirmada
+    </span>
+  );
+  if (status === 'pending_results') return (
+    <span className="flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">
+      <Hourglass className="w-3 h-3" /> Aguardando resultados
+    </span>
+  );
+  if (status === 'completed') return (
+    <span className="flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+      <Star className="w-3 h-3" /> Encerrada
+    </span>
+  );
+  if (status === 'cancelled') return (
+    <span className="flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-600">
+      <XCircle className="w-3 h-3" /> Cancelada
+    </span>
+  );
+  // scheduled / default
+  return (
+    <span className="flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+      <Hourglass className="w-3 h-3" /> Aguardando jogadores
+    </span>
+  );
 }
 
 export function SlotModal({ slot, courtName, onClose, onRefresh }: Props) {
@@ -64,19 +100,52 @@ export function SlotModal({ slot, courtName, onClose, onRefresh }: Props) {
   const [cancelConfirmed, setCancelConfirmed] = useState(false);
   const [stripeRefunded, setStripeRefunded] = useState(false);
 
+  // Linked game (private bookings created by player have an associated game)
+  const [linkedGame, setLinkedGame] = useState<{
+    id: string; status: string; current_players: number;
+    max_players: number; price_per_player: number; organizer_id: string;
+  } | null>(null);
+  const [gamePlayers, setGamePlayers] = useState<{ player_id: string; player_name: string; paid: boolean }[]>([]);
+  const [gameLoading, setGameLoading] = useState(false);
+
   // Reserve flow
+  const [reserveType, setReserveType] = useState<'private' | 'open'>('private');
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState<Profile[]>([]);
   const [searching, setSearching] = useState(false);
   const [selectedUser, setSelectedUser] = useState<Profile | null>(null);
   const [reservePrice, setReservePrice] = useState(String(slot.price_override ?? ''));
-  const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid'>('pending');
+  const paymentStatus = 'pending' as const;
+  // Open game fields
+  const maxPlayers = 18;
+  const [pricePerPlayer, setPricePerPlayer] = useState(String(slot.price_override ?? ''));
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const status = getStatus(slot);
   const { date, time } = formatDateTime(slot.start_time);
   const endTime = formatEndTime(slot.end_time);
   const isPaid = slot.booking?.payment_status === 'paid';
+
+  useEffect(() => {
+    if (!slot.booking?.id) return;
+    setGameLoading(true);
+    supabase
+      .from('games')
+      .select('id, status, current_players, max_players, price_per_player, organizer_id')
+      .eq('booking_id', slot.booking.id)
+      .maybeSingle()
+      .then(async ({ data: g }) => {
+        if (!g) { setGameLoading(false); return; }
+        setLinkedGame(g);
+        const { data: gp } = await supabase
+          .from('game_players')
+          .select('player_id, player_name, paid')
+          .eq('game_id', g.id)
+          .order('id');
+        setGamePlayers(gp ?? []);
+        setGameLoading(false);
+      });
+  }, [slot.booking?.id]);
 
   useEffect(() => {
     if (search.length < 2) { setSearchResults([]); return; }
@@ -120,30 +189,66 @@ export function SlotModal({ slot, courtName, onClose, onRefresh }: Props) {
   }
 
   async function handleReserve() {
-    if (!selectedUser) { setError('Selecione um jogador.'); return; }
     setBusy(true); setError('');
-    const price = parseFloat(reservePrice) || 0;
 
-    const { error: bookErr } = await supabase.from('bookings').insert({
-      slot_id: slot.id,
-      created_by: selectedUser.id,
-      total_price: price,
-      payment_status: paymentStatus,
-      status: 'confirmed',
-    });
-    if (bookErr) { setError(bookErr.message); setBusy(false); return; }
+    let body: Record<string, unknown>;
 
-    const { error: slotErr } = await supabase.from('slots').update({ is_available: false }).eq('id', slot.id);
-    if (slotErr) { setError(slotErr.message); setBusy(false); return; }
+    if (reserveType === 'private') {
+      if (!selectedUser) { setError('Selecione um jogador.'); setBusy(false); return; }
+      body = {
+        type: 'private',
+        slotId: slot.id,
+        userId: selectedUser.id,
+        price: parseFloat(reservePrice) || 0,
+        paymentStatus,
+      };
+    } else {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setError('Sessão expirada. Faça login novamente.'); setBusy(false); return; }
+      body = {
+        type: 'open',
+        slotId: slot.id,
+        organizerId: user.id,
+        maxPlayers,
+        pricePerPlayer: parseFloat(pricePerPlayer) || 0,
+      };
+    }
 
+    const { error: fnErr } = await supabase.functions.invoke('create-manual-booking', { body });
     setBusy(false);
+    if (fnErr) {
+      const parsed = await (fnErr as any).context?.json?.().catch(() => null);
+      setError(parsed?.error ?? fnErr.message ?? 'Erro ao criar reserva');
+      return;
+    }
     onRefresh(); onClose();
   }
 
   async function handleDeleteSlot() {
     setBusy(true); setError('');
-    // Remove draft games referencing this slot (bookings cascade automatically via DB constraint)
-    await supabase.from('games').delete().eq('slot_id', slot.id);
+
+    // Check for active games linked to this slot
+    const { data: linkedGames } = await supabase
+      .from('games')
+      .select('id, status')
+      .eq('slot_id', slot.id);
+
+    for (const game of linkedGames ?? []) {
+      const activeStatuses = ['scheduled', 'confirmed_booking', 'pending_results'];
+      if (activeStatuses.includes(game.status)) {
+        // Active game — cancel properly (refunds + notifications)
+        const { error: fnErr } = await supabase.functions.invoke('cancel-game', { body: { gameId: game.id } });
+        if (fnErr) {
+          setError(`Erro ao cancelar partida vinculada: ${fnErr.message}`);
+          setBusy(false);
+          return;
+        }
+      } else {
+        // Inactive game — just unlink the slot
+        await supabase.from('games').update({ slot_id: null }).eq('id', game.id);
+      }
+    }
+
     const { error: e } = await supabase.from('slots').delete().eq('id', slot.id);
     setBusy(false);
     if (e) { setError(e.message); return; }
@@ -249,6 +354,80 @@ export function SlotModal({ slot, courtName, onClose, onRefresh }: Props) {
                       </div>
                     </div>
                   </div>
+
+                  {/* Linked game details */}
+                  {gameLoading && (
+                    <div className="flex items-center justify-center py-3">
+                      <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                    </div>
+                  )}
+                  {linkedGame && !gameLoading && (
+                    <div className="space-y-3 border border-gray-100 rounded-2xl p-4 bg-gray-50">
+                      {/* Status + count */}
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-1.5 text-sm font-bold text-gray-700">
+                          <Users className="w-4 h-4 text-gray-400" />
+                          {linkedGame.current_players} / {linkedGame.max_players} jogadores
+                        </div>
+                        <GameStatusBadge status={linkedGame.status} />
+                      </div>
+
+                      {/* Fill bar */}
+                      <div className="w-full bg-gray-200 rounded-full h-1.5">
+                        <div
+                          className={`h-1.5 rounded-full transition-all ${
+                            linkedGame.status === 'confirmed_booking' ? 'bg-green-500' : 'bg-purple-500'
+                          }`}
+                          style={{ width: `${Math.min(100, Math.round((linkedGame.current_players / linkedGame.max_players) * 100))}%` }}
+                        />
+                      </div>
+
+                      {/* Player list */}
+                      {gamePlayers.length > 0 && (
+                        <div className="space-y-1.5">
+                          {gamePlayers.map(p => (
+                            <div key={p.player_id} className={`flex items-center gap-2.5 px-3 py-2 rounded-xl border ${
+                              p.paid ? 'bg-green-50 border-green-100' : 'bg-orange-50 border-orange-100'
+                            }`}>
+                              <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-[11px] font-bold ${
+                                p.paid ? 'bg-green-600 text-white' : 'bg-orange-400 text-white'
+                              }`}>
+                                {initials(p.player_name)}
+                              </div>
+                              <span className="text-sm font-medium text-gray-900 flex-1 truncate">
+                                {p.player_name}
+                                {p.player_id === linkedGame.organizer_id && (
+                                  <span className="ml-1.5 text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-bold">Org.</span>
+                                )}
+                              </span>
+                              {p.paid
+                                ? <CheckCircle className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+                                : <AlertCircle className="w-3.5 h-3.5 text-orange-400 flex-shrink-0" />}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {gamePlayers.length === 0 && (
+                        <p className="text-xs text-gray-400 text-center">Nenhum jogador registrado ainda.</p>
+                      )}
+
+                      {/* Revenue summary */}
+                      {linkedGame.price_per_player > 0 && (
+                        <div className="border-t border-gray-200 pt-3 space-y-1">
+                          <div className="flex justify-between text-xs text-gray-500">
+                            <span>Receita confirmada</span>
+                            <span className="font-bold text-gray-800">
+                              R$ {(gamePlayers.filter(p => p.paid).length * linkedGame.price_per_player).toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-xs text-gray-400">
+                            <span>Receita potencial</span>
+                            <span>R$ {(linkedGame.max_players * linkedGame.price_per_player).toFixed(2)}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Actions */}
                   <div className="space-y-2">
@@ -432,6 +611,44 @@ export function SlotModal({ slot, courtName, onClose, onRefresh }: Props) {
           {/* ── RESERVE VIEW ── */}
           {view === 'reserve' && (
             <div className="space-y-4">
+
+              {/* Type selector */}
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">Tipo de reserva</label>
+                <div className="flex gap-2">
+                  <button onClick={() => setReserveType('private')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all ${
+                      reserveType === 'private' ? 'bg-purple-600 text-white border-purple-600' : 'border-gray-200 text-gray-600 hover:border-purple-300'
+                    }`}>
+                    <Lock className="w-4 h-4" /> Privada
+                  </button>
+                  <button onClick={() => setReserveType('open')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all ${
+                      reserveType === 'open' ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 text-gray-600 hover:border-blue-300'
+                    }`}>
+                    <Users className="w-4 h-4" /> Aberta
+                  </button>
+                </div>
+              </div>
+
+              {/* Open game fields */}
+              {reserveType === 'open' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">Preço por jogador (R$)</label>
+                    <div className="relative">
+                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input type="number" min="0" step="0.01" placeholder="0,00" value={pricePerPlayer}
+                        onChange={e => setPricePerPlayer(e.target.value)}
+                        className="w-full pl-9 pr-4 py-2.5 border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-400" />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Private game fields */}
+              {reserveType === 'private' && (
+              <>
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">Buscar jogador</label>
                 <div className="relative">
@@ -494,32 +711,21 @@ export function SlotModal({ slot, courtName, onClose, onRefresh }: Props) {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">Status do pagamento</label>
-                <div className="flex gap-2">
-                  {([
-                    { value: 'pending', label: 'Pendente', icon: AlertCircle, color: 'border-orange-300 text-orange-600 bg-orange-50' },
-                    { value: 'paid', label: 'Já pago', icon: CheckCircle, color: 'border-green-300 text-green-600 bg-green-50' },
-                  ] as const).map(opt => (
-                    <button key={opt.value} onClick={() => setPaymentStatus(opt.value)}
-                      className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all ${
-                        paymentStatus === opt.value
-                          ? opt.color
-                          : 'border-gray-200 text-gray-500 bg-white hover:border-gray-300'
-                      }`}>
-                      <opt.icon className="w-4 h-4" />
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+
+</>
+              )}
+              {/* end reserveType === 'private' */}
 
               {error && <p className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2 border border-red-100">{error}</p>}
 
-              <button onClick={handleReserve} disabled={busy || !selectedUser}
-                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-purple-600 text-white font-semibold hover:bg-purple-700 transition-colors disabled:opacity-50">
+              <button
+                onClick={handleReserve}
+                disabled={busy || (reserveType === 'private' && !selectedUser)}
+                className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-white font-semibold transition-colors disabled:opacity-50 ${
+                  reserveType === 'open' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-purple-600 hover:bg-purple-700'
+                }`}>
                 {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarCheck className="w-5 h-5" />}
-                Confirmar reserva
+                {reserveType === 'open' ? 'Criar partida aberta' : 'Confirmar reserva'}
               </button>
             </div>
           )}

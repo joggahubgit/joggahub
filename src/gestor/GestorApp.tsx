@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { LayoutDashboard, Calendar, List, DollarSign, Settings, LogOut, Menu, X, Building2 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase-gestor';
 import { LoginPage } from './components/LoginPage';
 import { SimpleDashboard } from './components/SimpleDashboard';
 import { SmartBookingCalendar } from './components/SmartBookingCalendar';
@@ -8,9 +8,8 @@ import { SimpleBookingsList } from './components/SimpleBookingsList';
 import { SimpleRevenue } from './components/SimpleRevenue';
 import { SimpleSettings } from './components/SimpleSettings';
 import { CreateAvailability } from './components/CreateAvailability';
-import { VenueProfile } from './components/VenueProfile';
 
-type Tab = 'dashboard' | 'calendar' | 'bookings' | 'revenue' | 'profile' | 'settings';
+type Tab = 'dashboard' | 'calendar' | 'bookings' | 'revenue' | 'settings';
 
 export default function GestorApp() {
   const [user, setUser] = useState<any>(null);
@@ -59,33 +58,11 @@ export default function GestorApp() {
     return <LoginPage />;
   }
 
-  // No venue registered yet — force settings tab
-  if (!venue && activeTab !== 'settings') {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
-          <div className="w-16 h-16 bg-purple-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <Building2 className="w-8 h-8 text-purple-600" />
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Configure sua quadra</h2>
-          <p className="text-gray-600 mb-6">Antes de continuar, cadastre as informações da sua quadra.</p>
-          <button
-            onClick={() => setActiveTab('settings')}
-            className="w-full bg-purple-600 text-white py-3 rounded-xl font-semibold hover:bg-purple-700 transition-colors"
-          >
-            Ir para Configurações
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   const menuItems = [
     { id: 'dashboard' as Tab, label: 'Dashboard', icon: LayoutDashboard },
     { id: 'calendar' as Tab, label: 'Agenda', icon: Calendar },
     { id: 'bookings' as Tab, label: 'Reservas', icon: List },
     { id: 'revenue' as Tab, label: 'Pagamentos', icon: DollarSign },
-    { id: 'profile' as Tab, label: 'Perfil da Quadra', icon: Building2 },
     { id: 'settings' as Tab, label: 'Configurações', icon: Settings },
   ];
 
@@ -101,8 +78,6 @@ export default function GestorApp() {
         return <SimpleBookingsList venueId={venue?.id} />;
       case 'revenue':
         return <SimpleRevenue venueId={venue?.id} />;
-      case 'profile':
-        return <VenueProfile venue={venue} onVenueUpdated={setVenue} />;
       case 'settings':
         return <SimpleSettings venueId={venue?.id} userId={user?.id} onVenueCreated={(v) => { setVenue(v); setActiveTab('dashboard'); }} />;
       default:

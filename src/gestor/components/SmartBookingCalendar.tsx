@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Ban, Filter, Clock, CheckCircle, AlertCircle, Plus, Trash2 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase-gestor';
 import { CreateAvailability } from './CreateAvailability';
 import { RemoveSlots } from './RemoveSlots';
 import { SlotModal } from './SlotModal';
@@ -499,34 +499,44 @@ export function SmartBookingCalendar({ venueId }: Props) {
                 <h3 className="font-bold text-lg text-gray-900">{court.name}</h3>
               </div>
 
-              <div className="overflow-x-auto">
-                <div className="inline-flex min-w-full">
-                  {/* Time column */}
-                  <div className="w-24 flex-shrink-0 bg-gray-50 border-r-2 border-gray-200">
-                    <div className="h-12 border-b-2 border-gray-200 flex items-center justify-center">
-                      <Clock className="w-4 h-4 text-gray-400" />
+              <div className="flex">
+                {/* TIME COLUMN — outside scroll so labels never get clipped */}
+                <div className="w-14 flex-shrink-0 bg-white border-r border-gray-200 z-10">
+                  <div className="h-12 border-b-2 border-gray-200" />
+                  {HOURS.map((hour, i) => (
+                    <div key={hour} className="relative h-16 border-b border-gray-100">
+                      <span className={`absolute right-2 text-[11px] font-medium text-gray-400 tabular-nums leading-none ${i === 0 ? 'top-1' : '-top-[0.55em]'}`}>
+                        {hour}
+                      </span>
                     </div>
-                    {HOURS.map(hour => (
-                      <div key={hour} className="h-16 border-b border-gray-200 flex items-center justify-center">
-                        <span className="text-sm font-semibold text-gray-700">{hour}</span>
-                      </div>
-                    ))}
-                  </div>
+                  ))}
+                </div>
 
-                  {/* Day columns */}
+                {/* DAY COLUMNS — horizontally scrollable */}
+                <div className="flex-1 overflow-x-auto">
+                <div className="inline-flex min-w-full">
                   {displayDays.map((day, dayIdx) => (
-                    <div key={dayIdx} className="flex-1 min-w-[140px] border-r-2 border-gray-200 last:border-0">
-                      <div className="h-12 border-b-2 border-gray-200 flex items-center justify-center bg-gray-50">
+                    <div key={dayIdx} className={`flex-1 min-w-[140px] border-r border-gray-200 last:border-0 ${sameDay(day, today) ? 'bg-blue-50/30' : ''}`}>
+                      <div className={`h-12 border-b-2 border-gray-200 flex items-center justify-center ${sameDay(day, today) ? 'bg-blue-50' : 'bg-gray-50'}`}>
                         <div className="text-center">
-                          <div className="text-xs text-gray-600 font-medium">{formatDayName(day)}</div>
-                          <div className="text-base font-bold text-gray-900">{formatShortDate(day)}</div>
+                          <div className="text-xs text-gray-500 font-medium uppercase tracking-wide">{formatDayName(day)}</div>
+                          {sameDay(day, today)
+                            ? <div className="w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center mx-auto mt-0.5">
+                                <span className="text-sm font-bold text-white">{day.getDate()}</span>
+                              </div>
+                            : <div className="text-sm font-bold text-gray-900">{formatShortDate(day)}</div>
+                          }
                         </div>
                       </div>
 
-                      {HOURS.map(hour => {
+                      {HOURS.map((hour, i) => {
                         const slot = getSlot(court.id, day, hour);
                         const status = getSlotStatus(slot);
-                        if (!shouldShow(slot)) return <div key={hour} className="h-16 border-b border-gray-100 bg-gray-50" />;
+                        const borderClass = 'border-b border-gray-100';
+
+                        if (!shouldShow(slot)) return (
+                          <div key={hour} className={`h-16 ${borderClass} bg-transparent`} />
+                        );
 
                         return (
                           <button
@@ -537,50 +547,65 @@ export function SmartBookingCalendar({ venueId }: Props) {
                               else setSelectedSlot(slot);
                             }}
                             disabled={!slot}
-                            className={`w-full h-16 border-b border-gray-200 text-xs transition-all relative group ${
+                            className={`w-full h-16 ${borderClass} text-xs transition-all ${
                               status === 'available'
-                                ? 'bg-green-50 hover:bg-green-100 border-l-4 border-l-green-500'
+                                ? 'bg-green-50 hover:bg-green-100 border-l-[3px] border-l-green-500'
                                 : status === 'open_game'
-                                ? 'bg-blue-50 hover:bg-blue-100 border-l-4 border-l-blue-500'
+                                ? 'bg-blue-50 hover:bg-blue-100 border-l-[3px] border-l-blue-500'
                                 : status === 'booked'
                                 ? slot?.booking?.payment_status === 'paid'
-                                  ? 'bg-purple-600 hover:bg-purple-700 text-white border-l-4 border-l-purple-800'
-                                  : 'bg-orange-500 hover:bg-orange-600 text-white border-l-4 border-l-orange-700'
+                                  ? 'bg-purple-600 hover:bg-purple-700 text-white border-l-[3px] border-l-purple-800'
+                                  : 'bg-orange-500 hover:bg-orange-600 text-white border-l-[3px] border-l-orange-700'
                                 : status === 'blocked'
-                                ? 'bg-gray-200 hover:bg-gray-300 border-l-4 border-l-gray-400'
-                                : 'bg-gray-50 cursor-default'
+                                ? 'bg-gray-100 hover:bg-gray-200 border-l-[3px] border-l-gray-300'
+                                : 'bg-white cursor-default'
                             }`}
                           >
                             {status === 'booked' && slot?.booking && (
-                              <div className="px-2 py-1 h-full flex flex-col justify-center items-start">
-                                <div className="font-bold truncate w-full text-left">
+                              <div className="px-2 pt-1.5 h-full flex flex-col justify-start items-start overflow-hidden gap-0.5">
+                                <div className="text-[9px] opacity-75 leading-none tabular-nums">
+                                  {slot.start_time.substring(11,16)} – {slot.end_time.substring(11,16)}
+                                </div>
+                                <div className="font-bold truncate w-full text-left text-[11px] leading-tight">
                                   {slot.booking.profiles?.name?.split(' ')[0] ?? 'Jogador'}
                                 </div>
-                                <div className="text-xs opacity-90 flex items-center gap-1">
+                                <div className="opacity-90 flex items-center gap-0.5 text-[10px]">
                                   {slot.booking.payment_status === 'paid'
-                                    ? <CheckCircle className="w-3 h-3" />
-                                    : <AlertCircle className="w-3 h-3" />}
+                                    ? <CheckCircle className="w-2.5 h-2.5 flex-shrink-0" />
+                                    : <AlertCircle className="w-2.5 h-2.5 flex-shrink-0" />}
                                   R$ {slot.booking.total_price}
                                 </div>
                               </div>
                             )}
                             {status === 'open_game' && slot?.game && (
-                              <div className="px-2 py-1 h-full flex flex-col justify-center">
-                                <div className="font-bold text-blue-700 truncate">Partida Aberta</div>
-                                <div className="text-xs text-blue-500">
+                              <div className="px-2 pt-1.5 h-full flex flex-col justify-start overflow-hidden gap-0.5">
+                                <div className="text-[9px] text-blue-400 leading-none tabular-nums">
+                                  {slot.start_time.substring(11,16)} – {slot.end_time.substring(11,16)}
+                                </div>
+                                <div className="font-bold text-blue-700 text-[11px] leading-tight truncate">Partida Aberta</div>
+                                <div className="text-[10px] text-blue-500">
                                   {slot.game.current_players}/{slot.game.max_players} jogadores
                                 </div>
                               </div>
                             )}
                             {status === 'available' && (
-                              <div className="px-2 py-1 h-full flex flex-col justify-center">
-                                <div className="font-bold text-green-700">Livre</div>
-                                <div className="text-xs text-green-600">R$ {slot?.price_override ?? '—'}</div>
+                              <div className="px-2 pt-1.5 h-full flex flex-col justify-start overflow-hidden gap-0.5">
+                                <div className="text-[9px] text-green-500 leading-none tabular-nums">
+                                  {slot!.start_time.substring(11,16)} – {slot!.end_time.substring(11,16)}
+                                </div>
+                                <div className="font-bold text-green-700 text-[11px] leading-tight">Livre</div>
+                                <div className="text-[10px] text-green-600">R$ {slot?.price_override ?? '—'}</div>
                               </div>
                             )}
                             {status === 'blocked' && (
-                              <div className="flex items-center justify-center h-full">
-                                <Ban className="w-6 h-6 text-gray-500" />
+                              <div className="px-2 pt-1.5 h-full flex flex-col justify-start overflow-hidden gap-0.5">
+                                <div className="text-[9px] text-gray-400 leading-none tabular-nums">
+                                  {slot!.start_time.substring(11,16)} – {slot!.end_time.substring(11,16)}
+                                </div>
+                                <div className="flex items-center gap-1 mt-1">
+                                  <Ban className="w-3 h-3 text-gray-400" />
+                                  <span className="text-[10px] text-gray-400">Bloqueado</span>
+                                </div>
                               </div>
                             )}
                           </button>
@@ -589,7 +614,8 @@ export function SmartBookingCalendar({ venueId }: Props) {
                     </div>
                   ))}
                 </div>
-              </div>
+                </div>{/* end overflow-x-auto */}
+                </div>{/* end flex */}
             </div>
           ))}
         </div>

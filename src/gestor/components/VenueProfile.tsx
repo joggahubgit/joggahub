@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Save, MapPin, Phone, Mail, Check, X, Upload, Camera, Pencil, AlertCircle, Plus, Trash2 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase-gestor';
 
 interface Props {
   venue: any;

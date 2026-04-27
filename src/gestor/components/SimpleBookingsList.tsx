@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Search, Filter, CheckCircle, XCircle, Phone, Mail, Calendar, Clock, DollarSign, ChevronDown, MoreVertical } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase-gestor';
 
 interface Props { venueId: string; }
 
