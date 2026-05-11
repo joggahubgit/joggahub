@@ -6,6 +6,8 @@ import { SmartBookingCalendar } from './components/SmartBookingCalendar';
 import { SimpleBookingsList } from './components/SimpleBookingsList';
 import { SimpleRevenue } from './components/SimpleRevenue';
 import { SimpleSettings } from './components/SimpleSettings';
+import { VenueProfile } from './components/VenueProfile';
+import { GestorNotifications } from './components/GestorNotifications';
 
 type Tab = 'calendar' | 'bookings' | 'revenue' | 'settings';
 
@@ -54,6 +56,29 @@ export default function GestorApp() {
     return <LoginPage />;
   }
 
+  if (!venue) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl border-2 border-gray-100 shadow-sm p-8 max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <LogOut className="w-8 h-8 text-red-500" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Acesso restrito</h2>
+          <p className="text-gray-500 text-sm mb-6">
+            Esta área é exclusiva para gestores de quadras cadastrados na plataforma.
+            Entre em contato com a JoggaHub para solicitar acesso.
+          </p>
+          <button
+            onClick={handleSignOut}
+            className="w-full py-2.5 rounded-xl bg-gray-100 text-gray-700 font-medium hover:bg-gray-200 transition-colors text-sm"
+          >
+            Sair
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const menuItems = [
     { id: 'calendar' as Tab, label: 'Agenda', icon: Calendar },
     { id: 'bookings' as Tab, label: 'Reservas', icon: List },
@@ -72,7 +97,9 @@ export default function GestorApp() {
       case 'revenue':
         return <SimpleRevenue venueId={venue?.id} />;
       case 'settings':
-        return <SimpleSettings venueId={venue?.id} userId={user?.id} onVenueCreated={(v) => { setVenue(v); setActiveTab('calendar'); }} />;
+        return venue
+          ? <VenueProfile venue={venue} onVenueUpdated={(v) => setVenue(v)} />
+          : <SimpleSettings venueId={null} userId={user?.id} onVenueCreated={(v) => { setVenue(v); setActiveTab('calendar'); }} />;
       default:
         return null;
     }
@@ -106,6 +133,7 @@ export default function GestorApp() {
               <span className="text-sm font-medium text-gray-900">{venue?.name ?? 'Minha Quadra'}</span>
               <span className="text-xs text-gray-600">Administrador</span>
             </div>
+            {venue?.id && <GestorNotifications venueId={venue.id} />}
             <div className="w-9 h-9 md:w-10 md:h-10 bg-gradient-to-br from-purple-600 to-purple-700 rounded-full flex items-center justify-center text-white font-semibold shadow-md text-sm md:text-base">
               {venueInitials}
             </div>

@@ -13,6 +13,22 @@ serve(async (req) => {
   }
 
   try {
+    // ── JWT verification ──
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
+    }
+    const supabaseUser = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } },
+    );
+    const { data: { user }, error: authError } = await supabaseUser.auth.getUser();
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
+    }
+    const callerId = user.id;
+
     const { gameId } = await req.json();
     if (!gameId) throw new Error('gameId is required');
 
@@ -35,6 +51,17 @@ serve(async (req) => {
     const slotId = game?.slot_id ?? null;
     const bookingId = game?.booking_id ?? null;
     const isPrivateGame = !!bookingId;
+
+    // ── Authorization: caller must be the venue admin ──
+    if (!slotId) {
+      return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: corsHeaders });
+    }
+    const { data: slotData } = await supabase.from('slots').select('court_id').eq('id', slotId).single();
+    const { data: courtData } = await supabase.from('courts').select('venue_id').eq('id', slotData?.court_id ?? '').single();
+    const { data: venueData } = await supabase.from('venues').select('admin_id').eq('id', courtData?.venue_id ?? '').single();
+    if (venueData?.admin_id !== callerId) {
+      return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: corsHeaders });
+    }
 
     // Fetch organizer from booking (private game) for notifications
     let organizerId: string | null = null;

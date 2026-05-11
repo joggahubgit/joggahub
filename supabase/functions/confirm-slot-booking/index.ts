@@ -12,8 +12,24 @@ serve(async (req) => {
   }
 
   try {
-    const { slotId, courtId, userId, price, startTime, endTime } = await req.json();
-    if (!userId) throw new Error('userId é obrigatório');
+    // ── JWT verification ──
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
+    }
+    const supabaseUser = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } },
+    );
+    const { data: { user }, error: authError } = await supabaseUser.auth.getUser();
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
+    }
+    // userId comes from the verified JWT — not from the request body
+    const userId = user.id;
+
+    const { slotId, courtId, price, startTime, endTime } = await req.json();
     if (!slotId && !(courtId && startTime && endTime)) {
       throw new Error('Forneça slotId ou (courtId + startTime + endTime)');
     }

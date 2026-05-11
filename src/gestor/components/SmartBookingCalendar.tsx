@@ -6,6 +6,7 @@ import { RemoveSlots } from './RemoveSlots';
 import { SlotModal } from './SlotModal';
 import { OpenGameModal } from './OpenGameModal';
 import { DynamicSlotModal } from './DynamicSlotModal';
+import { GestorBookingDetail } from './GestorBookingDetail';
 
 interface Props {
   venueId: string;
@@ -89,6 +90,7 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
   const [selectedGameSlot, setSelectedGameSlot] = useState<Slot | null>(null);
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<'all' | 'available' | 'booked' | 'blocked'>('all');
   const [selectedCourtId, setSelectedCourtId] = useState<string>('all');
   const [showCreateSlot, setShowCreateSlot] = useState(false);
@@ -560,6 +562,7 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
                               onClick={() => {
                                 if (!slot) return;
                                 if (slot.game) setSelectedGameSlot(slot);
+                                else if (slot.booking) setSelectedBookingId(slot.booking.id);
                                 else setSelectedSlot(slot);
                               }}
                               disabled={!slot}
@@ -650,6 +653,14 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
             // Needed when weekStart didn't change (same week), so useEffect([fetchAll]) won't fire.
             requestAnimationFrame(() => fetchAllRef.current());
           }}
+        />
+      )}
+
+      {selectedBookingId && (
+        <GestorBookingDetail
+          bookingId={selectedBookingId}
+          onClose={() => setSelectedBookingId(null)}
+          onChanged={() => { fetchAll(); setSelectedBookingId(null); }}
         />
       )}
 

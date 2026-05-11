@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { Save, MapPin, Phone, Mail, Check, X, Upload, Camera, Pencil, AlertCircle, Plus, Trash2 } from 'lucide-react';
+import { Save, MapPin, Phone, Mail, Check, X, Upload, Camera, Pencil, AlertCircle, Plus, Trash2, Calendar, ToggleLeft, ToggleRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
+import { CreateSchedule } from './CreateSchedule';
 
 interface Props {
   venue: any;
@@ -11,7 +12,13 @@ const AMENITIES = ['Banheiro', 'Vestiário', 'Churrasqueira', 'Área para Festa'
 const SPORT_TYPES = [
   { id: 'society', label: 'Society' },
   { id: 'futsal', label: 'Futsal' },
+  { id: 'football', label: 'Futebol' },
+  { id: 'beach_tennis', label: 'Beach Tennis' },
+  { id: 'padel', label: 'Padel' },
+  { id: 'volleyball', label: 'Vôlei' },
+  { id: 'basketball', label: 'Basquete' },
 ];
+const SURFACES = ['Grama sintética', 'Grama natural', 'Piso emborrachado', 'Cimento', 'Salão', 'Saibro', 'Asfalto', 'Areia'];
 
 async function uploadPhoto(file: File, venueId: string, index: number): Promise<string | null> {
   const ext = file.name.split('.').pop();
@@ -80,8 +87,14 @@ export function VenueProfile({ venue, onVenueUpdated }: Props) {
   const [newPreviews, setNewPreviews] = useState<string[]>([]);
   const photoRef = useRef<HTMLInputElement>(null);
 
+  // ── Schedule modal ────────────────────────────────────────
+  const [scheduleCourtId, setScheduleCourtId] = useState<string | null>(null);
+
   // ── Courts (editable list) ────────────────────────────────
-  const [editCourts, setEditCourts] = useState<{ id?: string; name: string; sportType: string; pricePerHour: string; isNew?: boolean; toDelete?: boolean }[]>([]);
+  const [editCourts, setEditCourts] = useState<{
+    id?: string; name: string; sportType: string; surface: string;
+    pricePerHour: string; isActive: boolean; isNew?: boolean; toDelete?: boolean;
+  }[]>([]);
 
   // ── Amenities ─────────────────────────────────────────────
   const [amenities, setAmenities] = useState<string[]>([]);
@@ -91,7 +104,7 @@ export function VenueProfile({ venue, onVenueUpdated }: Props) {
   }, [venue?.id]);
 
   async function fetchCourts() {
-    const { data } = await supabase.from('courts').select('*').eq('venue_id', venue.id).neq('is_active', false);
+    const { data } = await supabase.from('courts').select('*').eq('venue_id', venue.id).order('name');
     if (data?.length) {
       setCourts(data);
       const allImages = [...new Set(data.flatMap((c: any) => c.images ?? []))];
@@ -135,7 +148,9 @@ export function VenueProfile({ venue, onVenueUpdated }: Props) {
       id: c.id,
       name: c.name ?? '',
       sportType: c.sport_type ?? 'society',
+      surface: c.surface ?? 'Grama sintética',
       pricePerHour: String(c.price_per_hour ?? 120),
+      isActive: c.is_active !== false,
     })));
 
     setNewPhotos([]);
@@ -186,10 +201,9 @@ export function VenueProfile({ venue, onVenueUpdated }: Props) {
 
   // ── Court handlers ────────────────────────────────────────
   function addCourt() {
-    if (editCourts.filter(c => !c.toDelete).length >= 3) return;
-    setEditCourts(prev => [...prev, { name: '', sportType: 'society', pricePerHour: '120', isNew: true }]);
+    setEditCourts(prev => [...prev, { name: '', sportType: 'society', surface: 'Grama sintética', pricePerHour: '120', isActive: true, isNew: true }]);
   }
-  function updateCourt(idx: number, field: 'name' | 'sportType' | 'pricePerHour', value: string) {
+  function updateCourt(idx: number, field: 'name' | 'sportType' | 'surface' | 'pricePerHour' | 'isActive', value: string | boolean) {
     setEditCourts(prev => prev.map((c, i) => i === idx ? { ...c, [field]: value } : c));
   }
   function markDeleteCourt(idx: number) {
@@ -237,7 +251,8 @@ export function VenueProfile({ venue, onVenueUpdated }: Props) {
           venue_id: venue.id,
           name: c.name.trim() || `Quadra ${i + 1}`,
           sport_type: c.sportType,
-          is_active: true,
+          surface: c.surface,
+          is_active: c.isActive,
           price_per_hour: Number(c.pricePerHour) || 120,
           amenities,
           images: finalImages,
@@ -246,6 +261,8 @@ export function VenueProfile({ venue, onVenueUpdated }: Props) {
         await supabase.from('courts').update({
           name: c.name.trim(),
           sport_type: c.sportType,
+          surface: c.surface,
+          is_active: c.isActive,
           price_per_hour: Number(c.pricePerHour) || 120,
           amenities,
           images: finalImages,
@@ -264,7 +281,6 @@ export function VenueProfile({ venue, onVenueUpdated }: Props) {
 
   const mainPhoto = images[0] ?? null;
   const initials = (venue?.name ?? 'JH').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2);
-  const activeCourts = isEditing ? editCourts.filter(c => !c.toDelete) : courts;
 
   return (
     <div className="space-y-6">
@@ -514,56 +530,86 @@ export function VenueProfile({ venue, onVenueUpdated }: Props) {
           </div>
 
           {/* Courts */}
-          <div className="bg-white rounded-2xl border-2 border-gray-100 p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
+          <div className="bg-white rounded-2xl border-2 border-gray-100 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b-2 border-gray-100">
               <h3 className="text-lg font-bold text-gray-900">
-                Quadras <span className="text-sm font-normal text-gray-400">({activeCourts.length}/3)</span>
+                Quadras
+                <span className="ml-2 text-sm font-normal text-gray-400">
+                  {isEditing
+                    ? `${editCourts.filter(c => !c.toDelete).length} quadra${editCourts.filter(c => !c.toDelete).length !== 1 ? 's' : ''}`
+                    : `${courts.filter(c => c.is_active).length} ativa${courts.filter(c => c.is_active).length !== 1 ? 's' : ''} · ${courts.length} total`}
+                </span>
               </h3>
-              {isEditing && activeCourts.length < 3 && (
+              {isEditing && (
                 <button onClick={addCourt}
-                  className="flex items-center gap-1 text-sm font-semibold text-purple-600 hover:text-purple-700">
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 transition-colors">
                   <Plus className="w-4 h-4" /> Adicionar
                 </button>
               )}
             </div>
 
             {isEditing ? (
-              <div className="space-y-3">
+              <div className="p-4 space-y-3">
                 {editCourts.map((c, idx) => c.toDelete ? null : (
-                  <div key={idx} className="border-2 border-gray-200 rounded-xl p-4 space-y-3 relative">
+                  <div key={idx} className={`border-2 rounded-xl p-4 space-y-3 ${c.isActive ? 'border-gray-200' : 'border-gray-100 bg-gray-50 opacity-60'}`}>
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-purple-600 uppercase tracking-wide">Quadra {idx + 1}</span>
-                      {activeCourts.length > 1 && (
-                        <button onClick={() => markDeleteCourt(idx)}
-                          className="text-gray-400 hover:text-red-500 transition-colors">
-                          <Trash2 className="w-4 h-4" />
+                      <span className="text-xs font-semibold text-purple-600 uppercase tracking-wide">
+                        Quadra {idx + 1}{!c.isActive && <span className="ml-1.5 text-gray-400 normal-case font-normal">(inativa)</span>}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => updateCourt(idx, 'isActive', !c.isActive)}
+                          title={c.isActive ? 'Desativar' : 'Ativar'}
+                          className="text-gray-400 hover:text-gray-600 transition-colors">
+                          {c.isActive
+                            ? <ToggleRight className="w-5 h-5 text-green-500" />
+                            : <ToggleLeft className="w-5 h-5" />}
                         </button>
-                      )}
+                        {editCourts.filter(ec => !ec.toDelete).length > 1 && (
+                          <button onClick={() => markDeleteCourt(idx)}
+                            className="text-gray-300 hover:text-red-500 transition-colors">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
+
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Nome</label>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Nome</label>
                       <input type="text" value={c.name} onChange={e => updateCourt(idx, 'name', e.target.value)}
                         placeholder="Ex: Quadra Society 1"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm" />
+                        className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm" />
                     </div>
-                    <div className="flex gap-3">
-                      <div className="flex-1">
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Tipo</label>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">Modalidade</label>
                         <select value={c.sportType} onChange={e => updateCourt(idx, 'sportType', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm bg-white">
+                          className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm bg-white">
                           {SPORT_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
                         </select>
                       </div>
-                      <div className="w-32">
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Preço/hora (R$)</label>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">Superfície</label>
+                        <select value={c.surface} onChange={e => updateCourt(idx, 'surface', e.target.value)}
+                          className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm bg-white">
+                          {SURFACES.map(s => <option key={s}>{s}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Preço por hora (R$)</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">R$</span>
                         <input type="number" value={c.pricePerHour} onChange={e => updateCourt(idx, 'pricePerHour', e.target.value)}
                           min="0" step="10"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm" />
+                          className="w-full pl-9 pr-3 py-2.5 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm" />
                       </div>
                     </div>
                   </div>
                 ))}
-                {activeCourts.length === 0 && (
+
+                {editCourts.filter(c => !c.toDelete).length === 0 && (
                   <button onClick={addCourt}
                     className="w-full py-8 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center gap-2 text-gray-400 hover:border-purple-400 hover:text-purple-500 transition-all">
                     <Plus className="w-6 h-6" />
@@ -572,25 +618,48 @@ export function VenueProfile({ venue, onVenueUpdated }: Props) {
                 )}
               </div>
             ) : courts.length === 0 ? (
-              <div className="py-6 border-2 border-dashed border-amber-200 rounded-xl text-center bg-amber-50">
-                <p className="text-sm text-amber-700 font-medium">Nenhuma quadra cadastrada</p>
-                <button onClick={startEdit} className="mt-2 text-xs text-purple-600 font-semibold hover:underline">
-                  Clique em Editar Perfil para adicionar
-                </button>
+              <div className="p-6">
+                <div className="py-6 border-2 border-dashed border-amber-200 rounded-xl text-center bg-amber-50">
+                  <p className="text-sm text-amber-700 font-medium">Nenhuma quadra cadastrada</p>
+                  <button onClick={startEdit} className="mt-2 text-xs text-purple-600 font-semibold hover:underline">
+                    Clique em Editar Perfil para adicionar
+                  </button>
+                </div>
               </div>
             ) : (
-              <div className="space-y-3">
-                {courts.map((c, i) => (
-                  <div key={c.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                    <div>
-                      <p className="font-semibold text-gray-900 text-sm">{c.name}</p>
-                      <p className="text-xs text-gray-500 capitalize mt-0.5">{c.sport_type}</p>
+              <div className="divide-y-2 divide-gray-100">
+                {courts.map(c => (
+                  <div key={c.id} className={`flex items-center gap-3 px-5 py-4 ${!c.is_active ? 'opacity-50' : ''}`}>
+                    <div className="w-9 h-9 rounded-xl bg-purple-100 flex items-center justify-center flex-shrink-0 font-bold text-purple-600 text-sm">
+                      {c.name.replace(/\D/g, '') || c.name[0]?.toUpperCase() || '?'}
                     </div>
-                    <div className="text-right">
-                      <p className="font-bold text-purple-600 text-sm">R$ {c.price_per_hour}/h</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-gray-900 text-sm truncate">{c.name}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {SPORT_TYPES.find(t => t.id === c.sport_type)?.label ?? c.sport_type}
+                        {c.surface && <> · {c.surface}</>}
+                        {!c.is_active && <span className="ml-1.5 text-amber-500 font-semibold">Inativa</span>}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-sm font-bold text-purple-600">R$ {c.price_per_hour}/h</span>
+                      <button
+                        onClick={() => setScheduleCourtId(c.id)}
+                        title="Configurar horários"
+                        className="p-1.5 rounded-xl text-gray-400 hover:bg-purple-50 hover:text-purple-600 transition-colors"
+                      >
+                        <Calendar className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {!isEditing && courts.length > 0 && (
+              <div className="px-5 py-2.5 border-t-2 border-gray-100 bg-gray-50 flex items-center gap-1.5 text-[11px] text-gray-400">
+                <Calendar className="w-3 h-3" />
+                Clique em <Calendar className="w-3 h-3 text-purple-500 inline-block mx-0.5" /> para configurar horários de cada quadra
               </div>
             )}
           </div>
@@ -619,6 +688,15 @@ export function VenueProfile({ venue, onVenueUpdated }: Props) {
           </div>
         </div>
       </div>
+
+      {/* Schedule modal */}
+      {scheduleCourtId && venue?.id && (
+        <CreateSchedule
+          venueId={venue.id}
+          onClose={() => setScheduleCourtId(null)}
+          onSaved={() => setScheduleCourtId(null)}
+        />
+      )}
     </div>
   );
 }

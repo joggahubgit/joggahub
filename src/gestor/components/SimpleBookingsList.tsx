@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Search, Filter, CheckCircle, XCircle, Phone, Mail, Calendar, Clock, DollarSign, ChevronDown, MoreVertical } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
+import { GestorBookingDetail } from './GestorBookingDetail';
 
 interface Props { venueId: string; }
 
@@ -30,6 +31,7 @@ export function SimpleBookingsList({ venueId }: Props) {
   const [expandedBooking, setExpandedBooking] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [courts, setCourts] = useState<{ id: string; name: string }[]>([]);
+  const [detailBookingId, setDetailBookingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!venueId) return;
@@ -136,11 +138,14 @@ export function SimpleBookingsList({ venueId }: Props) {
     return matchDate && matchStatus && matchCourt && matchSearch;
   });
 
+  const paidBookings = filtered.filter(b => b.payment_status === 'paid');
+  const pendingBookings = filtered.filter(b => b.payment_status === 'pending');
   const stats = {
     total: filtered.length,
-    paid: filtered.filter(b => b.payment_status === 'paid').length,
-    pending: filtered.filter(b => b.payment_status === 'pending').length,
-    revenue: filtered.reduce((sum, b) => sum + (b.total_price ?? 0), 0),
+    paid: paidBookings.length,
+    pending: pendingBookings.length,
+    confirmedRevenue: paidBookings.reduce((sum, b) => sum + (b.total_price ?? 0), 0),
+    pendingRevenue: pendingBookings.reduce((sum, b) => sum + (b.total_price ?? 0), 0),
   };
 
   const toggleSelection = (id: string) =>
@@ -278,7 +283,13 @@ export function SimpleBookingsList({ venueId }: Props) {
               <div className="divide-y divide-gray-100">
                 {filtered.map(booking => (
                   <div key={booking.id}>
-                    <div className={`px-6 py-4 hover:bg-purple-50 transition-colors ${selectedBookings.includes(booking.id) ? 'bg-purple-50' : ''}`}>
+                    <div
+                      className={`px-6 py-4 hover:bg-purple-50 transition-colors cursor-pointer ${selectedBookings.includes(booking.id) ? 'bg-purple-50' : ''}`}
+                      onClick={(e) => {
+                        if ((e.target as HTMLElement).closest('input[type="checkbox"]') || (e.target as HTMLElement).closest('button')) return;
+                        setDetailBookingId(booking.id);
+                      }}
+                    >
                       <div className="flex items-center gap-4">
                         <input type="checkbox" checked={selectedBookings.includes(booking.id)} onChange={() => toggleSelection(booking.id)}
                           className="w-5 h-5 text-purple-600 rounded focus:ring-2 focus:ring-purple-600" />
@@ -365,7 +376,14 @@ export function SimpleBookingsList({ venueId }: Props) {
             {/* Mobile cards */}
             <div className="lg:hidden divide-y divide-gray-100">
               {filtered.map(booking => (
-                <div key={booking.id} className="p-4">
+                <div
+                  key={booking.id}
+                  className="p-4 cursor-pointer active:bg-purple-50"
+                  onClick={(e) => {
+                    if ((e.target as HTMLElement).closest('input[type="checkbox"]') || (e.target as HTMLElement).closest('button')) return;
+                    setDetailBookingId(booking.id);
+                  }}
+                >
                   <div className="flex items-start gap-3">
                     <input type="checkbox" checked={selectedBookings.includes(booking.id)} onChange={() => toggleSelection(booking.id)}
                       className="w-5 h-5 text-purple-600 rounded focus:ring-2 focus:ring-purple-600 mt-1" />
@@ -433,18 +451,34 @@ export function SimpleBookingsList({ venueId }: Props) {
 
       {/* Revenue summary */}
       {filtered.length > 0 && (
-        <div className="bg-gradient-to-r from-purple-600 to-purple-700 rounded-xl md:rounded-2xl p-4 md:p-6 text-white shadow-lg">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div>
-              <p className="text-purple-200 mb-1 md:mb-2 text-sm md:text-base">Receita Total (Filtrado)</p>
-              <p className="text-3xl md:text-4xl font-bold">R$ {stats.revenue.toLocaleString('pt-BR')}</p>
-            </div>
-            <div className="text-left sm:text-right">
-              <p className="text-purple-200 text-xs md:text-sm">Média por Reserva</p>
-              <p className="text-xl md:text-2xl font-bold">R$ {stats.total > 0 ? Math.round(stats.revenue / stats.total) : 0}</p>
-            </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="bg-white rounded-xl md:rounded-2xl border-2 border-green-100 p-4 md:p-5 shadow-sm">
+            <p className="text-sm text-gray-500 mb-1">Receita Confirmada</p>
+            <p className="text-2xl md:text-3xl font-bold text-gray-900">
+              R$ {stats.confirmedRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+            <p className="text-xs text-gray-400 mt-1">
+              {stats.paid} reserva{stats.paid !== 1 ? 's' : ''} · ticket médio R$ {stats.paid > 0 ? Math.round(stats.confirmedRevenue / stats.paid).toLocaleString('pt-BR') : '—'}
+            </p>
+          </div>
+          <div className="bg-amber-50 rounded-xl md:rounded-2xl border-2 border-amber-100 p-4 md:p-5 shadow-sm">
+            <p className="text-sm text-amber-700 mb-1">A Receber (pendente)</p>
+            <p className="text-2xl md:text-3xl font-bold text-amber-900">
+              R$ {stats.pendingRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+            <p className="text-xs text-amber-600 mt-1">
+              {stats.pending} reserva{stats.pending !== 1 ? 's' : ''} aguardando pagamento
+            </p>
           </div>
         </div>
+      )}
+
+      {detailBookingId && (
+        <GestorBookingDetail
+          bookingId={detailBookingId}
+          onClose={() => setDetailBookingId(null)}
+          onChanged={() => { fetchBookings(); setDetailBookingId(null); }}
+        />
       )}
     </div>
   );

@@ -13,6 +13,22 @@ serve(async (req) => {
   }
 
   try {
+    // ── JWT verification ──
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
+    }
+    const supabaseUser = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } },
+    );
+    const { data: { user }, error: authError } = await supabaseUser.auth.getUser();
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
+    }
+    const callerId = user.id;
+
     const { bookingId } = await req.json();
     if (!bookingId) throw new Error('bookingId is required');
 
@@ -35,10 +51,24 @@ serve(async (req) => {
     if (bookErr || !booking) throw new Error('Reserva não encontrada');
     if (booking.status === 'cancelled') throw new Error('Reserva já cancelada');
 
+    // ── Authorization: caller must be booking owner or venue admin ──
+    if (booking.created_by !== callerId) {
+      let isVenueAdmin = false;
+      if (booking.slot_id) {
+        const { data: slotData } = await supabase.from('slots').select('court_id').eq('id', booking.slot_id).single();
+        const { data: courtData } = await supabase.from('courts').select('venue_id').eq('id', slotData?.court_id ?? '').single();
+        const { data: venueData } = await supabase.from('venues').select('admin_id').eq('id', courtData?.venue_id ?? '').single();
+        isVenueAdmin = venueData?.admin_id === callerId;
+      }
+      if (!isVenueAdmin) {
+        return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: corsHeaders });
+      }
+    }
+
     const isPaid = booking.payment_status === 'paid';
     let stripeRefunded = false;
 
-    // Attempt Stripe refund for paid bookings (same as cancel-game)
+    // Attempt Stripe refund for paid bookings
     if (isPaid && booking.slot_id) {
       const sessions = await stripe.checkout.sessions.list({ limit: 100 });
       const matching = sessions.data.find(

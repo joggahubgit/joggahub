@@ -1,5 +1,6 @@
 import Stripe from 'https://esm.sh/stripe@14.21.0';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,18 +13,31 @@ serve(async (req) => {
   }
 
   try {
+    // ── JWT verification ──
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
+    }
+    const supabaseUser = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } },
+    );
+    const { data: { user }, error: authError } = await supabaseUser.auth.getUser();
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
+    }
+    // playerId always comes from the verified JWT
+    const playerId = user.id;
+
     const {
       gameId,
-      playerId,
       playerName,
       courtName,
       venueName,
       sport,
       date,
       time,
-      vagaPrice,      // valor da vaga (sem taxa)
-      serviceFee,     // taxa de serviço (15%)
-      totalPrice,     // vagaPrice + serviceFee
       successUrl,
       cancelUrl,
       mode,           // 'join_self' | 'join_other'
@@ -33,6 +47,24 @@ serve(async (req) => {
     const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', {
       apiVersion: '2023-10-16',
     });
+
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    );
+
+    // ── Fetch price from DB — never trust body for financial values ──
+    const { data: game, error: gameErr } = await supabase
+      .from('games')
+      .select('price_per_player')
+      .eq('id', gameId)
+      .single();
+
+    if (gameErr || !game) throw new Error('Jogo não encontrado');
+
+    const vagaPrice = game.price_per_player as number;
+    // Service fee: 8% + R$2,50 per transaction
+    const serviceFee = Math.round((vagaPrice * 0.08 + 2.50) * 100) / 100;
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -64,7 +96,7 @@ serve(async (req) => {
       ],
       metadata: {
         gameId: gameId ?? '',
-        playerId: playerId ?? '',
+        playerId,
         playerName: playerName ?? '',
         mode: mode ?? 'join_self',
       },
