@@ -42,32 +42,44 @@ function buildWeekDays() {
 interface SlotItem {
   id: string;
   time: string;
-  endTime: string;
-  available: boolean;
-  price: number;
+  endTime90: string;  // end time for 90min
+  endTime120: string; // end time for 120min
+  available90: boolean;
+  available120: boolean;
+  pricePerHour: number;
   hasGame?: boolean;
   gameId?: string;
+  isDynamic: boolean;
+}
+
+interface CourtSchedule {
+  open_time: string;   // 'HH:MM'
+  close_time: string;
+  price: number;       // price per hour
 }
 
 interface SelectedSlot {
-  slotId: string;
+  slotId: string;       // empty string for dynamic slots
   courtId: string;
   courtName: string;
   time: string;
-  endTime: string;
-  price: number;
+  endTime: string;      // set based on chosen duration
+  price: number;        // total for chosen duration
+  pricePerHour: number;
+  isDynamic: boolean;
 }
 
 const CourtDetails: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const [activeTab, setActiveTab] = useState<TabType>('home');
+  const [activeTab, setActiveTab] = useState<TabType>('book');
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   const weekDays = buildWeekDays();
   const [selectedDate, setSelectedDate] = useState(weekDays[1].date);
   const weekScrollRef = useRef<HTMLDivElement>(null);
   const slotPanelRef = useRef<HTMLDivElement>(null);
+  const fetchSlotsRef = useRef(fetchSlots);
 
   // Venue + primary court info (for header/home tab)
   const [venue, setVenue] = useState<any>(null);
@@ -92,6 +104,10 @@ const CourtDetails: React.FC = () => {
 
   // Selected slot (across all courts)
   const [selectedSlot, setSelectedSlot] = useState<SelectedSlot | null>(null);
+  const [selectedDuration, setSelectedDuration] = useState<90 | 120>(90);
+
+  // court_schedules: courtId → schedule for selected date's day_of_week
+  const [courtSchedules, setCourtSchedules] = useState<Record<string, CourtSchedule>>({});
 
   // Open-games tab state
   const [openGamesBySlot, setOpenGamesBySlot] = useState<Record<string, any>>({});
@@ -168,15 +184,30 @@ const CourtDetails: React.FC = () => {
   async function fetchSlots(courts = venueCourts, date = selectedDate) {
     if (!courts.length) return;
     setLoadingSlots(true);
-    const { data } = await supabase
+
+    const dayOfWeek = new Date(date + 'T12:00:00').getDay();
+
+    // Fetch court_schedules for this day
+    const { data: scheduleRows } = await supabase
+      .from('court_schedules')
+      .select('court_id, open_time, close_time, price')
+      .in('court_id', courts.map(c => c.id))
+      .eq('day_of_week', dayOfWeek);
+
+    const scheduleMap: Record<string, CourtSchedule> = {};
+    (scheduleRows ?? []).forEach(s => { scheduleMap[s.court_id] = s; });
+    setCourtSchedules(scheduleMap);
+
+    // Fetch existing slots (created at booking time) — these are "occupied" blocks
+    const { data: existingSlots } = await supabase
       .from('slots')
       .select('id, court_id, start_time, end_time, is_available, price_override')
       .in('court_id', courts.map(c => c.id))
       .gte('start_time', `${date}T00:00:00`)
-      .lte('start_time', `${date}T23:59:59`)
-      .order('start_time');
+      .lte('start_time', `${date}T23:59:59`);
 
-    const slotIds = (data ?? []).map(s => s.id);
+    // Fetch open games for those slots
+    const slotIds = (existingSlots ?? []).map(s => s.id);
     const gameBySlotId: Record<string, string> = {};
     if (slotIds.length > 0) {
       const { data: gamesData } = await supabase
@@ -189,21 +220,154 @@ const CourtDetails: React.FC = () => {
     }
 
     const byCourtId: Record<string, SlotItem[]> = {};
-    for (const c of courts) byCourtId[c.id] = [];
-    for (const s of data ?? []) {
-      const courtPrice = courts.find(c => c.id === s.court_id)?.price_per_hour ?? 0;
-      byCourtId[s.court_id]?.push({
-        id: s.id,
-        time: s.start_time.substring(11, 16),
-        endTime: s.end_time ? s.end_time.substring(11, 16) : addMinutesToHHMM(s.start_time.substring(11, 16), 60),
-        available: s.is_available,
-        price: s.price_override ?? courtPrice,
-        hasGame: s.id in gameBySlotId,
-        gameId: gameBySlotId[s.id],
-      });
+    for (const c of courts) {
+      const schedule = scheduleMap[c.id];
+      const allCourtSlots = (existingSlots ?? []).filter(s => s.court_id === c.id);
+
+      // Pre-created slots are always the source of truth.
+      // Deleted slots don't appear; blocked slots are unavailable; empty = nothing to show.
+      byCourtId[c.id] = generateFromPreCreatedSlots(schedule ?? null, allCourtSlots, date, gameBySlotId, c.price_per_hour);
     }
     setSlotsByCourt(byCourtId);
     setLoadingSlots(false);
+  }
+  fetchSlotsRef.current = fetchSlots;
+
+  function timeDiffMins(start: string, end: string): number {
+    const [sh, sm] = start.split(':').map(Number);
+    const [eh, em] = end.split(':').map(Number);
+    return (eh * 60 + em) - (sh * 60 + sm);
+  }
+
+  function generateDynamicSlots(
+    schedule: CourtSchedule,
+    bookedSlots: any[],
+    date: string,
+    gameBySlotId: Record<string, string>,
+    fallbackPrice: number,
+  ): SlotItem[] {
+    const [oh, om] = schedule.open_time.split(':').map(Number);
+    const [ch, cm] = schedule.close_time.split(':').map(Number);
+    const openMins = oh * 60 + om;
+    const closeMins = ch * 60 + cm;
+    const schedulePrice = schedule.price || fallbackPrice;
+
+    // Build booked intervals from existing slots (unavailable = blocked/booked)
+    const bookedIntervals = bookedSlots
+      .filter(s => !s.is_available)
+      .map(s => {
+        const startMins = timeToMins(s.start_time.substring(11, 16));
+        const endMins = s.end_time
+          ? timeToMins(s.end_time.substring(11, 16))
+          : startMins + 90;
+        return { startMins, endMins, slotId: s.id };
+      });
+
+    // Index available batch-created slots by their start time for quick lookup
+    const availableSlotByTime: Record<string, any> = {};
+    bookedSlots
+      .filter(s => s.is_available)
+      .forEach(s => {
+        const t = s.start_time.substring(11, 16);
+        availableSlotByTime[t] = s;
+      });
+
+    const result: SlotItem[] = [];
+    let t = openMins;
+    while (t < closeMins - 89) { // last start must leave at least 90min
+      const time = minsToHHMM(t);
+      const end90 = t + 90;
+      const end120 = t + 120;
+
+      const conflicts90 = bookedIntervals.some(b => b.startMins < end90 && b.endMins > t);
+      const conflicts120 = bookedIntervals.some(b => b.startMins < end120 && b.endMins > t);
+
+      // Find if this time has a game (from any slot — available or not)
+      const matchedSlot = bookedSlots.find(s => s.start_time.substring(11, 16) === time);
+      const hasGame = matchedSlot ? (matchedSlot.id in gameBySlotId) : false;
+      const gameId = matchedSlot ? gameBySlotId[matchedSlot.id] : undefined;
+
+      // Use price_override from batch slot if present, otherwise fall back to schedule price
+      const batchSlot = availableSlotByTime[time];
+      const pricePerHour = batchSlot?.price_override ?? schedulePrice;
+
+      result.push({
+        id: `dyn_${date}_${time}`,
+        time,
+        endTime90: minsToHHMM(end90),
+        endTime120: minsToHHMM(end120),
+        available90: !conflicts90,
+        available120: end120 <= closeMins && !conflicts120,
+        pricePerHour,
+        hasGame,
+        gameId,
+        isDynamic: true,
+      });
+
+      t += 30;
+    }
+    return result;
+  }
+
+  function generateFromPreCreatedSlots(
+    schedule: CourtSchedule | null,
+    allSlots: any[],
+    date: string,
+    gameBySlotId: Record<string, string>,
+    fallbackPrice: number,
+  ): SlotItem[] {
+    const availableSlots = allSlots.filter(s => s.is_available);
+
+    const bookedIntervals = allSlots
+      .filter(s => !s.is_available)
+      .map(s => ({
+        startMins: timeToMins(s.start_time.substring(11, 16)),
+        endMins: s.end_time
+          ? timeToMins(s.end_time.substring(11, 16))
+          : timeToMins(s.start_time.substring(11, 16)) + 30,
+      }));
+
+    const closeMins = schedule ? timeToMins(schedule.close_time) : 24 * 60;
+
+    return availableSlots
+      .map(slot => {
+        const time = slot.start_time.substring(11, 16);
+        const startMins = timeToMins(time);
+        const end90 = startMins + 90;
+        const end120 = startMins + 120;
+
+        const conflicts90 = bookedIntervals.some(b => b.startMins < end90 && b.endMins > startMins);
+        const conflicts120 = bookedIntervals.some(b => b.startMins < end120 && b.endMins > startMins);
+
+        const anySlotAtTime = allSlots.find(s => s.start_time.substring(11, 16) === time);
+        const hasGame = anySlotAtTime ? (anySlotAtTime.id in gameBySlotId) : false;
+        const gameId = anySlotAtTime ? gameBySlotId[anySlotAtTime.id] : undefined;
+
+        return {
+          id: slot.id,
+          time,
+          endTime90: minsToHHMM(end90),
+          endTime120: minsToHHMM(end120),
+          available90: !conflicts90,
+          available120: end120 <= closeMins && !conflicts120,
+          pricePerHour: slot.price_override ?? schedule?.price ?? fallbackPrice,
+          hasGame,
+          gameId,
+          isDynamic: false,
+        };
+      })
+      .sort((a, b) => a.time.localeCompare(b.time));
+  }
+
+  function timeToMins(hhmm: string): number {
+    const [h, m] = hhmm.split(':').map(Number);
+    return h * 60 + m;
+  }
+
+  function minsToHHMM(mins: number): string {
+    const h = Math.floor(mins / 60) % 24;
+    const m = mins % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   }
 
   useEffect(() => {
@@ -211,17 +375,29 @@ const CourtDetails: React.FC = () => {
     fetchSlots(venueCourts, selectedDate);
   }, [selectedDate, venueCourts]);
 
-  // Realtime: re-fetch slots when gestor changes availability
+  // Realtime: re-fetch when gestor changes availability or cancels a booking
   useEffect(() => {
     if (!venueCourts.length) return;
+    const refresh = () => {
+      setSelectedSlot(null);
+      fetchSlotsRef.current();
+    };
     const channel = supabase
       .channel(`court-details-slots-${venueCourts.map(c => c.id).join('-')}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'slots' }, () => {
-        fetchSlots(venueCourts, selectedDate);
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'slots' }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, refresh)
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [venueCourts, selectedDate]);
+  }, [venueCourts]);
+
+  // Re-fetch when user returns to this tab
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') fetchSlotsRef.current();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
 
   // ── Open games: fetch for selected date across venue courts ─
   useEffect(() => {
@@ -243,25 +419,21 @@ const CourtDetails: React.FC = () => {
 
   // ── Slot selection ────────────────────────────────────────
   function handleSlotSelect(slot: SlotItem, courtId: string, courtName: string) {
-    if (!slot.available || slot.hasGame) return;
-    // Second tap on same slot → go to booking
-    if (selectedSlot?.slotId === slot.id) {
-      navigate('/book-court', {
-        state: {
-          slotId: slot.id,
-          price: slot.price,
-          time: slot.time,
-          endTime: slot.endTime,
-          courtId,
-          courtName,
-          venueName: court.venueName,
-          date: selectedDate,
-        },
-      });
-    } else {
-      setSelectedSlot({ slotId: slot.id, courtId, courtName, time: slot.time, endTime: slot.endTime, price: slot.price });
-      setTimeout(() => slotPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
-    }
+    const isAvailable = selectedDuration === 90 ? slot.available90 : slot.available120;
+    if (!isAvailable || slot.hasGame) return;
+    const endTime = selectedDuration === 90 ? slot.endTime90 : slot.endTime120;
+    const price = slot.pricePerHour * (selectedDuration / 60);
+    setSelectedSlot({
+      slotId: slot.isDynamic ? '' : slot.id,
+      courtId,
+      courtName,
+      time: slot.time,
+      endTime,
+      price,
+      pricePerHour: slot.pricePerHour,
+      isDynamic: slot.isDynamic,
+    });
+    setTimeout(() => slotPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
   }
 
   function handleCreateOpenGame() {
@@ -286,7 +458,7 @@ const CourtDetails: React.FC = () => {
     });
   }
 
-  const totalAvailable = Object.values(slotsByCourt).flat().filter(s => s.available && !s.hasGame).length;
+  const totalAvailable = Object.values(slotsByCourt).flat().filter(s => s.available90 && !s.hasGame).length;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-6">
@@ -435,13 +607,31 @@ const CourtDetails: React.FC = () => {
               </div>
             </div>
 
-            {/* Toggle */}
-            <div className="flex items-center justify-between px-1">
-              <span className="text-sm text-gray-700">Mostrar só disponíveis</span>
-              <button onClick={() => setShowAvailableOnly(v => !v)}
-                className={`relative w-12 h-6 rounded-full transition-colors ${showAvailableOnly ? 'bg-gray-900' : 'bg-gray-300'}`}>
-                <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${showAvailableOnly ? 'translate-x-7' : 'translate-x-1'}`} />
-              </button>
+            {/* Duration + toggle row */}
+            <div className="flex items-center justify-between px-1 gap-3">
+              {/* Duration picker */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600 font-medium">Duração:</span>
+                <div className="flex bg-gray-100 rounded-lg p-0.5">
+                  {([90, 120] as const).map(d => (
+                    <button
+                      key={d}
+                      onClick={() => { setSelectedDuration(d); setSelectedSlot(null); }}
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${selectedDuration === d ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
+                    >
+                      {d === 90 ? '1h30' : '2h'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {/* Available only toggle */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500">Só livres</span>
+                <button onClick={() => setShowAvailableOnly(v => !v)}
+                  className={`relative w-10 h-5 rounded-full transition-colors ${showAvailableOnly ? 'bg-gray-900' : 'bg-gray-300'}`}>
+                  <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${showAvailableOnly ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                </button>
+              </div>
             </div>
 
             {/* Loading */}
@@ -468,16 +658,17 @@ const CourtDetails: React.FC = () => {
             ) : (
               /* One block per court */
               venueCourts.map(c => {
-                const slots = (slotsByCourt[c.id] ?? []).filter(s =>
-                  showAvailableOnly ? s.available : true
+                const allSlots = slotsByCourt[c.id] ?? [];
+                const slots = allSlots.filter(s =>
+                  showAvailableOnly ? (selectedDuration === 90 ? s.available90 : s.available120) : true
                 );
 
                 if (slots.length === 0) return null;
 
                 const sportLbl = c.sport_type ? sportLabel(c.sport_type) : '';
-                const minPrice = slots.length > 0
-                  ? Math.min(...slots.map(s => s.price))
-                  : c.price_per_hour;
+                const schedule = courtSchedules[c.id];
+                const basePrice = schedule?.price ?? c.price_per_hour;
+                const slotPrice = basePrice * (selectedDuration / 60);
 
                 return (
                   <div key={c.id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
@@ -490,7 +681,7 @@ const CourtDetails: React.FC = () => {
                         )}
                       </div>
                       <span className="text-sm font-semibold text-violet-600">
-                        a partir de R$ {minPrice}/h
+                        R$ {slotPrice.toFixed(0)} · {selectedDuration === 90 ? '1h30' : '2h'}
                       </span>
                     </div>
 
@@ -503,7 +694,8 @@ const CourtDetails: React.FC = () => {
                       ) : (
                         <div className="grid grid-cols-4 gap-2">
                           {slots.map(slot => {
-                            const isSelected = selectedSlot?.slotId === slot.id;
+                            const isSelected = selectedSlot?.time === slot.time && selectedSlot?.courtId === c.id;
+                            const isAvailable = selectedDuration === 90 ? slot.available90 : slot.available120;
                             return (
                               <button
                                 key={slot.id}
@@ -514,19 +706,19 @@ const CourtDetails: React.FC = () => {
                                     handleSlotSelect(slot, c.id, c.name);
                                   }
                                 }}
-                                disabled={!slot.available && !slot.hasGame}
+                                disabled={!isAvailable && !slot.hasGame}
                                 className={`py-2 px-1 rounded-xl border text-xs font-semibold transition-all flex flex-col items-center gap-0.5 ${
                                   isSelected
                                     ? 'bg-gray-900 text-white border-gray-900'
                                     : slot.hasGame
                                       ? 'bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100'
-                                      : slot.available
+                                      : isAvailable
                                         ? 'bg-white text-gray-900 border-gray-200 hover:border-gray-400'
                                         : 'bg-transparent border-transparent text-gray-300 line-through cursor-not-allowed'
                                 }`}
                               >
                                 <span>{slot.time}</span>
-                                {slot.hasGame && <span className="text-[9px] font-bold text-violet-500">Jogo aberto</span>}
+                                {slot.hasGame && <span className="text-[9px] font-bold text-violet-500">Jogo</span>}
                               </button>
                             );
                           })}
@@ -548,12 +740,15 @@ const CourtDetails: React.FC = () => {
                       <Lock className="w-3.5 h-3.5 text-violet-600" />
                       <p className="text-xs font-bold text-violet-600 uppercase tracking-wide">Nova Partida Privada</p>
                     </div>
-                    <p className="text-xl font-bold text-gray-900">{selectedSlot.time}{selectedSlot.endTime ? ` – ${selectedSlot.endTime}` : ''}</p>
+                    <p className="text-xl font-bold text-gray-900">
+                      {selectedSlot.time} – {selectedSlot.endTime}
+                      <span className="text-sm font-normal text-gray-400 ml-2">{selectedDuration === 90 ? '1h30' : '2h'}</span>
+                    </p>
                     <p className="text-sm text-gray-500">{selectedSlot.courtName}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-2xl font-bold text-gray-900">R$ {selectedSlot.price}</p>
-                    <p className="text-xs text-gray-400">quadra/hora</p>
+                    <p className="text-2xl font-bold text-gray-900">R$ {selectedSlot.price.toFixed(0)}</p>
+                    <p className="text-xs text-gray-400">quadra · {selectedDuration === 90 ? '1h30' : '2h'}</p>
                   </div>
                 </div>
 
@@ -570,7 +765,7 @@ const CourtDetails: React.FC = () => {
                         <p className="font-semibold text-sm text-gray-900">Pagar tudo</p>
                         <p className="text-xs text-gray-500">Você cobre o valor completo da quadra</p>
                       </div>
-                      <span className="text-sm font-bold text-gray-900 flex-shrink-0">R$ {selectedSlot.price}</span>
+                      <span className="text-sm font-bold text-gray-900 flex-shrink-0">R$ {selectedSlot.price.toFixed(0)}</span>
                     </button>
                     <button
                       onClick={() => setPrivatePayMode('split')}
@@ -586,12 +781,11 @@ const CourtDetails: React.FC = () => {
                       </span>
                     </button>
 
-                    {/* Hold explanation — shown immediately when split is selected */}
                     {privatePayMode === 'split' && (
                       <div className="bg-blue-50 rounded-xl p-3.5 border border-blue-100 space-y-2">
                         <p className="text-sm text-blue-900 leading-relaxed">
                           A quadra abre para até <strong>18 jogadores</strong>. Cada um autoriza{' '}
-                          <strong>R$ {((selectedSlot.price / 10) * 1.15).toFixed(2)}</strong> no cartão — quanto mais jogadores entrarem, menos cada um paga.
+                          <strong>R$ {((selectedSlot.price / 10) * 1.08 + 2.50).toFixed(2)}</strong> no cartão — quanto mais jogadores entrarem, menos cada um paga.
                         </p>
                         <p className="text-sm text-blue-900 leading-relaxed">
                           12 horas antes do jogo o valor é ajustado e cobrado automaticamente.
@@ -616,6 +810,9 @@ const CourtDetails: React.FC = () => {
                         price: selectedSlot.price,
                         time: selectedSlot.time,
                         endTime: selectedSlot.endTime,
+                        startTime: `${selectedDate}T${selectedSlot.time}:00`,
+                        endTimeISO: `${selectedDate}T${selectedSlot.endTime}:00`,
+                        duration: selectedDuration,
                         courtId: selectedSlot.courtId,
                         courtName: selectedSlot.courtName,
                         venueName: court.venueName,
@@ -623,6 +820,7 @@ const CourtDetails: React.FC = () => {
                         maxPlayers: PRIVATE_MAX_PLAYERS,
                         payMode: privatePayMode,
                         courtSport: venueCourts.find(c => c.id === selectedSlot.courtId)?.sport_type ?? '',
+                        isDynamic: selectedSlot.isDynamic,
                       },
                     })}
                     className="flex-1 bg-violet-600 text-white py-3 rounded-xl font-bold text-base hover:bg-violet-700 transition-colors"
@@ -675,9 +873,8 @@ const CourtDetails: React.FC = () => {
               venueCourts.map(c => {
                 const slots = slotsByCourt[c.id] ?? [];
                 if (slots.length === 0) return null;
-                const minPrice = slots.length > 0
-                  ? Math.min(...slots.map(s => s.price))
-                  : c.price_per_hour;
+                const schedule = courtSchedules[c.id];
+                const basePrice = schedule?.price ?? c.price_per_hour;
                 return (
                   <div key={c.id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
                     <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100">
@@ -685,7 +882,7 @@ const CourtDetails: React.FC = () => {
                         <h3 className="font-bold text-gray-900">{c.name}</h3>
                         {c.sport_type && <span className="text-xs text-gray-500">{sportLabel(c.sport_type)}</span>}
                       </div>
-                      <span className="text-sm font-semibold text-violet-600">a partir de R$ {minPrice}/h</span>
+                      <span className="text-sm font-semibold text-violet-600">a partir de R$ {basePrice}/h</span>
                     </div>
                     <div className="p-4">
                       <div className="grid grid-cols-4 gap-2">
@@ -694,6 +891,8 @@ const CourtDetails: React.FC = () => {
                           const isSelected = selectedOpenSlot?.slotId === slot.id;
                           const spotsLeft = game ? game.max_players - game.current_players : null;
                           const isFull = game && spotsLeft === 0;
+                          const slotAvailable = slot.available90;
+                          const slotPrice = slot.pricePerHour * (90 / 60);
 
                           return (
                             <button
@@ -701,12 +900,20 @@ const CourtDetails: React.FC = () => {
                               onClick={() => {
                                 if (game && !isFull) {
                                   navigate(`/game-details/${game.id}`);
-                                } else if (!game && slot.available) {
-                                  const min = minPlayersForCourt(c.id);
-                                  setSelectedOpenSlot(isSelected ? null : { slotId: slot.id, courtId: c.id, courtName: c.name, time: slot.time, endTime: slot.endTime, price: slot.price });
+                                } else if (!game && slotAvailable) {
+                                  setSelectedOpenSlot(isSelected ? null : {
+                                    slotId: slot.isDynamic ? '' : slot.id,
+                                    courtId: c.id,
+                                    courtName: c.name,
+                                    time: slot.time,
+                                    endTime: slot.endTime90,
+                                    price: slotPrice,
+                                    pricePerHour: slot.pricePerHour,
+                                    isDynamic: slot.isDynamic,
+                                  });
                                 }
                               }}
-                              disabled={!slot.available && !game || isFull}
+                              disabled={(!slotAvailable && !game) || !!isFull}
                               className={`py-3 px-1 rounded-xl border text-xs font-semibold transition-all flex flex-col items-center gap-0.5 ${
                                 isSelected
                                   ? 'bg-gray-900 text-white border-gray-900'
@@ -714,7 +921,7 @@ const CourtDetails: React.FC = () => {
                                   ? 'bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100'
                                   : isFull
                                   ? 'bg-gray-100 text-gray-300 border-transparent cursor-not-allowed'
-                                  : slot.available
+                                  : slotAvailable
                                   ? 'bg-white text-gray-900 border-gray-200 hover:border-gray-400'
                                   : 'bg-transparent border-transparent text-gray-300 line-through cursor-not-allowed'
                               }`}

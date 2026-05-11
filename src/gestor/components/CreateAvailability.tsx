@@ -66,7 +66,7 @@ export function CreateAvailability({ onClose, onSaved, venueId, prefill }: Creat
 
   // shared
   const [courtId, setCourtId] = useState(prefill?.courtId ?? '');
-  const [duration, setDuration] = useState(60);
+  const [duration, setDuration] = useState(90);
   const [price, setPrice] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -324,7 +324,7 @@ export function CreateAvailability({ onClose, onSaved, venueId, prefill }: Creat
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Duração de cada slot</label>
                 <div className="grid grid-cols-2 gap-3">
-                  {[{ label: '1 hora', value: 60 }, { label: '2 horas', value: 120 }].map(opt => (
+                  {[{ label: '1h30', value: 90 }, { label: '2 horas', value: 120 }].map(opt => (
                     <button key={opt.value} onClick={() => setDuration(opt.value)}
                       className={`py-3 rounded-xl font-bold text-sm border-2 transition-colors ${
                         duration === opt.value ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-200 hover:border-purple-400'
@@ -387,7 +387,7 @@ export function CreateAvailability({ onClose, onSaved, venueId, prefill }: Creat
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Duração</label>
                 <div className="grid grid-cols-2 gap-3">
-                  {[{ label: '1 hora', value: 60 }, { label: '2 horas', value: 120 }].map(opt => (
+                  {[{ label: '1h30', value: 90 }, { label: '2 horas', value: 120 }].map(opt => (
                     <button key={opt.value} onClick={() => setDuration(opt.value)}
                       className={`py-3 rounded-xl font-bold text-sm border-2 transition-colors ${
                         duration === opt.value ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-200 hover:border-purple-400'

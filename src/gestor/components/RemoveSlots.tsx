@@ -29,7 +29,14 @@ const quickHours = [
 ];
 
 function isoToday() {
-  return new Date().toISOString().split('T')[0];
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function isoOffset(days: number) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
 interface Preview {
@@ -52,9 +59,9 @@ interface ExecutionResult {
 
 export function RemoveSlots({ onClose, onSaved, venueId }: Props) {
   const [courts, setCourts] = useState<{ id: string; name: string }[]>([]);
-  const [selectedCourtId, setSelectedCourtId] = useState('');
-  const [startDate, setStartDate] = useState(isoToday());
-  const [endDate, setEndDate] = useState(isoToday());
+  const [selectedCourtId, setSelectedCourtId] = useState<string>('all');
+  const [startDate, setStartDate] = useState(isoOffset(-180));
+  const [endDate, setEndDate] = useState(isoOffset(365));
   const [selectedDays, setSelectedDays] = useState<string[]>(weekDays.map(d => d.id));
   const [timeFrom, setTimeFrom] = useState('00:00');
   const [timeTo, setTimeTo] = useState('23:59');
@@ -79,7 +86,7 @@ export function RemoveSlots({ onClose, onSaved, venueId }: Props) {
   useEffect(() => {
     if (!venueId) return;
     supabase.from('courts').select('id, name').eq('venue_id', venueId).neq('is_active', false).then(({ data }) => {
-      if (data?.length) { setCourts(data); setSelectedCourtId(data[0].id); }
+      if (data?.length) { setCourts(data); }
     });
   }, [venueId]);
 
@@ -97,15 +104,17 @@ export function RemoveSlots({ onClose, onSaved, venueId }: Props) {
   }
 
   async function loadPreview() {
-    if (!selectedCourtId || selectedDays.length === 0) return;
+    if (selectedDays.length === 0) return;
     setLoadingPreview(true); setError('');
 
     const dates = getAffectedDates();
     if (!dates.length) { setLoadingPreview(false); return; }
 
+    const courtIds = selectedCourtId === 'all' ? courts.map(c => c.id) : [selectedCourtId];
+
     const { data: slotRows } = await supabase
       .from('slots').select('id, is_available, start_time')
-      .eq('court_id', selectedCourtId)
+      .in('court_id', courtIds)
       .gte('start_time', `${startDate}T${timeFrom}:00`)
       .lte('start_time', `${endDate}T${timeTo}:59`);
 
@@ -265,6 +274,12 @@ export function RemoveSlots({ onClose, onSaved, venueId }: Props) {
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Quadra</label>
                 <div className="flex flex-wrap gap-2">
+                  <button onClick={() => { setSelectedCourtId('all'); setStep('filter'); setPreview(null); setConfirmed(false); }}
+                    className={`px-4 py-2 rounded-xl font-semibold text-sm border-2 transition-colors ${
+                      selectedCourtId === 'all' ? 'bg-red-600 text-white border-red-600' : 'bg-white text-gray-700 border-gray-200 hover:border-red-300'
+                    }`}>
+                    Todas
+                  </button>
                   {courts.map(c => (
                     <button key={c.id} onClick={() => { setSelectedCourtId(c.id); setStep('filter'); setPreview(null); setConfirmed(false); }}
                       className={`px-4 py-2 rounded-xl font-semibold text-sm border-2 transition-colors ${
@@ -342,7 +357,7 @@ export function RemoveSlots({ onClose, onSaved, venueId }: Props) {
               </div>
 
               {/* Buscar */}
-              <button onClick={loadPreview} disabled={loadingPreview || !selectedCourtId || selectedDays.length === 0}
+              <button onClick={loadPreview} disabled={loadingPreview || selectedDays.length === 0 || courts.length === 0}
                 className="w-full py-3 rounded-xl bg-gray-900 text-white font-semibold hover:bg-gray-800 transition-colors text-sm flex items-center justify-center gap-2 disabled:opacity-50">
                 {loadingPreview
                   ? <><Loader2 className="w-4 h-4 animate-spin" /> Buscando horários...</>

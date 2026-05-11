@@ -27,7 +27,7 @@ serve(async (req) => {
       cancelUrl,
     } = await req.json();
 
-    if (!slotId || !userId || !price) throw new Error('slotId, userId e price são obrigatórios');
+    if (!userId || !price || !courtId) throw new Error('userId, courtId e price são obrigatórios');
 
     const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', {
       apiVersion: '2023-10-16',

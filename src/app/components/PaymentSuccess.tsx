@@ -24,6 +24,10 @@ export default function PaymentSuccess() {
   const date = params.get('date') ?? '';
   const time = params.get('time') ?? '';
   const endTime = params.get('endTime') ?? '';
+  // Dynamic slot params
+  const startTime = params.get('startTime') ?? '';
+  const endTimeISO = params.get('endTimeISO') ?? '';
+  const isDynamic = params.get('isDynamic') === 'true';
   const price = params.get('price') ?? '';
   // organizer / private_game extras
   const maxPlayers = Number(params.get('maxPlayers') ?? '4');
@@ -79,15 +83,30 @@ export default function PaymentSuccess() {
 
         // ── PRIVATE GAME MODE ──
         if (mode === 'private_game') {
-          if (!slotId || !userId) {
-            setError(`Parâmetros inválidos. slotId="${slotId}" userId="${userId}"`);
+          if (!userId) {
+            setError('Parâmetros inválidos: userId ausente.');
             return;
           }
 
-          // 1. Confirm slot booking (creates booking record + marks slot unavailable)
+          // 1. Confirm slot booking — edge function creates slot if dynamic (bypasses RLS)
+          const confirmBody: Record<string, string> = { userId, price };
+          if (slotId) {
+            confirmBody.slotId = slotId;
+            if (courtId) confirmBody.courtId = courtId;
+          } else if (isDynamic && startTime && endTimeISO && courtId) {
+            confirmBody.courtId = courtId;
+            confirmBody.startTime = startTime;
+            confirmBody.endTime = endTimeISO;
+          } else {
+            setError('Parâmetros inválidos: slotId ou startTime/endTime ausente.');
+            return;
+          }
+
           const { data: bookingData, error: bookingErr } = await supabase.functions.invoke('confirm-slot-booking', {
-            body: { slotId, courtId, userId, price },
+            body: confirmBody,
           });
+
+          const effectiveSlotId: string = bookingData?.slotId ?? slotId ?? '';
 
           if (bookingErr) {
             const body = await (bookingErr as any).context?.json?.().catch(() => null);
@@ -110,7 +129,7 @@ export default function PaymentSuccess() {
               organizer_id: userId,
               created_by: userId,
               court_id: courtId || null,
-              slot_id: slotId || null,
+              slot_id: effectiveSlotId || null,
               booking_id: bookingId,
               scheduled_at: scheduledAt,
               max_players: payMode === 'split' ? 18 : maxPlayers,

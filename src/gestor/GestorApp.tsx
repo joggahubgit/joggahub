@@ -1,24 +1,20 @@
 import { useState, useEffect } from 'react';
-import { LayoutDashboard, Calendar, List, DollarSign, Settings, LogOut, Menu, X, Building2 } from 'lucide-react';
+import { Calendar, List, DollarSign, Settings, LogOut, Menu, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
 import { LoginPage } from './components/LoginPage';
-import { SimpleDashboard } from './components/SimpleDashboard';
 import { SmartBookingCalendar } from './components/SmartBookingCalendar';
 import { SimpleBookingsList } from './components/SimpleBookingsList';
 import { SimpleRevenue } from './components/SimpleRevenue';
 import { SimpleSettings } from './components/SimpleSettings';
-import { CreateAvailability } from './components/CreateAvailability';
 
-type Tab = 'dashboard' | 'calendar' | 'bookings' | 'revenue' | 'settings';
+type Tab = 'calendar' | 'bookings' | 'revenue' | 'settings';
 
 export default function GestorApp() {
   const [user, setUser] = useState<any>(null);
   const [venue, setVenue] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const [activeTab, setActiveTab] = useState<Tab>('calendar');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [showCreateAvailability, setShowCreateAvailability] = useState(false);
-  const [calendarRefreshKey, setCalendarRefreshKey] = useState(0);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -59,10 +55,9 @@ export default function GestorApp() {
   }
 
   const menuItems = [
-    { id: 'dashboard' as Tab, label: 'Dashboard', icon: LayoutDashboard },
     { id: 'calendar' as Tab, label: 'Agenda', icon: Calendar },
     { id: 'bookings' as Tab, label: 'Reservas', icon: List },
-    { id: 'revenue' as Tab, label: 'Pagamentos', icon: DollarSign },
+    { id: 'revenue' as Tab, label: 'Financeiro', icon: DollarSign },
     { id: 'settings' as Tab, label: 'Configurações', icon: Settings },
   ];
 
@@ -70,16 +65,14 @@ export default function GestorApp() {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'dashboard':
-        return <SimpleDashboard venueId={venue?.id} onCreateAvailability={() => setShowCreateAvailability(true)} onNavigate={(tab) => setActiveTab(tab as Tab)} />;
       case 'calendar':
-        return <SmartBookingCalendar key={calendarRefreshKey} venueId={venue?.id} />;
+        return <SmartBookingCalendar venueId={venue?.id} onNavigate={(tab) => setActiveTab(tab as Tab)} />;
       case 'bookings':
         return <SimpleBookingsList venueId={venue?.id} />;
       case 'revenue':
         return <SimpleRevenue venueId={venue?.id} />;
       case 'settings':
-        return <SimpleSettings venueId={venue?.id} userId={user?.id} onVenueCreated={(v) => { setVenue(v); setActiveTab('dashboard'); }} />;
+        return <SimpleSettings venueId={venue?.id} userId={user?.id} onVenueCreated={(v) => { setVenue(v); setActiveTab('calendar'); }} />;
       default:
         return null;
     }
@@ -171,14 +164,6 @@ export default function GestorApp() {
         <div className="fixed inset-0 bg-black bg-opacity-50 z-20 lg:hidden" onClick={() => setMobileMenuOpen(false)} />
       )}
 
-      {/* Create Availability Modal */}
-      {showCreateAvailability && venue?.id && (
-        <CreateAvailability
-          venueId={venue.id}
-          onClose={() => setShowCreateAvailability(false)}
-          onSaved={() => { setCalendarRefreshKey(k => k + 1); setShowCreateAvailability(false); }}
-        />
-      )}
     </div>
   );
 }

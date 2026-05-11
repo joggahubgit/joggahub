@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
+import { Calendar } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
+import { CreateSchedule } from './CreateSchedule';
 
 interface SimpleSettingsProps {
   venueId: string | null;
@@ -17,6 +19,7 @@ export function SimpleSettings({ venueId, onVenueCreated }: SimpleSettingsProps)
   const [openingHours, setOpeningHours] = useState('Seg-Dom: 08h-23h');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [showSchedule, setShowSchedule] = useState(false);
 
   // Campos de quadra
   const [courtName, setCourtName] = useState('Quadra 1');
@@ -73,8 +76,33 @@ export function SimpleSettings({ venueId, onVenueCreated }: SimpleSettingsProps)
   };
 
   return (
-    <div>
-      <h2 className="text-2xl font-bold mb-6">Configurações</h2>
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-gray-900">Configurações</h2>
+
+      {/* Horários das Quadras */}
+      {venueId && (
+        <div className="bg-white rounded-xl border-2 border-gray-100 p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                <Calendar className="w-5 h-5 text-purple-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-900 text-base">Horários das Quadras</h3>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  Configure os dias e horários de funcionamento de cada quadra. Os jogadores verão slots a cada 30 minutos dentro do período configurado.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowSchedule(true)}
+              className="flex-shrink-0 px-4 py-2 bg-purple-600 text-white rounded-xl font-semibold text-sm hover:bg-purple-700 transition-colors"
+            >
+              Configurar
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border-2 border-gray-100 p-6">
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -205,6 +233,14 @@ export function SimpleSettings({ venueId, onVenueCreated }: SimpleSettingsProps)
           </div>
         </form>
       </div>
+
+      {showSchedule && venueId && (
+        <CreateSchedule
+          venueId={venueId}
+          onClose={() => setShowSchedule(false)}
+          onSaved={() => setShowSchedule(false)}
+        />
+      )}
     </div>
   );
 }

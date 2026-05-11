@@ -1,12 +1,16 @@
-import { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Ban, Filter, Clock, CheckCircle, AlertCircle, Plus, Trash2 } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { ChevronLeft, ChevronRight, ChevronDown, Ban, Filter, CheckCircle, AlertCircle, Plus, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
-import { CreateAvailability } from './CreateAvailability';
+import { CreateSchedule } from './CreateSchedule';
 import { RemoveSlots } from './RemoveSlots';
 import { SlotModal } from './SlotModal';
 import { OpenGameModal } from './OpenGameModal';
+import { DynamicSlotModal } from './DynamicSlotModal';
 
-interface Props { venueId: string; }
+interface Props {
+  venueId: string;
+  onNavigate?: (tab: string) => void;
+}
 
 interface Court { id: string; name: string; }
 interface Slot {
@@ -20,6 +24,7 @@ interface Slot {
     id: string;
     payment_status: string;
     total_price: number;
+    status: string;
     profiles: { name: string; phone: string } | null;
   } | null;
   game?: {
@@ -30,8 +35,10 @@ interface Slot {
   } | null;
 }
 
-const HOURS = ['07:00','08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00','22:00','23:00'];
-const DAY_NAMES_SHORT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const HOURS = Array.from({ length: 33 }, (_, i) => {
+  const totalMins = 420 + i * 30; // 07:00 → 23:00
+  return `${String(Math.floor(totalMins / 60)).padStart(2, '0')}:${String(totalMins % 60).padStart(2, '0')}`;
+});
 
 function addDays(date: Date, days: number) {
   const d = new Date(date);
@@ -42,12 +49,9 @@ function addDays(date: Date, days: number) {
 function startOfWeek(date: Date) {
   const d = new Date(date);
   const day = d.getDay();
-  d.setDate(d.getDate() - day);
+  const diff = day === 0 ? -6 : 1 - day; // Sunday wraps to previous Monday
+  d.setDate(d.getDate() + diff);
   return d;
-}
-
-function startOfMonth(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), 1);
 }
 
 function formatShortDate(date: Date) {
@@ -58,8 +62,8 @@ function formatDayName(date: Date) {
   return date.toLocaleDateString('pt-BR', { weekday: 'short' }).toUpperCase();
 }
 
-function formatMonthYear(date: Date) {
-  return date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+function formatLongDate(date: Date) {
+  return date.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
 function isoDate(date: Date) {
@@ -70,89 +74,78 @@ function sameDay(a: Date, b: Date) {
   return isoDate(a) === isoDate(b);
 }
 
-type ViewMode = 'week' | 'day' | 'month';
+type ViewMode = 'week' | 'day';
 
-export function SmartBookingCalendar({ venueId }: Props) {
+interface CourtScheduleEntry { open_time: string; close_time: string; price: number; }
+type CourtScheduleMap = Record<string, Record<number, CourtScheduleEntry>>;
+
+export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
   const [courts, setCourts] = useState<Court[]>([]);
   const [slots, setSlots] = useState<Slot[]>([]);
+  const [courtSchedules, setCourtSchedules] = useState<CourtScheduleMap>({});
   const [loading, setLoading] = useState(true);
-  const [weekStart, setWeekStart] = useState(startOfWeek(new Date()));
-  const [monthStart, setMonthStart] = useState(startOfMonth(new Date()));
   const [viewMode, setViewMode] = useState<ViewMode>('week');
-  const [selectedDay, setSelectedDay] = useState(new Date().getDay());
+  const [focusedDate, setFocusedDate] = useState(() => new Date());
+  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
   const [selectedGameSlot, setSelectedGameSlot] = useState<Slot | null>(null);
   const [filterStatus, setFilterStatus] = useState<'all' | 'available' | 'booked' | 'blocked'>('all');
   const [selectedCourtId, setSelectedCourtId] = useState<string>('all');
-
   const [showCreateSlot, setShowCreateSlot] = useState(false);
   const [showRemoveSlots, setShowRemoveSlots] = useState(false);
+  const [selectedDynamic, setSelectedDynamic] = useState<{
+    courtId: string; courtName: string; date: Date; hour: string; pricePerHour: number;
+    existingSlotId?: string; existingEndHour?: string;
+  } | null>(null);
+  const [collapsedCourts, setCollapsedCourts] = useState<Set<string>>(new Set());
 
+  function toggleCourt(courtId: string) {
+    setCollapsedCourts(prev => {
+      const next = new Set(prev);
+      if (next.has(courtId)) next.delete(courtId); else next.add(courtId);
+      return next;
+    });
+  }
+
+  const today = new Date();
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
-  const displayDays = viewMode === 'week' ? weekDays : [weekDays[selectedDay]];
+  const displayDays = viewMode === 'week' ? weekDays : [focusedDate];
   const displayCourts = selectedCourtId === 'all' ? courts : courts.filter(c => c.id === selectedCourtId);
 
-  // Build the month grid: all days from start-of-week of month's first day
-  const monthGridDays = (() => {
-    const firstDayOfMonth = monthStart;
-    const gridStart = startOfWeek(firstDayOfMonth);
-    const lastDayOfMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
-    const gridEnd = addDays(startOfWeek(lastDayOfMonth), 6);
-    const days: Date[] = [];
-    let cur = gridStart;
-    while (cur <= gridEnd) {
-      days.push(new Date(cur));
-      cur = addDays(cur, 1);
-    }
-    return days;
-  })();
-
   function getFetchRange(): { fromDate: string; toDate: string } {
-    if (viewMode === 'month') {
-      const lastDay = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
-      return { fromDate: isoDate(monthStart), toDate: isoDate(lastDay) };
+    if (viewMode === 'day') {
+      const d = isoDate(focusedDate);
+      return { fromDate: d, toDate: d };
     }
     return { fromDate: isoDate(weekStart), toDate: isoDate(addDays(weekStart, 6)) };
   }
 
-  useEffect(() => {
+  const fetchAll = useCallback(async () => {
     if (!venueId) return;
-    fetchAll();
-  }, [venueId, weekStart, monthStart, viewMode]);
-
-  // Realtime: re-fetch whenever any slot changes
-  useEffect(() => {
-    if (!venueId) return;
-    const channel = supabase
-      .channel(`gestor-slots-${venueId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'slots' }, () => {
-        fetchAll();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => {
-        fetchAll();
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [venueId]);
-
-  useEffect(() => {
-    setSelectedCourtId('all');
-  }, [courts.length]);
-
-  async function fetchAll() {
     setLoading(true);
     try {
       const { fromDate, toDate } = getFetchRange();
 
       const { data: courtRows, error: courtError } = await supabase
         .from('courts').select('id, name').eq('venue_id', venueId).neq('is_active', false);
-
       if (courtError) console.error('[Calendar] courts error', courtError);
 
       const validCourts = courtRows ?? [];
       setCourts(validCourts);
 
-      if (!validCourts.length) { setSlots([]); return; }
+      if (!validCourts.length) { setSlots([]); setCourtSchedules({}); return; }
+
+      const { data: scheduleRows } = await supabase
+        .from('court_schedules')
+        .select('court_id, day_of_week, open_time, close_time, price')
+        .in('court_id', validCourts.map(c => c.id));
+
+      const schedMap: CourtScheduleMap = {};
+      (scheduleRows ?? []).forEach(s => {
+        if (!schedMap[s.court_id]) schedMap[s.court_id] = {};
+        schedMap[s.court_id][s.day_of_week] = { open_time: s.open_time, close_time: s.close_time, price: s.price ?? 0 };
+      });
+      setCourtSchedules(schedMap);
 
       const { data: slotRows, error: slotError } = await supabase
         .from('slots')
@@ -161,37 +154,31 @@ export function SmartBookingCalendar({ venueId }: Props) {
         .gte('start_time', `${fromDate}T00:00:00`)
         .lte('start_time', `${toDate}T23:59:59`)
         .order('start_time', { ascending: true });
-
       if (slotError) console.error('[Calendar] slots error', slotError);
 
       if (!slotRows?.length) { setSlots([]); return; }
 
       const allSlotIds = slotRows.map(s => s.id);
-      const bookedSlotIds = slotRows.filter(s => !s.is_available).map(s => s.id);
       let bookingBySlot: Record<string, any> = {};
       let gameBySlot: Record<string, any> = {};
 
-      // Fetch bookings for unavailable slots
-      if (bookedSlotIds.length) {
-        const { data: bookingRows } = await supabase
-          .from('bookings')
-          .select('id, slot_id, created_by, payment_status, total_price')
-          .in('slot_id', bookedSlotIds)
-          .neq('status', 'cancelled');
+      const { data: bookingRows } = await supabase
+        .from('bookings')
+        .select('id, slot_id, created_by, payment_status, total_price, status')
+        .in('slot_id', allSlotIds)
+        .neq('status', 'cancelled');
 
-        const userIds = [...new Set((bookingRows ?? []).map(b => b.created_by).filter(Boolean))];
-        const profileMap: Record<string, { name: string; phone: string }> = {};
-        if (userIds.length) {
-          const { data: profiles } = await supabase
-            .from('profiles').select('id, name, phone').in('id', userIds);
-          (profiles ?? []).forEach(p => { profileMap[p.id] = p; });
-        }
-        (bookingRows ?? []).forEach(b => {
-          bookingBySlot[b.slot_id] = { ...b, profiles: profileMap[b.created_by] ?? null };
-        });
+      const userIds = [...new Set((bookingRows ?? []).map(b => b.created_by).filter(Boolean))];
+      const profileMap: Record<string, { name: string; phone: string }> = {};
+      if (userIds.length) {
+        const { data: profiles } = await supabase
+          .from('profiles').select('id, name, phone').in('id', userIds);
+        (profiles ?? []).forEach(p => { profileMap[p.id] = p; });
       }
+      (bookingRows ?? []).forEach(b => {
+        bookingBySlot[b.slot_id] = { ...b, profiles: profileMap[b.created_by] ?? null };
+      });
 
-      // Fetch games for all slots, keep only active ones
       const { data: gameRows } = await supabase
         .from('games')
         .select('id, slot_id, is_open, current_players, max_players')
@@ -208,9 +195,69 @@ export function SmartBookingCalendar({ venueId }: Props) {
     } finally {
       setLoading(false);
     }
+  }, [venueId, viewMode, focusedDate, weekStart]);
+
+  // Always keep a current reference to fetchAll so callbacks (realtime, timers)
+  // never use a stale closure.
+  const fetchAllRef = useRef(fetchAll);
+  fetchAllRef.current = fetchAll;
+
+  useEffect(() => {
+    if (!venueId) return;
+    fetchAll();
+  }, [fetchAll]);
+
+  useEffect(() => {
+    if (!venueId) return;
+    const channel = supabase
+      .channel(`gestor-slots-${venueId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'slots' }, () => fetchAllRef.current())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => fetchAllRef.current())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'court_schedules' }, () => fetchAllRef.current())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [venueId]);
+
+  useEffect(() => {
+    setSelectedCourtId('all');
+  }, [courts.length]);
+
+  function switchView(mode: ViewMode) {
+    if (mode === 'week') setWeekStart(startOfWeek(focusedDate));
+    setViewMode(mode);
   }
 
-  function fetchSlots() { fetchAll(); }
+  function navigatePrev() {
+    if (viewMode === 'week') setWeekStart(prev => addDays(prev, -7));
+    else setFocusedDate(prev => addDays(prev, -1));
+  }
+
+  function navigateNext() {
+    if (viewMode === 'week') setWeekStart(prev => addDays(prev, 7));
+    else setFocusedDate(prev => addDays(prev, 1));
+  }
+
+  function goToday() {
+    const now = new Date();
+    setFocusedDate(now);
+    setWeekStart(startOfWeek(now));
+  }
+
+  function navigateLabel() {
+    if (viewMode === 'week') return `${formatShortDate(weekDays[0])} – ${formatShortDate(weekDays[6])}`;
+    const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+    return cap(formatLongDate(focusedDate));
+  }
+
+  function isWithinSchedule(courtId: string, date: Date, hour: string): boolean {
+    const dow = date.getDay();
+    const sched = courtSchedules[courtId]?.[dow];
+    if (!sched) return false;
+    // Normalize to "HH:MM" — Postgres time columns come back as "HH:MM:SS"
+    const open = sched.open_time.substring(0, 5);
+    const close = sched.close_time.substring(0, 5);
+    return hour >= open && hour < close;
+  }
 
   function getSlot(courtId: string, date: Date, hour: string): Slot | undefined {
     const dateStr = isoDate(date);
@@ -224,7 +271,7 @@ export function SmartBookingCalendar({ venueId }: Props) {
   function getSlotStatus(slot: Slot | undefined): 'available' | 'booked' | 'blocked' | 'open_game' | 'empty' {
     if (!slot) return 'empty';
     if (slot.booking) return 'booked';
-    if (slot.game) return 'open_game';   // must come before is_available check — games set slot to unavailable
+    if (slot.game) return 'open_game';
     if (!slot.is_available) return 'blocked';
     return 'available';
   }
@@ -234,72 +281,38 @@ export function SmartBookingCalendar({ venueId }: Props) {
     return getSlotStatus(slot) === filterStatus;
   }
 
-  function getSlotsForDay(date: Date) {
-    const dateStr = isoDate(date);
-    return statsSlots.filter(s => s.start_time?.startsWith(dateStr));
-  }
-
-  function navigatePrev() {
-    if (viewMode === 'week') setWeekStart(addDays(weekStart, -7));
-    else if (viewMode === 'day') setSelectedDay(prev => Math.max(0, prev - 1));
-    else setMonthStart(new Date(monthStart.getFullYear(), monthStart.getMonth() - 1, 1));
-  }
-
-  function navigateNext() {
-    if (viewMode === 'week') setWeekStart(addDays(weekStart, 7));
-    else if (viewMode === 'day') setSelectedDay(prev => Math.min(6, prev + 1));
-    else setMonthStart(new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 1));
-  }
-
-  function navigateLabel() {
-    if (viewMode === 'week') return `${formatShortDate(weekDays[0])} – ${formatShortDate(weekDays[6])}`;
-    if (viewMode === 'day') return formatShortDate(weekDays[selectedDay]);
-    return formatMonthYear(monthStart);
-  }
-
-  function openDayFromMonth(date: Date) {
-    const ws = startOfWeek(date);
-    setWeekStart(ws);
-    setSelectedDay(date.getDay());
-    setViewMode('day');
-  }
-
+  // ── Stats for visible period ──
   const statsSlots = selectedCourtId === 'all' ? slots : slots.filter(s => s.court_id === selectedCourtId);
-  const totalSlots = statsSlots.length;
   const bookedSlots = statsSlots.filter(s => s.booking).length;
-  const availableSlots = statsSlots.filter(s => !s.booking && s.is_available).length;
+  const pendingSlots = statsSlots.filter(s => s.booking?.payment_status === 'pending').length;
+  const paidRevenue = statsSlots
+    .filter(s => s.booking?.payment_status === 'paid')
+    .reduce((sum, s) => sum + (s.booking?.total_price ?? 0), 0);
+  const hasSchedule = Object.keys(courtSchedules).length > 0 || slots.length > 0;
 
-  const today = new Date();
+  const isShowingToday = viewMode === 'day' && sameDay(focusedDate, today);
+  const statsLabel = isShowingToday ? 'Hoje' : viewMode === 'day' ? formatShortDate(focusedDate) : 'Semana';
 
   return (
     <div className="space-y-4">
-      {/* ── Header: título + stats ── */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Gestão de Agenda</h2>
-          <p className="text-sm text-gray-500 mt-0.5">Visualize e gerencie todos os horários</p>
-        </div>
 
-        {/* Stats strip */}
-        <div className="flex gap-3">
-          <div className="bg-white border border-gray-200 rounded-xl px-4 py-2.5 shadow-sm text-center min-w-[72px]">
-            <p className="text-xs text-gray-400 font-medium">Ocupação</p>
-            <p className="text-xl font-bold text-purple-600 leading-tight">
-              {totalSlots > 0 ? `${Math.round((bookedSlots / totalSlots) * 100)}%` : '—'}
-            </p>
-          </div>
-          <div className="bg-white border border-gray-200 rounded-xl px-4 py-2.5 shadow-sm text-center min-w-[72px]">
-            <p className="text-xs text-gray-400 font-medium">Livres</p>
-            <p className="text-xl font-bold text-green-600 leading-tight">{availableSlots}</p>
-          </div>
-          <div className="bg-white border border-gray-200 rounded-xl px-4 py-2.5 shadow-sm text-center min-w-[72px]">
-            <p className="text-xs text-gray-400 font-medium">Reservas</p>
-            <p className="text-xl font-bold text-gray-900 leading-tight">{bookedSlots}</p>
-          </div>
-          <div className="bg-white border border-gray-200 rounded-xl px-4 py-2.5 shadow-sm text-center min-w-[72px]">
-            <p className="text-xs text-gray-400 font-medium">Total</p>
-            <p className="text-xl font-bold text-gray-900 leading-tight">{totalSlots}</p>
-          </div>
+      {/* ── Metrics strip ── */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm">
+          <p className="text-xs text-gray-400 font-medium">Receita · {statsLabel}</p>
+          <p className="text-2xl font-bold text-purple-600 leading-tight mt-0.5">
+            R$ {paidRevenue.toLocaleString('pt-BR')}
+          </p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm">
+          <p className="text-xs text-gray-400 font-medium">Reservas · {statsLabel}</p>
+          <p className="text-2xl font-bold text-gray-900 leading-tight mt-0.5">{bookedSlots}</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm">
+          <p className="text-xs text-gray-400 font-medium">Pendentes · {statsLabel}</p>
+          <p className={`text-2xl font-bold leading-tight mt-0.5 ${pendingSlots > 0 ? 'text-orange-500' : 'text-gray-900'}`}>
+            {pendingSlots}
+          </p>
         </div>
       </div>
 
@@ -311,12 +324,12 @@ export function SmartBookingCalendar({ venueId }: Props) {
 
           {/* View toggle */}
           <div className="flex bg-gray-100 rounded-lg p-0.5 flex-shrink-0">
-            {(['month', 'week', 'day'] as ViewMode[]).map(mode => (
-              <button key={mode} onClick={() => setViewMode(mode)}
+            {(['day', 'week'] as ViewMode[]).map(mode => (
+              <button key={mode} onClick={() => switchView(mode)}
                 className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-all ${
                   viewMode === mode ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'
                 }`}>
-                {mode === 'month' ? 'Mês' : mode === 'week' ? 'Semana' : 'Dia'}
+                {mode === 'week' ? 'Semana' : 'Dia'}
               </button>
             ))}
           </div>
@@ -326,13 +339,21 @@ export function SmartBookingCalendar({ venueId }: Props) {
             <button onClick={navigatePrev} className="p-1.5 hover:bg-white rounded-md transition-colors">
               <ChevronLeft className="w-4 h-4 text-gray-600" />
             </button>
-            <span className="px-3 text-sm font-semibold text-gray-800 whitespace-nowrap capitalize min-w-[140px] text-center">
+            <span className="px-3 text-sm font-semibold text-gray-800 whitespace-nowrap capitalize min-w-[160px] text-center">
               {navigateLabel()}
             </span>
             <button onClick={navigateNext} className="p-1.5 hover:bg-white rounded-md transition-colors">
               <ChevronRight className="w-4 h-4 text-gray-600" />
             </button>
           </div>
+
+          {/* Hoje button */}
+          {!isShowingToday && (
+            <button onClick={goToday}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-gray-200 text-gray-600 hover:border-purple-300 hover:text-purple-600 transition-all flex-shrink-0">
+              Hoje
+            </button>
+          )}
 
           {/* Divider */}
           <div className="h-6 w-px bg-gray-200 flex-shrink-0 hidden sm:block" />
@@ -371,7 +392,7 @@ export function SmartBookingCalendar({ venueId }: Props) {
             <button onClick={() => setShowCreateSlot(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700 transition-colors">
               <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">Criar horários</span>
+              <span className="hidden sm:inline">Horários</span>
             </button>
             <button onClick={() => setShowRemoveSlots(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white text-red-500 text-sm font-semibold border border-red-200 hover:bg-red-50 transition-colors">
@@ -381,275 +402,277 @@ export function SmartBookingCalendar({ venueId }: Props) {
           </div>
         </div>
 
-        {/* Row 2: filtros de status + legenda (só semana/dia) */}
-        {viewMode !== 'month' && (
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 bg-gray-50">
-            <div className="flex items-center gap-1.5">
-              <Filter className="w-3.5 h-3.5 text-gray-400" />
-              <span className="text-xs text-gray-400 font-medium">Mostrar:</span>
-            </div>
-            <div className="flex gap-1.5">
-              {([
-                { value: 'all', label: 'Todos' },
-                { value: 'available', label: 'Livres', dot: 'bg-green-500' },
-                { value: 'booked', label: 'Reservados', dot: 'bg-purple-600' },
-                { value: 'blocked', label: 'Bloqueados', dot: 'bg-gray-400' },
-              ] as const).map(f => (
-                <button key={f.value} onClick={() => setFilterStatus(f.value)}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
-                    filterStatus === f.value
-                      ? 'bg-purple-600 text-white'
-                      : 'bg-white text-gray-600 border border-gray-200 hover:border-purple-200'
-                  }`}>
-                  {'dot' in f && f.dot && filterStatus !== f.value && (
-                    <div className={`w-2 h-2 rounded-full ${f.dot}`} />
-                  )}
-                  {f.label}
-                </button>
-              ))}
-            </div>
+        {/* Row 2: filtros de status */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 bg-gray-50">
+          <div className="flex items-center gap-1.5">
+            <Filter className="w-3.5 h-3.5 text-gray-400" />
+            <span className="text-xs text-gray-400 font-medium">Mostrar:</span>
           </div>
-        )}
-      </div>
-
-      {/* Calendar grid */}
-      {loading ? (
-        <div className="bg-white rounded-2xl border-2 border-gray-200 p-12 text-center text-gray-400">Carregando agenda...</div>
-      ) : courts.length === 0 ? (
-        <div className="bg-white rounded-2xl border-2 border-gray-200 p-12 text-center text-gray-400">
-          Nenhuma quadra cadastrada. Adicione quadras nas Configurações.
-        </div>
-      ) : viewMode === 'month' ? (
-        /* ── Month View ── */
-        <div className="bg-white rounded-2xl border-2 border-gray-200 overflow-hidden shadow-sm">
-          {/* Day-of-week header */}
-          <div className="grid grid-cols-7 border-b-2 border-gray-200">
-            {DAY_NAMES_SHORT.map(d => (
-              <div key={d} className="py-3 text-center text-xs font-bold text-gray-500 uppercase">
-                {d}
-              </div>
+          <div className="flex gap-1.5">
+            {([
+              { value: 'all', label: 'Todos' },
+              { value: 'available', label: 'Livres', dot: 'bg-green-500' },
+              { value: 'booked', label: 'Reservados', dot: 'bg-purple-600' },
+              { value: 'blocked', label: 'Bloqueados', dot: 'bg-gray-400' },
+            ] as const).map(f => (
+              <button key={f.value} onClick={() => setFilterStatus(f.value)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                  filterStatus === f.value
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-white text-gray-600 border border-gray-200 hover:border-purple-200'
+                }`}>
+                {'dot' in f && f.dot && filterStatus !== f.value && (
+                  <div className={`w-2 h-2 rounded-full ${f.dot}`} />
+                )}
+                {f.label}
+              </button>
             ))}
           </div>
 
-          {/* Day cells */}
-          <div className="grid grid-cols-7">
-            {monthGridDays.map((day, idx) => {
-              const inMonth = day.getMonth() === monthStart.getMonth();
-              const isToday = sameDay(day, today);
-              const daySlots = getSlotsForDay(day);
-              const booked = daySlots.filter(s => s.booking).length;
-              const available = daySlots.filter(s => !s.booking && s.is_available).length;
-              const blocked = daySlots.filter(s => !s.is_available && !s.booking).length;
-              const hasAny = daySlots.length > 0;
-              const isLastRow = idx >= monthGridDays.length - 7;
-              const isLastCol = (idx + 1) % 7 === 0;
-
-              return (
-                <button
-                  key={idx}
-                  onClick={() => inMonth && openDayFromMonth(day)}
-                  disabled={!inMonth}
-                  className={`
-                    min-h-[80px] md:min-h-[100px] p-2 text-left border-b border-r border-gray-100 transition-colors
-                    ${isLastRow ? 'border-b-0' : ''}
-                    ${isLastCol ? 'border-r-0' : ''}
-                    ${!inMonth ? 'bg-gray-50 cursor-default' : 'hover:bg-purple-50 cursor-pointer'}
-                  `}
-                >
-                  <div className={`
-                    w-7 h-7 flex items-center justify-center rounded-full text-sm font-bold mb-1
-                    ${isToday ? 'bg-purple-600 text-white' : inMonth ? 'text-gray-900' : 'text-gray-300'}
-                  `}>
-                    {day.getDate()}
-                  </div>
-
-                  {inMonth && hasAny && (
-                    <div className="space-y-1">
-                      {booked > 0 && (
-                        <div className="flex items-center gap-1">
-                          <div className="w-2 h-2 rounded-full bg-purple-600 flex-shrink-0" />
-                          <span className="text-xs text-purple-700 font-medium">{booked} res.</span>
-                        </div>
-                      )}
-                      {available > 0 && (
-                        <div className="flex items-center gap-1">
-                          <div className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
-                          <span className="text-xs text-green-700 font-medium">{available} livres</span>
-                        </div>
-                      )}
-                      {blocked > 0 && (
-                        <div className="flex items-center gap-1">
-                          <div className="w-2 h-2 rounded-full bg-gray-400 flex-shrink-0" />
-                          <span className="text-xs text-gray-500 font-medium">{blocked} bloq.</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </button>
-              );
-            })}
+          {/* Color legend */}
+          <div className="ml-auto flex items-center gap-3 text-[11px] text-gray-400 hidden sm:flex">
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-green-100 border-l-2 border-green-300 inline-block" />Disponível</span>
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-purple-600 inline-block" />Pago</span>
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-orange-500 inline-block" />Pendente</span>
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-blue-100 border-l-2 border-blue-400 inline-block" />Aberto</span>
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-gray-200 inline-block" />Bloqueado</span>
           </div>
         </div>
+      </div>
+
+      {/* ── Calendar grid ── */}
+      {loading ? (
+        <div className="bg-white rounded-2xl border-2 border-gray-200 p-12 text-center text-gray-400">
+          Carregando agenda...
+        </div>
+      ) : courts.length === 0 ? (
+        <div className="bg-white rounded-2xl border-2 border-gray-200 p-12 text-center">
+          <p className="text-gray-500 font-semibold mb-1">Nenhuma quadra cadastrada</p>
+          <p className="text-sm text-gray-400">Adicione quadras em <button onClick={() => onNavigate?.('settings')} className="text-purple-600 underline">Configurações</button>.</p>
+        </div>
+      ) : !hasSchedule ? (
+        <div className="bg-white rounded-2xl border-2 border-gray-200 p-12 text-center">
+          <p className="text-gray-500 font-semibold mb-1">Nenhum horário configurado</p>
+          <p className="text-sm text-gray-400 mb-4">Configure os horários de funcionamento para que jogadores possam reservar.</p>
+          <button
+            onClick={() => setShowCreateSlot(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-xl font-semibold text-sm hover:bg-purple-700 transition-colors">
+            <Plus className="w-4 h-4" />
+            Configurar horários
+          </button>
+        </div>
       ) : (
-        /* ── Week / Day View ── */
         <div className="bg-white rounded-2xl border-2 border-gray-200 overflow-hidden shadow-sm">
-          {displayCourts.map(court => (
+          {displayCourts.map(court => {
+            const isCollapsed = selectedCourtId === 'all' && collapsedCourts.has(court.id);
+            return (
             <div key={court.id} className="border-b-2 border-gray-200 last:border-0">
-              <div className="bg-gray-100 px-6 py-4 border-b-2 border-gray-200">
-                <h3 className="font-bold text-lg text-gray-900">{court.name}</h3>
+              <div className="bg-gray-50 px-5 py-3 border-b border-gray-200 flex items-center justify-between">
+                <h3 className="font-bold text-base text-gray-900">{court.name}</h3>
+                <div className="flex items-center gap-3">
+                  {/* per-court booked count for this period */}
+                  {(() => {
+                    const courtBooked = slots.filter(s => s.court_id === court.id && s.booking).length;
+                    return courtBooked > 0 ? (
+                      <span className="text-xs text-gray-400">{courtBooked} reserva{courtBooked !== 1 ? 's' : ''}</span>
+                    ) : null;
+                  })()}
+                  {selectedCourtId === 'all' && (
+                    <button
+                      onClick={() => toggleCourt(court.id)}
+                      className="p-1 rounded-lg hover:bg-gray-200 transition-colors text-gray-400 hover:text-gray-600"
+                      title={isCollapsed ? 'Expandir' : 'Minimizar'}
+                    >
+                      <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`} />
+                    </button>
+                  )}
+                </div>
               </div>
 
-              <div className="flex">
-                {/* TIME COLUMN — outside scroll so labels never get clipped */}
+              {!isCollapsed && <div className="flex">
+                {/* TIME COLUMN */}
                 <div className="w-14 flex-shrink-0 bg-white border-r border-gray-200 z-10">
                   <div className="h-12 border-b-2 border-gray-200" />
                   {HOURS.map((hour, i) => (
-                    <div key={hour} className="relative h-16 border-b border-gray-100">
-                      <span className={`absolute right-2 text-[11px] font-medium text-gray-400 tabular-nums leading-none ${i === 0 ? 'top-1' : '-top-[0.55em]'}`}>
+                    <div key={hour} className="relative h-10 border-b border-gray-100">
+                      <span className={`absolute right-2 text-[10px] font-medium text-gray-400 tabular-nums leading-none ${i === 0 ? 'top-1' : '-top-[0.5em]'}`}>
                         {hour}
                       </span>
                     </div>
                   ))}
                 </div>
 
-                {/* DAY COLUMNS — horizontally scrollable */}
+                {/* DAY COLUMNS */}
                 <div className="flex-1 overflow-x-auto">
-                <div className="inline-flex min-w-full">
-                  {displayDays.map((day, dayIdx) => (
-                    <div key={dayIdx} className={`flex-1 min-w-[140px] border-r border-gray-200 last:border-0 ${sameDay(day, today) ? 'bg-blue-50/30' : ''}`}>
-                      <div className={`h-12 border-b-2 border-gray-200 flex items-center justify-center ${sameDay(day, today) ? 'bg-blue-50' : 'bg-gray-50'}`}>
-                        <div className="text-center">
-                          <div className="text-xs text-gray-500 font-medium uppercase tracking-wide">{formatDayName(day)}</div>
-                          {sameDay(day, today)
-                            ? <div className="w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center mx-auto mt-0.5">
-                                <span className="text-sm font-bold text-white">{day.getDate()}</span>
-                              </div>
-                            : <div className="text-sm font-bold text-gray-900">{formatShortDate(day)}</div>
-                          }
+                  <div className="inline-flex min-w-full">
+                    {displayDays.map((day, dayIdx) => (
+                      <div key={dayIdx} className={`flex-1 min-w-[140px] border-r border-gray-200 last:border-0 ${sameDay(day, today) ? 'bg-blue-50/30' : ''}`}>
+                        <div className={`h-12 border-b-2 border-gray-200 flex items-center justify-center ${sameDay(day, today) ? 'bg-blue-50' : 'bg-gray-50'}`}>
+                          <div className="text-center">
+                            <div className="text-xs text-gray-500 font-medium uppercase tracking-wide">{formatDayName(day)}</div>
+                            {sameDay(day, today)
+                              ? <div className="w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center mx-auto mt-0.5">
+                                  <span className="text-sm font-bold text-white">{day.getDate()}</span>
+                                </div>
+                              : <div className="text-sm font-bold text-gray-900">{formatShortDate(day)}</div>
+                            }
+                          </div>
                         </div>
+
+                        {HOURS.map((hour) => {
+                          const slot = getSlot(court.id, day, hour);
+                          const status = getSlotStatus(slot);
+                          // available slots (e.g. after booking cancellation) are always interactive;
+                          // empty cells within schedule hours are also interactive
+                          const scheduled = status === 'available' || (status === 'empty' && isWithinSchedule(court.id, day, hour));
+                          const borderClass = 'border-b border-gray-100';
+
+                          if (!scheduled && !shouldShow(slot)) return (
+                            <div key={hour} className={`h-10 ${borderClass} bg-transparent`} />
+                          );
+
+                          if (scheduled) {
+                            const sched = courtSchedules[court.id]?.[day.getDay()];
+                            return (
+                              <button
+                                key={hour}
+                                onClick={() => setSelectedDynamic({
+                                  courtId: court.id,
+                                  courtName: court.name,
+                                  date: day,
+                                  hour,
+                                  pricePerHour: slot?.price_override ?? sched?.price ?? 0,
+                                  ...(slot ? {
+                                    existingSlotId: slot.id,
+                                    existingEndHour: slot.end_time?.substring(11, 16),
+                                  } : {}),
+                                })}
+                                className={`w-full h-10 ${borderClass} bg-green-50/60 border-l-[2px] border-l-green-200 flex items-center hover:bg-green-100/70 transition-colors group`}
+                              >
+                                <span className="text-[9px] text-green-400 ml-2 tabular-nums leading-none group-hover:text-green-600">{hour}</span>
+                              </button>
+                            );
+                          }
+
+                          return (
+                            <button
+                              key={hour}
+                              onClick={() => {
+                                if (!slot) return;
+                                if (slot.game) setSelectedGameSlot(slot);
+                                else setSelectedSlot(slot);
+                              }}
+                              disabled={!slot}
+                              className={`w-full h-10 ${borderClass} text-xs transition-all ${
+                                status === 'open_game'
+                                  ? 'bg-blue-50 hover:bg-blue-100 border-l-[3px] border-l-blue-500'
+                                  : status === 'booked'
+                                  ? slot?.booking?.payment_status === 'paid'
+                                    ? 'bg-purple-600 hover:bg-purple-700 text-white border-l-[3px] border-l-purple-800'
+                                    : 'bg-orange-500 hover:bg-orange-600 text-white border-l-[3px] border-l-orange-700'
+                                  : status === 'blocked'
+                                  ? 'bg-gray-100 hover:bg-gray-200 border-l-[3px] border-l-gray-300'
+                                  : 'bg-white cursor-default'
+                              }`}
+                            >
+                              {status === 'booked' && slot?.booking && (
+                                <div className="px-2 pt-1.5 h-full flex flex-col justify-start items-start overflow-hidden gap-0.5">
+                                  <div className="text-[9px] opacity-75 leading-none tabular-nums">
+                                    {slot.start_time.substring(11,16)} – {slot.end_time.substring(11,16)}
+                                  </div>
+                                  <div className="font-bold truncate w-full text-left text-[11px] leading-tight">
+                                    {slot.booking.profiles?.name?.split(' ')[0] ?? 'Jogador'}
+                                  </div>
+                                  <div className="opacity-90 flex items-center gap-0.5 text-[10px]">
+                                    {slot.booking.payment_status === 'paid'
+                                      ? <CheckCircle className="w-2.5 h-2.5 flex-shrink-0" />
+                                      : <AlertCircle className="w-2.5 h-2.5 flex-shrink-0" />}
+                                    R$ {slot.booking.total_price}
+                                  </div>
+                                </div>
+                              )}
+                              {status === 'open_game' && slot?.game && (
+                                <div className="px-2 pt-1.5 h-full flex flex-col justify-start overflow-hidden gap-0.5">
+                                  <div className="text-[9px] text-blue-400 leading-none tabular-nums">
+                                    {slot.start_time.substring(11,16)} – {slot.end_time.substring(11,16)}
+                                  </div>
+                                  <div className="font-bold text-blue-700 text-[11px] leading-tight truncate">Partida Aberta</div>
+                                  <div className="text-[10px] text-blue-500">
+                                    {slot.game.current_players}/{slot.game.max_players} jogadores
+                                  </div>
+                                </div>
+                              )}
+                              {status === 'blocked' && (
+                                <div className="px-2 pt-1.5 h-full flex flex-col justify-start overflow-hidden gap-0.5">
+                                  <div className="text-[9px] text-gray-400 leading-none tabular-nums">
+                                    {slot!.start_time.substring(11,16)} – {slot!.end_time.substring(11,16)}
+                                  </div>
+                                  <div className="flex items-center gap-1 mt-1">
+                                    <Ban className="w-3 h-3 text-gray-400" />
+                                    <span className="text-[10px] text-gray-400">Bloqueado</span>
+                                  </div>
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
                       </div>
-
-                      {HOURS.map((hour, i) => {
-                        const slot = getSlot(court.id, day, hour);
-                        const status = getSlotStatus(slot);
-                        const borderClass = 'border-b border-gray-100';
-
-                        if (!shouldShow(slot)) return (
-                          <div key={hour} className={`h-16 ${borderClass} bg-transparent`} />
-                        );
-
-                        return (
-                          <button
-                            key={hour}
-                            onClick={() => {
-                              if (!slot) return;
-                              if (slot.game) setSelectedGameSlot(slot);
-                              else setSelectedSlot(slot);
-                            }}
-                            disabled={!slot}
-                            className={`w-full h-16 ${borderClass} text-xs transition-all ${
-                              status === 'available'
-                                ? 'bg-green-50 hover:bg-green-100 border-l-[3px] border-l-green-500'
-                                : status === 'open_game'
-                                ? 'bg-blue-50 hover:bg-blue-100 border-l-[3px] border-l-blue-500'
-                                : status === 'booked'
-                                ? slot?.booking?.payment_status === 'paid'
-                                  ? 'bg-purple-600 hover:bg-purple-700 text-white border-l-[3px] border-l-purple-800'
-                                  : 'bg-orange-500 hover:bg-orange-600 text-white border-l-[3px] border-l-orange-700'
-                                : status === 'blocked'
-                                ? 'bg-gray-100 hover:bg-gray-200 border-l-[3px] border-l-gray-300'
-                                : 'bg-white cursor-default'
-                            }`}
-                          >
-                            {status === 'booked' && slot?.booking && (
-                              <div className="px-2 pt-1.5 h-full flex flex-col justify-start items-start overflow-hidden gap-0.5">
-                                <div className="text-[9px] opacity-75 leading-none tabular-nums">
-                                  {slot.start_time.substring(11,16)} – {slot.end_time.substring(11,16)}
-                                </div>
-                                <div className="font-bold truncate w-full text-left text-[11px] leading-tight">
-                                  {slot.booking.profiles?.name?.split(' ')[0] ?? 'Jogador'}
-                                </div>
-                                <div className="opacity-90 flex items-center gap-0.5 text-[10px]">
-                                  {slot.booking.payment_status === 'paid'
-                                    ? <CheckCircle className="w-2.5 h-2.5 flex-shrink-0" />
-                                    : <AlertCircle className="w-2.5 h-2.5 flex-shrink-0" />}
-                                  R$ {slot.booking.total_price}
-                                </div>
-                              </div>
-                            )}
-                            {status === 'open_game' && slot?.game && (
-                              <div className="px-2 pt-1.5 h-full flex flex-col justify-start overflow-hidden gap-0.5">
-                                <div className="text-[9px] text-blue-400 leading-none tabular-nums">
-                                  {slot.start_time.substring(11,16)} – {slot.end_time.substring(11,16)}
-                                </div>
-                                <div className="font-bold text-blue-700 text-[11px] leading-tight truncate">Partida Aberta</div>
-                                <div className="text-[10px] text-blue-500">
-                                  {slot.game.current_players}/{slot.game.max_players} jogadores
-                                </div>
-                              </div>
-                            )}
-                            {status === 'available' && (
-                              <div className="px-2 pt-1.5 h-full flex flex-col justify-start overflow-hidden gap-0.5">
-                                <div className="text-[9px] text-green-500 leading-none tabular-nums">
-                                  {slot!.start_time.substring(11,16)} – {slot!.end_time.substring(11,16)}
-                                </div>
-                                <div className="font-bold text-green-700 text-[11px] leading-tight">Livre</div>
-                                <div className="text-[10px] text-green-600">R$ {slot?.price_override ?? '—'}</div>
-                              </div>
-                            )}
-                            {status === 'blocked' && (
-                              <div className="px-2 pt-1.5 h-full flex flex-col justify-start overflow-hidden gap-0.5">
-                                <div className="text-[9px] text-gray-400 leading-none tabular-nums">
-                                  {slot!.start_time.substring(11,16)} – {slot!.end_time.substring(11,16)}
-                                </div>
-                                <div className="flex items-center gap-1 mt-1">
-                                  <Ban className="w-3 h-3 text-gray-400" />
-                                  <span className="text-[10px] text-gray-400">Bloqueado</span>
-                                </div>
-                              </div>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-                </div>{/* end overflow-x-auto */}
-                </div>{/* end flex */}
+              </div>}
             </div>
-          ))}
+          );
+          })}
         </div>
       )}
 
-      {/* Remove slots modal */}
+      {/* ── Modals ── */}
       {showRemoveSlots && (
         <RemoveSlots
           venueId={venueId}
           onClose={() => setShowRemoveSlots(false)}
-          onSaved={() => { setShowRemoveSlots(false); fetchSlots(); }}
+          onSaved={() => { setShowRemoveSlots(false); fetchAll(); }}
         />
       )}
 
-      {/* Create slot modal */}
       {showCreateSlot && (
-        <CreateAvailability
+        <CreateSchedule
           venueId={venueId}
           onClose={() => setShowCreateSlot(false)}
-          onSaved={() => { setShowCreateSlot(false); fetchSlots(); }}
-          prefill={{
-            courtId: selectedCourtId !== 'all' ? selectedCourtId : undefined,
-            date: isoDate(viewMode === 'day' ? weekDays[selectedDay] : new Date()),
+          onSaved={({ startDate }) => {
+            const d = new Date(startDate + 'T12:00:00');
+            setFocusedDate(d);
+            setWeekStart(startOfWeek(d));
+            setViewMode('week');
+            setShowCreateSlot(false);
+            // Force refetch after React re-renders with the new state.
+            // Needed when weekStart didn't change (same week), so useEffect([fetchAll]) won't fire.
+            requestAnimationFrame(() => fetchAllRef.current());
           }}
         />
       )}
 
-      {/* Slot detail modal */}
       {selectedSlot && (
         <SlotModal
           slot={selectedSlot}
           courtName={courts.find(c => c.id === selectedSlot.court_id)?.name ?? 'Quadra'}
           onClose={() => setSelectedSlot(null)}
-          onRefresh={() => { fetchSlots(); setSelectedSlot(null); }}
+          onRefresh={() => { fetchAll(); setSelectedSlot(null); }}
+        />
+      )}
+
+      {selectedDynamic && (
+        <DynamicSlotModal
+          courtId={selectedDynamic.courtId}
+          courtName={selectedDynamic.courtName}
+          date={selectedDynamic.date}
+          hour={selectedDynamic.hour}
+          pricePerHour={selectedDynamic.pricePerHour}
+          existingSlotId={selectedDynamic.existingSlotId}
+          existingEndHour={selectedDynamic.existingEndHour}
+          onClose={() => setSelectedDynamic(null)}
+          onRefresh={() => { fetchAll(); setSelectedDynamic(null); }}
         />
       )}
 
@@ -659,7 +682,7 @@ export function SmartBookingCalendar({ venueId }: Props) {
           slotId={selectedGameSlot.id}
           courtName={courts.find(c => c.id === selectedGameSlot.court_id)?.name ?? 'Quadra'}
           onClose={() => setSelectedGameSlot(null)}
-          onRefresh={() => { fetchSlots(); setSelectedGameSlot(null); }}
+          onRefresh={() => { fetchAll(); setSelectedGameSlot(null); }}
         />
       )}
     </div>

@@ -22,12 +22,13 @@ export default function PrivateGameReview() {
   const {
     slotId, price, time, endTime, courtId, courtName, venueName, date,
     maxPlayers, payMode, courtSport,
+    startTime, endTimeISO, duration, isDynamic,
   } = (location.state as any) ?? {};
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  if (!slotId || !user) {
+  if (!user) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-6">
         <div className="text-center space-y-4">
@@ -75,7 +76,7 @@ export default function PrivateGameReview() {
 
       const successParams = new URLSearchParams({
         mode: 'private_game',
-        slotId,
+        slotId: slotId ?? '',
         courtId: courtId ?? '',
         userId: user!.id,
         courtName: courtName ?? '',
@@ -88,6 +89,8 @@ export default function PrivateGameReview() {
         courtPrice: String(courtPrice),
         courtSport: courtSport ?? '',
         price: String(total),
+        // Dynamic slot params (no pre-created slotId)
+        ...(isDynamic && startTime ? { startTime, endTimeISO: endTimeISO ?? '', isDynamic: 'true' } : {}),
         // For split: after checkout we partially capture only the organizer's share
         ...(payMode === 'split' && { organizerShare: String(total) }),
       });
