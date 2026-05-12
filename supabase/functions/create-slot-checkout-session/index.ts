@@ -60,7 +60,7 @@ serve(async (req) => {
     if (slotId) {
       const { data: slot } = await supabase
         .from('slots')
-        .select('court_id, price_override')
+        .select('court_id, price_override, start_time, end_time')
         .eq('id', slotId)
         .single();
       if (slot?.price_override != null) {
@@ -68,7 +68,13 @@ serve(async (req) => {
       } else {
         const eid = slot?.court_id ?? courtId;
         const { data: court } = await supabase.from('courts').select('price_per_hour').eq('id', eid).single();
-        courtPrice = (court?.price_per_hour as number) ?? null;
+        const pricePerHour = (court?.price_per_hour as number) ?? null;
+        if (pricePerHour && slot?.start_time && slot?.end_time) {
+          const durationHours = (new Date(slot.end_time).getTime() - new Date(slot.start_time).getTime()) / 3_600_000;
+          courtPrice = Math.round(pricePerHour * durationHours * 100) / 100;
+        } else {
+          courtPrice = pricePerHour;
+        }
       }
     } else {
       const { data: court } = await supabase.from('courts').select('price_per_hour').eq('id', courtId).single();
@@ -78,11 +84,11 @@ serve(async (req) => {
     if (!courtPrice) throw new Error('Preço da quadra não encontrado');
 
     const isSplit = payMode === 'split';
-    // Split: hold = courtPrice × 1.15 (captures only organizer share at cutoff)
-    // Full: price = courtPrice (organizer pays the full court)
-    const price = isSplit
-      ? Math.round(courtPrice * 1.15 * 100) / 100
-      : courtPrice;
+    // Service fee: 8% + R$2,50 per transaction (same model as create-checkout-session)
+    const serviceFee = Math.round((courtPrice * 0.08 + 2.50) * 100) / 100;
+    // Split: hold = courtPrice + serviceFee as guarantee (manual capture at cutoff)
+    // Full: charge courtPrice + serviceFee immediately
+    const totalCharge = Math.round((courtPrice + serviceFee) * 100) / 100;
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -96,12 +102,23 @@ serve(async (req) => {
         {
           price_data: {
             currency: 'brl',
-            unit_amount: Math.round(price * 100),
+            unit_amount: Math.round(courtPrice * 100),
             product_data: {
               name: isSplit ? `Garantia de reserva — ${courtName}` : `Reserva — ${courtName}`,
               description: isSplit
                 ? `${venueName} · ${date} · ${time}${endTime ? ` – ${endTime}` : ''} · Valor retido até o fim da partida`
                 : `${venueName} · ${date} · ${time}${endTime ? ` – ${endTime}` : ''}`,
+            },
+          },
+          quantity: 1,
+        },
+        {
+          price_data: {
+            currency: 'brl',
+            unit_amount: Math.round(serviceFee * 100),
+            product_data: {
+              name: 'Taxa de serviço JoggaHub',
+              description: '8% + R$2,50 por transação',
             },
           },
           quantity: 1,
@@ -113,6 +130,8 @@ serve(async (req) => {
         courtId: courtId ?? '',
         userId,
         payMode: payMode ?? 'full',
+        courtPrice: String(courtPrice),
+        totalCharge: String(totalCharge),
       },
       success_url: successUrl,
       cancel_url: cancelUrl,
