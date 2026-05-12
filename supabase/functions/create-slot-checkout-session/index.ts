@@ -85,7 +85,8 @@ serve(async (req) => {
       : courtPrice;
 
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
+      // PIX only supports immediate capture — exclude it from split (hold) sessions
+      payment_method_types: isSplit ? ['card'] : ['card', 'pix'],
       mode: 'payment',
       ...(isSplit && {
         payment_intent_data: {

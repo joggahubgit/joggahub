@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   X, ChevronLeft, CalendarCheck, Ban, Search, Loader2,
-  DollarSign, Lock, Users, CheckCircle,
+  DollarSign, CheckCircle,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
 
@@ -20,7 +20,6 @@ interface Props {
 }
 
 type View = 'choose' | 'reserve' | 'success';
-type ReserveType = 'private' | 'open';
 
 function isoDate(d: Date) {
   return d.toISOString().split('T')[0];
@@ -44,14 +43,11 @@ export function DynamicSlotModal({ courtId, courtName, date, hour, pricePerHour,
 
   // Reserve form
   const [duration, setDuration] = useState<90 | 120>(90);
-  const [reserveType, setReserveType] = useState<ReserveType>('private');
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState<Profile[]>([]);
   const [searching, setSearching] = useState(false);
   const [selectedUser, setSelectedUser] = useState<Profile | null>(null);
   const [price, setPrice] = useState('');
-  const [pricePerPlayer, setPricePerPlayer] = useState('');
-  const [maxPlayers, setMaxPlayers] = useState('18');
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // When an existing slot is reused, end time is fixed; otherwise compute from duration
@@ -108,23 +104,14 @@ export function DynamicSlotModal({ courtId, courtName, date, hour, pricePerHour,
   async function handleReserve() {
     setBusy(true); setError('');
 
+    if (!selectedUser) { setError('Selecione um jogador.'); setBusy(false); return; }
+
     const startTime = buildISO(date, hour);
     const endTime = buildISO(date, endHour);
 
-    let body: Record<string, unknown>;
-
-    if (reserveType === 'private') {
-      if (!selectedUser) { setError('Selecione um jogador.'); setBusy(false); return; }
-      body = existingSlotId
-        ? { type: 'private', slotId: existingSlotId, userId: selectedUser.id, price: parseFloat(price) || 0 }
-        : { type: 'private', courtId, startTime, endTime, userId: selectedUser.id, price: parseFloat(price) || 0 };
-    } else {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setError('Sessão expirada. Faça login novamente.'); setBusy(false); return; }
-      body = existingSlotId
-        ? { type: 'open', slotId: existingSlotId, organizerId: user.id, maxPlayers: parseInt(maxPlayers) || 18, pricePerPlayer: parseFloat(pricePerPlayer) || 0 }
-        : { type: 'open', courtId, startTime, endTime, organizerId: user.id, maxPlayers: parseInt(maxPlayers) || 18, pricePerPlayer: parseFloat(pricePerPlayer) || 0 };
-    }
+    const body = existingSlotId
+      ? { type: 'private', slotId: existingSlotId, userId: selectedUser.id, price: parseFloat(price) || 0 }
+      : { type: 'private', courtId, startTime, endTime, userId: selectedUser.id, price: parseFloat(price) || 0 };
 
     const { error: fnErr } = await supabase.functions.invoke('create-manual-booking', { body });
     setBusy(false);
@@ -188,7 +175,7 @@ export function DynamicSlotModal({ courtId, courtName, date, hour, pricePerHour,
                 </div>
                 <div>
                   <p className="font-bold">Reservar manualmente</p>
-                  <p className="text-sm opacity-80">Para um jogador cadastrado ou criar partida aberta</p>
+                  <p className="text-sm opacity-80">Para um jogador cadastrado</p>
                 </div>
               </button>
 
@@ -242,139 +229,83 @@ export function DynamicSlotModal({ courtId, courtName, date, hour, pricePerHour,
                 </p>
               )}
 
-              {/* Type */}
+              {/* Player search */}
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">Tipo</label>
-                <div className="flex gap-2">
-                  <button onClick={() => setReserveType('private')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all ${
-                      reserveType === 'private' ? 'bg-purple-600 text-white border-purple-600' : 'border-gray-200 text-gray-600 hover:border-purple-300'
-                    }`}>
-                    <Lock className="w-4 h-4" /> Privada
-                  </button>
-                  <button onClick={() => setReserveType('open')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all ${
-                      reserveType === 'open' ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 text-gray-600 hover:border-blue-300'
-                    }`}>
-                    <Users className="w-4 h-4" /> Aberta
-                  </button>
+                <label className="block text-sm font-bold text-gray-700 mb-2">Buscar jogador</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    autoFocus
+                    type="text"
+                    placeholder="Nome ou telefone..."
+                    value={search}
+                    onChange={e => { setSearch(e.target.value); setSelectedUser(null); }}
+                    className="w-full pl-9 pr-4 py-2.5 border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:border-purple-400"
+                  />
+                  {searching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />}
                 </div>
+                {!selectedUser && searchResults.length > 0 && (
+                  <div className="mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                    {searchResults.map(p => (
+                      <button key={p.id}
+                        onClick={() => { setSelectedUser(p); setSearch(''); setSearchResults([]); }}
+                        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-purple-50 transition-colors border-b border-gray-100 last:border-0 text-left">
+                        <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+                          <span className="text-purple-700 font-bold text-sm">{p.name?.[0]?.toUpperCase()}</span>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-gray-900 text-sm truncate">{p.name}</p>
+                          <p className="text-xs text-gray-500">{p.phone}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {!selectedUser && search.length >= 2 && !searching && searchResults.length === 0 && (
+                  <p className="mt-2 text-sm text-gray-400 text-center">Nenhum jogador encontrado</p>
+                )}
               </div>
 
-              {/* Private fields */}
-              {reserveType === 'private' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">Buscar jogador</label>
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                      <input
-                        autoFocus
-                        type="text"
-                        placeholder="Nome ou telefone..."
-                        value={search}
-                        onChange={e => { setSearch(e.target.value); setSelectedUser(null); }}
-                        className="w-full pl-9 pr-4 py-2.5 border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:border-purple-400"
-                      />
-                      {searching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />}
-                    </div>
-                    {!selectedUser && searchResults.length > 0 && (
-                      <div className="mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
-                        {searchResults.map(p => (
-                          <button key={p.id}
-                            onClick={() => { setSelectedUser(p); setSearch(''); setSearchResults([]); }}
-                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-purple-50 transition-colors border-b border-gray-100 last:border-0 text-left">
-                            <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
-                              <span className="text-purple-700 font-bold text-sm">{p.name?.[0]?.toUpperCase()}</span>
-                            </div>
-                            <div className="min-w-0">
-                              <p className="font-semibold text-gray-900 text-sm truncate">{p.name}</p>
-                              <p className="text-xs text-gray-500">{p.phone}</p>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {!selectedUser && search.length >= 2 && !searching && searchResults.length === 0 && (
-                      <p className="mt-2 text-sm text-gray-400 text-center">Nenhum jogador encontrado</p>
-                    )}
+              {selectedUser && (
+                <div className="flex items-center gap-3 p-3 bg-purple-50 rounded-xl border border-purple-200">
+                  <div className="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+                    <span className="text-white font-bold">{selectedUser.name?.[0]?.toUpperCase()}</span>
                   </div>
-
-                  {selectedUser && (
-                    <div className="flex items-center gap-3 p-3 bg-purple-50 rounded-xl border border-purple-200">
-                      <div className="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
-                        <span className="text-white font-bold">{selectedUser.name?.[0]?.toUpperCase()}</span>
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-bold text-gray-900 text-sm">{selectedUser.name}</p>
-                        <p className="text-xs text-gray-500">{selectedUser.phone}</p>
-                      </div>
-                      <button onClick={() => setSelectedUser(null)} className="p-1.5 hover:bg-purple-100 rounded-lg transition-colors">
-                        <X className="w-4 h-4 text-gray-500" />
-                      </button>
-                    </div>
-                  )}
-
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">
-                      Valor cobrado (R$)
-                      <span className="text-xs font-normal text-gray-400 ml-2">
-                        Sugerido: R$ {autoPrice}
-                      </span>
-                    </label>
-                    <div className="relative">
-                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                      <input
-                        type="number" min="0" step="5"
-                        value={price}
-                        onChange={e => setPrice(e.target.value)}
-                        className="w-full pl-9 pr-4 py-2.5 border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:border-purple-400"
-                      />
-                    </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-gray-900 text-sm">{selectedUser.name}</p>
+                    <p className="text-xs text-gray-500">{selectedUser.phone}</p>
                   </div>
-                </>
+                  <button onClick={() => setSelectedUser(null)} className="p-1.5 hover:bg-purple-100 rounded-lg transition-colors">
+                    <X className="w-4 h-4 text-gray-500" />
+                  </button>
+                </div>
               )}
 
-              {/* Open game fields */}
-              {reserveType === 'open' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">Máximo de jogadores</label>
-                    <input
-                      type="number" min="2" max="22" step="1"
-                      value={maxPlayers}
-                      onChange={e => setMaxPlayers(e.target.value)}
-                      className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-400"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">Preço por jogador (R$)</label>
-                    <div className="relative">
-                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                      <input
-                        type="number" min="0" step="5"
-                        value={pricePerPlayer}
-                        onChange={e => setPricePerPlayer(e.target.value)}
-                        className="w-full pl-9 pr-4 py-2.5 border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-400"
-                      />
-                    </div>
-                  </div>
-                </>
-              )}
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  Valor cobrado (R$)
+                  <span className="text-xs font-normal text-gray-400 ml-2">Sugerido: R$ {autoPrice}</span>
+                </label>
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="number" min="0" step="5"
+                    value={price}
+                    onChange={e => setPrice(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2.5 border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:border-purple-400"
+                  />
+                </div>
+              </div>
 
               {error && <p className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2 border border-red-100">{error}</p>}
 
               <button
                 onClick={handleReserve}
-                disabled={busy || (reserveType === 'private' && !selectedUser)}
-                className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-white font-semibold transition-colors disabled:opacity-50 ${
-                  reserveType === 'open' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-purple-600 hover:bg-purple-700'
-                }`}
+                disabled={busy || !selectedUser}
+                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-white font-semibold transition-colors disabled:opacity-50 bg-purple-600 hover:bg-purple-700"
               >
-                {busy
-                  ? <Loader2 className="w-4 h-4 animate-spin" />
-                  : <CalendarCheck className="w-5 h-5" />}
-                {reserveType === 'open' ? 'Criar partida aberta' : 'Confirmar reserva'}
+                {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarCheck className="w-5 h-5" />}
+                Confirmar reserva
               </button>
             </div>
           )}

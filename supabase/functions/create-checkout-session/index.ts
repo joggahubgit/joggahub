@@ -67,7 +67,8 @@ serve(async (req) => {
     const serviceFee = Math.round((vagaPrice * 0.08 + 2.50) * 100) / 100;
 
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
+      // PIX only supports immediate capture — exclude it from manual-capture (split hold) sessions
+      payment_method_types: captureManual ? ['card'] : ['card', 'pix'],
       mode: 'payment',
       ...(captureManual ? { payment_intent_data: { capture_method: 'manual' } } : {}),
       line_items: [

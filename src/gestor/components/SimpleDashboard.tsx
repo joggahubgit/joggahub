@@ -22,6 +22,7 @@ interface Booking {
 
 export function SimpleDashboard({ venueId, onCreateAvailability, onNavigate }: Props) {
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [totalSlotsToday, setTotalSlotsToday] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -50,6 +51,7 @@ export function SimpleDashboard({ venueId, onCreateAvailability, onNavigate }: P
         .gte('start_time', `${today}T00:00:00`)
         .lte('start_time', `${today}T23:59:59`);
       if (!slots?.length) { setLoading(false); return; }
+      setTotalSlotsToday(slots.length);
       const slotMap: Record<string, { start_time: string; court_id: string }> = {};
       slots.forEach(s => { slotMap[s.id] = s; });
 
@@ -181,12 +183,12 @@ export function SimpleDashboard({ venueId, onCreateAvailability, onNavigate }: P
           </div>
           <p className="text-gray-600 mb-1 md:mb-2 text-sm md:text-base">Taxa de Ocupação</p>
           <p className="text-3xl md:text-4xl font-bold text-gray-900 mb-1 md:mb-2">
-            {bookings.length > 0 ? `${Math.round((paidCount / bookings.length) * 100)}%` : '—'}
+            {totalSlotsToday > 0 ? `${Math.round((bookings.length / totalSlotsToday) * 100)}%` : '—'}
           </p>
           <div className="w-full bg-gray-200 rounded-full h-2">
             <div
               className="bg-purple-600 h-2 rounded-full"
-              style={{ width: bookings.length > 0 ? `${Math.round((paidCount / bookings.length) * 100)}%` : '0%' }}
+              style={{ width: totalSlotsToday > 0 ? `${Math.round((bookings.length / totalSlotsToday) * 100)}%` : '0%' }}
             />
           </div>
         </button>
