@@ -7,7 +7,7 @@ interface AuthContextType {
   session: Session | null
   profile: Profile | null
   loading: boolean
-  signUp: (email: string, password: string, name: string) => Promise<void>
+  signUp: (email: string, password: string, name: string) => Promise<{ needsConfirmation: boolean }>
   signIn: (email: string, password: string) => Promise<void>
   signInWithGoogle: () => Promise<void>
   signOut: () => Promise<void>
@@ -79,13 +79,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function signUp(email: string, password: string, name: string) {
-    const { error } = await supabase.auth.signUp({
+  async function signUp(email: string, password: string, name: string): Promise<{ needsConfirmation: boolean }> {
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { name } },
     })
     if (error) throw error
+    // session is null when email confirmation is required
+    return { needsConfirmation: !data.session }
   }
 
   async function signIn(email: string, password: string) {

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Mail, Loader2 } from 'lucide-react';
+import { ArrowLeft, Mail, Loader2, CheckCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
 
 export default function Auth() {
   const navigate = useNavigate();
@@ -11,6 +12,8 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [formData, setFormData] = useState({ name: '', email: '', password: '' });
+  const [pendingConfirmation, setPendingConfirmation] = useState(false);
+  const [resent, setResent] = useState(false);
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,8 +21,12 @@ export default function Auth() {
     setLoading(true);
     try {
       if (isSignUp) {
-        await signUp(formData.email, formData.password, formData.name);
-        navigate('/onboarding');
+        const { needsConfirmation } = await signUp(formData.email, formData.password, formData.name);
+        if (needsConfirmation) {
+          setPendingConfirmation(true);
+        } else {
+          navigate('/onboarding');
+        }
       } else {
         await signIn(formData.email, formData.password);
         navigate('/home');
@@ -30,6 +37,53 @@ export default function Auth() {
       setLoading(false);
     }
   };
+
+  async function handleResend() {
+    setResent(false);
+    await supabase.auth.resend({ type: 'signup', email: formData.email });
+    setResent(true);
+  }
+
+  // ── Email confirmation pending ───────────────────────────────────────────
+  if (pendingConfirmation) {
+    return (
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center px-6 py-12">
+        <div className="w-20 h-20 bg-violet-100 rounded-full flex items-center justify-center mb-6">
+          <Mail className="w-10 h-10 text-violet-600" />
+        </div>
+        <h1 className="text-2xl font-bold text-gray-900 text-center mb-2">Verifique seu email</h1>
+        <p className="text-gray-500 text-center mb-1">
+          Enviamos um link de confirmação para
+        </p>
+        <p className="font-semibold text-gray-900 text-center mb-6">{formData.email}</p>
+        <p className="text-gray-500 text-sm text-center mb-8">
+          Clique no link do email para ativar sua conta e começar a jogar.
+          Se não encontrar, verifique a pasta de spam.
+        </p>
+
+        {resent ? (
+          <div className="flex items-center gap-2 text-green-600 text-sm mb-6">
+            <CheckCircle className="w-4 h-4" />
+            Email reenviado!
+          </div>
+        ) : (
+          <button
+            onClick={handleResend}
+            className="text-violet-600 font-semibold text-sm mb-6 hover:underline"
+          >
+            Reenviar email
+          </button>
+        )}
+
+        <button
+          onClick={() => { setPendingConfirmation(false); setIsSignUp(false); setResent(false); }}
+          className="text-gray-500 text-sm hover:underline"
+        >
+          Voltar para o login
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white">
