@@ -63,18 +63,15 @@ serve(async (req) => {
         .select('court_id, price_override, start_time, end_time')
         .eq('id', slotId)
         .single();
-      if (slot?.price_override != null) {
-        courtPrice = slot.price_override as number;
+      // price_override stores the hourly rate override — same semantics as price_per_hour
+      const eid = slot?.court_id ?? courtId;
+      const { data: court } = await supabase.from('courts').select('price_per_hour').eq('id', eid).single();
+      const pricePerHour = (slot?.price_override as number) ?? (court?.price_per_hour as number) ?? null;
+      if (pricePerHour && slot?.start_time && slot?.end_time) {
+        const durationHours = (new Date(slot.end_time).getTime() - new Date(slot.start_time).getTime()) / 3_600_000;
+        courtPrice = Math.round(pricePerHour * durationHours * 100) / 100;
       } else {
-        const eid = slot?.court_id ?? courtId;
-        const { data: court } = await supabase.from('courts').select('price_per_hour').eq('id', eid).single();
-        const pricePerHour = (court?.price_per_hour as number) ?? null;
-        if (pricePerHour && slot?.start_time && slot?.end_time) {
-          const durationHours = (new Date(slot.end_time).getTime() - new Date(slot.start_time).getTime()) / 3_600_000;
-          courtPrice = Math.round(pricePerHour * durationHours * 100) / 100;
-        } else {
-          courtPrice = pricePerHour;
-        }
+        courtPrice = pricePerHour;
       }
     } else {
       const { data: court } = await supabase.from('courts').select('price_per_hour').eq('id', courtId).single();
