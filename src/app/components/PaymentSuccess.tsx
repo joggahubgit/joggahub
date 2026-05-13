@@ -473,7 +473,20 @@ export default function PaymentSuccess() {
           <div className="space-y-2">
             {privateGameId && (
               <button
-                onClick={() => navigate(`/open-game/${privateGameId}`, { replace: true })}
+                onClick={() => navigate(`/open-game/${privateGameId}`, {
+                  replace: true,
+                  state: {
+                    courtName,
+                    courtSport,
+                    venueName,
+                    date,
+                    time,
+                    endTime,
+                    maxPlayers,
+                    pricePerPlayer: 0,
+                    organizerName: '',
+                  },
+                })}
                 className="w-full bg-violet-600 text-white py-4 rounded-2xl font-bold hover:bg-violet-700 transition-colors"
               >
                 Ver minha partida
