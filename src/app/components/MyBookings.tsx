@@ -320,7 +320,7 @@ export default function MyBookings() {
     return new Date(iso).toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' });
   }
   function formatTime(iso: string) {
-    return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    return iso.substring(11, 16);
   }
 
   const upcoming = items.filter(isUpcoming);
