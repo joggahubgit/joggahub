@@ -681,9 +681,6 @@ const CourtDetails: React.FC = () => {
                           <span className="text-xs text-gray-500">{sportLbl}</span>
                         )}
                       </div>
-                      <span className="text-sm font-semibold text-violet-600">
-                        R$ {slotPrice.toFixed(0)} · {selectedDuration === 90 ? '1h30' : '2h'}
-                      </span>
                     </div>
 
                     {/* Slots grid */}
