@@ -38,6 +38,7 @@ serve(async (req) => {
       date,
       time,
       endTime,
+      durationMins: reqDuration,
       payMode,      // 'split' | 'full' | undefined
       successUrl,
       cancelUrl,
@@ -54,28 +55,32 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     );
 
+    // ── Validate player-chosen duration (90 or 120 min) ──
+    const durationMins = [90, 120].includes(Number(reqDuration)) ? Number(reqDuration) : null;
+    if (!durationMins) throw new Error('Duração inválida');
+
     // ── Fetch price from DB — never trust body for financial values ──
     let courtPrice: number | null = null;
 
     if (slotId) {
       const { data: slot } = await supabase
         .from('slots')
-        .select('court_id, price_override, start_time, end_time')
+        .select('court_id, price_override')
         .eq('id', slotId)
         .single();
       // price_override stores the hourly rate override — same semantics as price_per_hour
       const eid = slot?.court_id ?? courtId;
       const { data: court } = await supabase.from('courts').select('price_per_hour').eq('id', eid).single();
       const pricePerHour = (slot?.price_override as number) ?? (court?.price_per_hour as number) ?? null;
-      if (pricePerHour && slot?.start_time && slot?.end_time) {
-        const durationHours = (new Date(slot.end_time).getTime() - new Date(slot.start_time).getTime()) / 3_600_000;
-        courtPrice = Math.round(pricePerHour * durationHours * 100) / 100;
-      } else {
-        courtPrice = pricePerHour;
+      if (pricePerHour) {
+        courtPrice = Math.round(pricePerHour * (durationMins / 60) * 100) / 100;
       }
     } else {
       const { data: court } = await supabase.from('courts').select('price_per_hour').eq('id', courtId).single();
-      courtPrice = (court?.price_per_hour as number) ?? null;
+      const pricePerHour = (court?.price_per_hour as number) ?? null;
+      if (pricePerHour) {
+        courtPrice = Math.round(pricePerHour * (durationMins / 60) * 100) / 100;
+      }
     }
 
     if (!courtPrice) throw new Error('Preço da quadra não encontrado');

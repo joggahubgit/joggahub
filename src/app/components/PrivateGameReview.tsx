@@ -99,6 +99,9 @@ export default function PrivateGameReview() {
       const successUrl = `${origin}/payment-success?${successParams}&session_id={CHECKOUT_SESSION_ID}`;
       const cancelUrl = `${origin}/court-details/${courtId}`;
 
+      const timeToMins = (hhmm: string) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
+      const durationMins = endTime ? timeToMins(endTime) - timeToMins(time) : 90;
+
       const { data, error: fnErr } = await supabase.functions.invoke('create-slot-checkout-session', {
         body: {
           slotId,
@@ -109,6 +112,7 @@ export default function PrivateGameReview() {
           date: formattedDate,
           time,
           endTime,
+          durationMins,
           // For split: authorize full court price (hold); for full: charge organizer's amount directly
           price: payMode === 'split' ? holdTotal : total,
           payMode: payMode ?? 'full',
