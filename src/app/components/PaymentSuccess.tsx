@@ -40,6 +40,7 @@ export default function PaymentSuccess() {
   const sessionId = params.get('session_id') ?? '';
   // organizer open game
   const totalPrice = Number(params.get('totalPrice') ?? '0');
+  const durationMins = Number(params.get('durationMins') ?? '0');
 
   const [createdGameId, setCreatedGameId] = useState('');
 
@@ -115,6 +116,17 @@ export default function PaymentSuccess() {
           if (bookingData?.error) throw new Error(bookingData.error);
 
           const bookingId: string | null = bookingData?.bookingId ?? null;
+
+          // Block all consecutive 30-min slots in the session window
+          if (courtId && date && time && endTime) {
+            const sessionStart = `${date}T${time}:00`;
+            const sessionEnd = `${date}T${endTime}:00`;
+            await supabase.from('slots')
+              .update({ is_available: false })
+              .eq('court_id', courtId)
+              .gte('start_time', sessionStart)
+              .lt('start_time', sessionEnd);
+          }
 
           // 2. Compute scheduled_at from date + time (YYYY-MM-DD + HH:MM)
           let scheduledAt: string | null = null;

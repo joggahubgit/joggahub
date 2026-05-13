@@ -36,10 +36,10 @@ export async function redirectToCheckout(params: CheckoutParams) {
   const origin = window.location.origin;
   const slotParam = params.slotId ? `&slotId=${params.slotId}` : '';
   const payModeParam = params.payMode ? `&payMode=${params.payMode}` : '';
-  // Include session_id for manual-capture checkouts so PaymentSuccess can store the payment_intent_id
   const sessionParam = params.captureManual ? '&session_id={CHECKOUT_SESSION_ID}' : '';
+  const durationParam = params.durationMins ? `&durationMins=${params.durationMins}` : '';
   const successUrl = params.successUrl
-    ?? `${origin}/payment-success?gameId=${params.gameId ?? ''}&playerId=${params.playerId}&playerName=${encodeURIComponent(params.playerName)}&mode=${params.mode}${slotParam}${payModeParam}${sessionParam}`;
+    ?? `${origin}/payment-success?gameId=${params.gameId ?? ''}&playerId=${params.playerId}&playerName=${encodeURIComponent(params.playerName)}&mode=${params.mode}${slotParam}${payModeParam}${sessionParam}${durationParam}`;
   const cancelUrl = params.cancelUrl
     ?? `${origin}/open-game/${params.gameId ?? ''}`;
 
