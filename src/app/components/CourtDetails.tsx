@@ -317,7 +317,7 @@ const CourtDetails: React.FC = () => {
     fallbackPrice: number,
   ): SlotItem[] {
     const now = new Date();
-    const availableSlots = allSlots.filter(s => s.is_available && new Date(s.start_time) > now);
+    const futureSlots = allSlots.filter(s => new Date(s.start_time) > now);
 
     const bookedIntervals = allSlots
       .filter(s => !s.is_available)
@@ -330,7 +330,7 @@ const CourtDetails: React.FC = () => {
 
     const closeMins = schedule ? timeToMins(schedule.close_time) : 24 * 60;
 
-    return availableSlots
+    return futureSlots
       .map(slot => {
         const time = slot.start_time.substring(11, 16);
         const startMins = timeToMins(time);
