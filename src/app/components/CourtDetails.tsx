@@ -880,7 +880,6 @@ const CourtDetails: React.FC = () => {
                         <h3 className="font-bold text-gray-900">{c.name}</h3>
                         {c.sport_type && <span className="text-xs text-gray-500">{sportLabel(c.sport_type)}</span>}
                       </div>
-                      <span className="text-sm font-semibold text-violet-600">a partir de R$ {basePrice}/h</span>
                     </div>
                     <div className="p-4">
                       <div className="grid grid-cols-4 gap-2">
