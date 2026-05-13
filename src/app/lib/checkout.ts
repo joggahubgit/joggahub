@@ -18,6 +18,8 @@ interface CheckoutParams {
   vagaPrice: number;
   mode: 'organizer' | 'join_self' | 'join_other' | 'pay_reservation';
   slotId?: string;
+  /** Duration in minutes (90 or 120) — required for organizer flow price validation */
+  durationMins?: number;
   /** When true, Stripe authorizes but does not capture immediately (split join hold) */
   captureManual?: boolean;
   /** Passed through to PaymentSuccess so it can handle split vs full flows */

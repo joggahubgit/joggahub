@@ -97,6 +97,7 @@ export default function OpenGameReview() {
         vagaPrice: state.pricePerPlayer,
         mode: 'organizer',
         slotId: state.slotId,
+        durationMins,
         successUrl: `${origin}/payment-success?${successParams}`,
         cancelUrl: `${origin}/court-details/${state.courtId}`,
       });

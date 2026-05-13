@@ -38,9 +38,12 @@ serve(async (req) => {
       sport,
       date,
       time,
+      slotId,
+      courtId,
+      durationMins: reqDuration,
       successUrl,
       cancelUrl,
-      mode,           // 'join_self' | 'join_other'
+      mode,           // 'organizer' | 'join_self' | 'join_other' | 'pay_reservation'
       captureManual,  // when true: authorize hold, do not capture immediately
     } = await req.json();
 
@@ -54,15 +57,33 @@ serve(async (req) => {
     );
 
     // ── Fetch price from DB — never trust body for financial values ──
-    const { data: game, error: gameErr } = await supabase
-      .from('games')
-      .select('price_per_player')
-      .eq('id', gameId)
-      .single();
+    let vagaPrice: number;
 
-    if (gameErr || !game) throw new Error('Jogo não encontrado');
+    if (mode === 'organizer' && !gameId) {
+      // Game doesn't exist yet — price comes from slot/court
+      const durationMins = [90, 120].includes(Number(reqDuration)) ? Number(reqDuration) : null;
+      if (!durationMins) throw new Error('Duração inválida');
 
-    const vagaPrice = game.price_per_player as number;
+      const { data: slot } = await supabase
+        .from('slots')
+        .select('court_id, price_override')
+        .eq('id', slotId)
+        .single();
+      const eid = slot?.court_id ?? courtId;
+      const { data: court } = await supabase.from('courts').select('price_per_hour').eq('id', eid).single();
+      const pricePerHour = (slot?.price_override as number) ?? (court?.price_per_hour as number) ?? null;
+      if (!pricePerHour) throw new Error('Preço da quadra não encontrado');
+      const courtPrice = Math.round(pricePerHour * (durationMins / 60) * 100) / 100;
+      vagaPrice = Math.round(courtPrice / 10 * 100) / 100;
+    } else {
+      const { data: game, error: gameErr } = await supabase
+        .from('games')
+        .select('price_per_player')
+        .eq('id', gameId)
+        .single();
+      if (gameErr || !game) throw new Error('Jogo não encontrado');
+      vagaPrice = game.price_per_player as number;
+    }
     // Service fee: 8% + R$2,50 per transaction
     const serviceFee = Math.round((vagaPrice * 0.08 + 2.50) * 100) / 100;
 
