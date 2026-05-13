@@ -132,6 +132,7 @@ export default function PaymentSuccess() {
               slot_id: effectiveSlotId || null,
               booking_id: bookingId,
               scheduled_at: scheduledAt,
+              scheduled_end_at: (date && endTime) ? `${date}T${endTime}:00` : null,
               max_players: payMode === 'split' ? 18 : maxPlayers,
               current_players: 1,
               price_per_player: payMode === 'split' ? courtPrice / 10 : 0,

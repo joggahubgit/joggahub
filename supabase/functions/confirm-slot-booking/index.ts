@@ -83,7 +83,26 @@ serve(async (req) => {
         .single();
 
       if (!slot) throw new Error('Horário não encontrado.');
-      if (!slot.is_available) throw new Error('Este horário já foi reservado.');
+      if (!slot.is_available) {
+        // Slot already unavailable — may be a race with the Stripe webhook, which
+        // marks the slot before PaymentSuccess.tsx reaches here. Check if the webhook
+        // already created a booking for this user (idempotency).
+        const { data: myBooking } = await supabase
+          .from('bookings')
+          .select('id')
+          .eq('slot_id', effectiveSlotId)
+          .eq('created_by', userId)
+          .neq('status', 'cancelled')
+          .maybeSingle();
+
+        if (myBooking) {
+          return new Response(
+            JSON.stringify({ success: true, bookingId: myBooking.id, slotId: effectiveSlotId }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
+        throw new Error('Este horário já foi reservado.');
+      }
 
       // Block if slot is linked to an active game
       const { data: linkedGame } = await supabase

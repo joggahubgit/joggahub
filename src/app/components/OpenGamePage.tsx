@@ -206,7 +206,8 @@ export default function OpenGamePage() {
           .select('start_time, end_time')
           .eq('id', game.slot_id)
           .single();
-        if (slot?.end_time && !passed?.endTime) setEndTime(slot.end_time.substring(11, 16));
+        const endTimeVal = game.scheduled_end_at ?? slot?.end_time;
+        if (endTimeVal && !passed?.endTime) setEndTime(endTimeVal.substring(11, 16));
         if (slot?.start_time) {
           setGameStartTime(slot.start_time);
           const msUntilStart = new Date(slot.start_time).getTime() - Date.now();
