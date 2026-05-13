@@ -90,7 +90,11 @@ export default function PaymentSuccess() {
           }
 
           // 1. Confirm slot booking — edge function creates slot if dynamic (bypasses RLS)
-          const confirmBody: Record<string, string> = { userId, price };
+          const toMins = (hhmm: string) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
+          const sessionDuration = (endTime && time) ? toMins(endTime) - toMins(time) : 0;
+
+          const confirmBody: Record<string, unknown> = { userId, price };
+          if (sessionDuration > 0) confirmBody.durationMins = sessionDuration;
           if (slotId) {
             confirmBody.slotId = slotId;
             if (courtId) confirmBody.courtId = courtId;
@@ -116,17 +120,6 @@ export default function PaymentSuccess() {
           if (bookingData?.error) throw new Error(bookingData.error);
 
           const bookingId: string | null = bookingData?.bookingId ?? null;
-
-          // Block all consecutive 30-min slots in the session window
-          if (courtId && date && time && endTime) {
-            const sessionStart = `${date}T${time}:00`;
-            const sessionEnd = `${date}T${endTime}:00`;
-            await supabase.from('slots')
-              .update({ is_available: false })
-              .eq('court_id', courtId)
-              .gte('start_time', sessionStart)
-              .lt('start_time', sessionEnd);
-          }
 
           // 2. Compute scheduled_at from date + time (YYYY-MM-DD + HH:MM)
           let scheduledAt: string | null = null;

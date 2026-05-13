@@ -44,7 +44,7 @@ serve(async (req) => {
     // Fetch game — need slot_id and booking_id to handle private vs open games
     const { data: game } = await supabase
       .from('games')
-      .select('slot_id, booking_id')
+      .select('slot_id, booking_id, scheduled_end_at')
       .eq('id', gameId)
       .single();
 
@@ -56,7 +56,7 @@ serve(async (req) => {
     if (!slotId) {
       return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: corsHeaders });
     }
-    const { data: slotData } = await supabase.from('slots').select('court_id').eq('id', slotId).single();
+    const { data: slotData } = await supabase.from('slots').select('court_id, start_time').eq('id', slotId).single();
     const { data: courtData } = await supabase.from('courts').select('venue_id').eq('id', slotData?.court_id ?? '').single();
     const { data: venueData } = await supabase.from('venues').select('admin_id').eq('id', courtData?.venue_id ?? '').single();
     if (venueData?.admin_id !== callerId) {
@@ -155,9 +155,17 @@ serve(async (req) => {
         .eq('id', bookingId);
     }
 
-    // Free up the slot
+    // Free up the slot (and all consecutive slots blocked for this session)
     if (slotId) {
-      await supabase.from('slots').update({ is_available: true }).eq('id', slotId);
+      if (game?.scheduled_end_at && slotData?.start_time) {
+        await supabase.from('slots')
+          .update({ is_available: true })
+          .eq('court_id', slotData.court_id)
+          .gte('start_time', slotData.start_time.substring(0, 19))
+          .lt('start_time', game.scheduled_end_at.substring(0, 19));
+      } else {
+        await supabase.from('slots').update({ is_available: true }).eq('id', slotId);
+      }
     }
 
     // Notify open game players

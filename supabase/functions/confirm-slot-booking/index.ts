@@ -6,6 +6,20 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+async function blockConsecutiveSlots(supabase: any, slotId: string, durationMins: number) {
+  if (durationMins <= 30) return;
+  const { data: slot } = await supabase.from('slots').select('court_id, start_time').eq('id', slotId).single();
+  if (!slot?.start_time) return;
+  const [h, m] = slot.start_time.substring(11, 16).split(':').map(Number);
+  const endTotalMins = h * 60 + m + durationMins;
+  const sessionEnd = `${slot.start_time.substring(0, 10)}T${String(Math.floor(endTotalMins / 60)).padStart(2, '0')}:${String(endTotalMins % 60).padStart(2, '0')}:00`;
+  await supabase.from('slots')
+    .update({ is_available: false })
+    .eq('court_id', slot.court_id)
+    .gte('start_time', slot.start_time.substring(0, 19))
+    .lt('start_time', sessionEnd);
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -29,7 +43,7 @@ serve(async (req) => {
     // userId comes from the verified JWT — not from the request body
     const userId = user.id;
 
-    const { slotId, courtId, price, startTime, endTime } = await req.json();
+    const { slotId, courtId, price, startTime, endTime, durationMins } = await req.json();
     if (!slotId && !(courtId && startTime && endTime)) {
       throw new Error('Forneça slotId ou (courtId + startTime + endTime)');
     }
@@ -96,6 +110,10 @@ serve(async (req) => {
           .maybeSingle();
 
         if (myBooking) {
+          // Idempotent: also ensure consecutive slots are blocked (race with webhook)
+          if (durationMins && Number(durationMins) > 30) {
+            await blockConsecutiveSlots(supabase, effectiveSlotId, Number(durationMins));
+          }
           return new Response(
             JSON.stringify({ success: true, bookingId: myBooking.id, slotId: effectiveSlotId }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
@@ -165,8 +183,11 @@ serve(async (req) => {
       bookingId = newBooking?.id ?? null;
     }
 
-    // ── Mark slot unavailable ──
+    // ── Mark slot unavailable (+ all consecutive slots for the session duration) ──
     await supabase.from('slots').update({ is_available: false }).eq('id', effectiveSlotId);
+    if (durationMins && Number(durationMins) > 30) {
+      await blockConsecutiveSlots(supabase, effectiveSlotId, Number(durationMins));
+    }
 
     return new Response(
       JSON.stringify({ success: true, bookingId, slotId: effectiveSlotId }),
