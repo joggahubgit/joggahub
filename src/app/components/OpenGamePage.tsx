@@ -698,10 +698,12 @@ export default function OpenGamePage() {
               <p className="text-xs text-gray-400 mb-1">Nível</p>
               <p className="text-sm font-bold text-gray-900">Aberto</p>
             </div>
-            <div>
-              <p className="text-xs text-gray-400 mb-1">Valor</p>
-              <p className="text-sm font-bold text-gray-900">R$ {pricePerPlayer}</p>
-            </div>
+            {(!isPrivate || pricePerPlayer > 0) && (
+              <div>
+                <p className="text-xs text-gray-400 mb-1">Valor</p>
+                <p className="text-sm font-bold text-gray-900">R$ {pricePerPlayer}</p>
+              </div>
+            )}
           </div>
         </div>
 

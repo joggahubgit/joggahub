@@ -146,7 +146,7 @@ export default function MyBookings() {
   // ── Open games (organizer + player) ──────────────────────────────────────
 
   async function fetchGameItems(userId: string): Promise<Item[]> {
-    const gameFields = 'id, court_id, slot_id, scheduled_at, price_per_player, max_players, current_players, is_open, status, sport_type, booking_id, created_at';
+    const gameFields = 'id, court_id, slot_id, scheduled_at, price_per_player, court_price, max_players, current_players, is_open, status, sport_type, booking_id, created_at';
 
     const [{ data: asOrganizer }, { data: asPlayerRows }] = await Promise.all([
       supabase.from('games').select(gameFields).eq('organizer_id', userId),
@@ -223,7 +223,9 @@ export default function MyBookings() {
         startTime: g.scheduled_at,
         createdAt: g.created_at ?? g.scheduled_at,
         endTime: null,
-        price: g.price_per_player ?? 0,
+        price: (g._role === 'organizer' && !g.is_open && !(g.price_per_player > 0))
+          ? (g.court_price ?? 0)
+          : (g.price_per_player ?? 0),
         paymentStatus: isPaid ? 'paid' : 'pending',
         status: gameStatus,
         currentPlayers: g.current_players,

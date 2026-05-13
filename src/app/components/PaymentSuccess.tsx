@@ -119,7 +119,7 @@ export default function PaymentSuccess() {
           // 2. Compute scheduled_at from date + time (YYYY-MM-DD + HH:MM)
           let scheduledAt: string | null = null;
           if (date && time) {
-            scheduledAt = new Date(`${date}T${time}:00`).toISOString();
+            scheduledAt = `${date}T${time}:00`;
           }
 
           // 3. Create private game record
