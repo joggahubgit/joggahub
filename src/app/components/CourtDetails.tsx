@@ -316,7 +316,8 @@ const CourtDetails: React.FC = () => {
     gameBySlotId: Record<string, string>,
     fallbackPrice: number,
   ): SlotItem[] {
-    const availableSlots = allSlots.filter(s => s.is_available);
+    const now = new Date();
+    const availableSlots = allSlots.filter(s => s.is_available && new Date(s.start_time) > now);
 
     const bookedIntervals = allSlots
       .filter(s => !s.is_available)
