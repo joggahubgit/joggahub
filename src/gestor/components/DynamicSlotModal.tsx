@@ -164,19 +164,6 @@ export function DynamicSlotModal({ courtId, courtName, date, hour, pricePerHour,
           {view === 'choose' && (
             <div className="space-y-3">
               <button
-                onClick={() => { setView('reserve'); setError(''); }}
-                className="w-full flex items-center gap-4 p-4 rounded-2xl bg-purple-600 text-white hover:bg-purple-700 transition-colors text-left"
-              >
-                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <CalendarCheck className="w-5 h-5" />
-                </div>
-                <div>
-                  <p className="font-bold">Reservar manualmente</p>
-                  <p className="text-sm opacity-80">Para um jogador cadastrado</p>
-                </div>
-              </button>
-
-              <button
                 onClick={handleBlock}
                 disabled={busy}
                 className="w-full flex items-center gap-4 p-4 rounded-2xl bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors text-left disabled:opacity-60"
