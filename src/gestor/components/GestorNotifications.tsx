@@ -58,15 +58,23 @@ export function GestorNotifications({ venueId }: Props) {
   useEffect(() => {
     if (!venueId) return;
     loadRef.current();
-    const channel = supabase
-      .channel(`gestor-notif-${venueId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' },     () => loadRef.current(true))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'slots' },        () => loadRef.current(true))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'games' },        () => loadRef.current(true))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_players' }, () => loadRef.current(true))
-      .subscribe();
+
+    let channel: ReturnType<typeof supabase.channel> | null = null;
     const poll = setInterval(() => loadRef.current(true), 15_000);
-    return () => { supabase.removeChannel(channel); clearInterval(poll); };
+
+    // Ensure JWT is on the realtime connection before subscribing so RLS has auth.uid()
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.access_token) supabase.realtime.setAuth(session.access_token);
+      channel = supabase
+        .channel(`gestor-notif-${venueId}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' },     () => loadRef.current(true))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'slots' },        () => loadRef.current(true))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'games' },        () => loadRef.current(true))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'game_players' }, () => loadRef.current(true))
+        .subscribe();
+    });
+
+    return () => { if (channel) supabase.removeChannel(channel); clearInterval(poll); };
   }, [venueId]);
 
   // Close panel on outside click

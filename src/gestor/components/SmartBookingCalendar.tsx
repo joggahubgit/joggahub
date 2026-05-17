@@ -230,16 +230,23 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
 
   useEffect(() => {
     if (!venueId) return;
-    const channel = supabase
-      .channel(`gestor-slots-${venueId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'slots' }, () => fetchAllRef.current(true))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => fetchAllRef.current(true))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'games' }, () => fetchAllRef.current(true))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'court_schedules' }, () => fetchAllRef.current(true))
-      .subscribe();
-    // Silent polling fallback: handles cases where realtime JWT isn't set at subscription time
+
+    let channel: ReturnType<typeof supabase.channel> | null = null;
     const poll = setInterval(() => fetchAllRef.current(true), 15_000);
-    return () => { supabase.removeChannel(channel); clearInterval(poll); };
+
+    // Ensure JWT is on the realtime connection before subscribing so RLS has auth.uid()
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.access_token) supabase.realtime.setAuth(session.access_token);
+      channel = supabase
+        .channel(`gestor-slots-${venueId}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'slots' },          () => fetchAllRef.current(true))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' },       () => fetchAllRef.current(true))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'games' },          () => fetchAllRef.current(true))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'court_schedules' },() => fetchAllRef.current(true))
+        .subscribe();
+    });
+
+    return () => { if (channel) supabase.removeChannel(channel); clearInterval(poll); };
   }, [venueId]);
 
   useEffect(() => {
