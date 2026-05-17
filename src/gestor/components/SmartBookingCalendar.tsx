@@ -76,6 +76,12 @@ function sameDay(a: Date, b: Date) {
   return isoDate(a) === isoDate(b);
 }
 
+function minutesToHour(hour: string, minutes: number): string {
+  const [h, m] = hour.split(':').map(Number);
+  const total = h * 60 + m + minutes;
+  return `${String(Math.floor(total / 60) % 24).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
 type ViewMode = 'week' | 'day';
 
 interface CourtScheduleEntry { open_time: string; close_time: string; price: number; }
@@ -538,7 +544,27 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
                 {/* DAY COLUMNS */}
                 <div className="flex-1 overflow-x-auto">
                   <div className="inline-flex min-w-full">
-                    {displayDays.map((day, dayIdx) => (
+                    {displayDays.map((day, dayIdx) => {
+                      // Precompute which blocked slots are consecutive extensions of a booking
+                      const bookedSessionSpans: Record<string, number> = {};
+                      const hoursInSession = new Set<string>();
+                      const sessionOwnerFor: Record<string, string> = {};
+                      for (let hi = 0; hi < HOURS.length; hi++) {
+                        const h = HOURS[hi];
+                        if (hoursInSession.has(h)) continue;
+                        const s = getSlot(court.id, day, h);
+                        if (getSlotStatus(s) === 'booked') {
+                          let span = 1;
+                          for (let ji = hi + 1; ji < HOURS.length; ji++) {
+                            const ns = getSlot(court.id, day, HOURS[ji]);
+                            if (getSlotStatus(ns) === 'blocked' && !ns?.booking) {
+                              span++; hoursInSession.add(HOURS[ji]); sessionOwnerFor[HOURS[ji]] = h;
+                            } else break;
+                          }
+                          bookedSessionSpans[h] = span;
+                        }
+                      }
+                      return (
                       <div key={dayIdx} className={`flex-1 min-w-[140px] border-r border-gray-200 last:border-0 ${sameDay(day, today) ? 'bg-blue-50/30' : ''}`}>
                         <div className={`h-12 border-b-2 border-gray-200 flex items-center justify-center ${sameDay(day, today) ? 'bg-blue-50' : 'bg-gray-50'}`}>
                           <div className="text-center">
@@ -559,6 +585,19 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
                           // empty cells within schedule hours are also interactive
                           const scheduled = status === 'available' || (status === 'empty' && isWithinSchedule(court.id, day, hour));
                           const borderClass = 'border-b border-gray-100';
+
+                          // Blocked slot that is a consecutive extension of a booking — render as purple
+                          if (hoursInSession.has(hour)) {
+                            const ownerSlot = getSlot(court.id, day, sessionOwnerFor[hour]);
+                            const isPaid = ownerSlot?.booking?.payment_status === 'paid';
+                            return (
+                              <button
+                                key={hour}
+                                onClick={() => { if (ownerSlot?.booking) setSelectedBookingId(ownerSlot.booking.id); }}
+                                className={`w-full h-10 ${borderClass} ${isPaid ? 'bg-purple-600 hover:bg-purple-700' : 'bg-orange-500 hover:bg-orange-600'} border-l-[3px] ${isPaid ? 'border-l-purple-800' : 'border-l-orange-700'}`}
+                              />
+                            );
+                          }
 
                           if (!scheduled && !shouldShow(slot)) return (
                             <div key={hour} className={`h-10 ${borderClass} bg-transparent`} />
@@ -624,7 +663,7 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
                               {status === 'booked' && slot?.booking && (
                                 <div className="px-2 pt-1.5 h-full flex flex-col justify-start items-start overflow-hidden gap-0.5">
                                   <div className="text-[9px] opacity-75 leading-none tabular-nums">
-                                    {slot.start_time.substring(11,16)} – {slot.end_time.substring(11,16)}
+                                    {hour} – {minutesToHour(hour, (bookedSessionSpans[hour] ?? 1) * 30)}
                                   </div>
                                   <div className="font-bold truncate w-full text-left text-[11px] leading-tight">
                                     {slot.booking.profiles?.name?.split(' ')[0] ?? 'Jogador'}
@@ -663,7 +702,8 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
                           );
                         })}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </div>}
