@@ -124,9 +124,9 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
     return { fromDate: isoDate(weekStart), toDate: isoDate(addDays(weekStart, 6)) };
   }
 
-  const fetchAll = useCallback(async () => {
+  const fetchAll = useCallback(async (silent = false) => {
     if (!venueId) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const { fromDate, toDate } = getFetchRange();
 
@@ -214,13 +214,13 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
     } catch (e) {
       console.error('[Calendar] fetchAll error', e);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [venueId, viewMode, focusedDate, weekStart]);
 
   // Always keep a current reference to fetchAll so callbacks (realtime, timers)
   // never use a stale closure.
-  const fetchAllRef = useRef(fetchAll);
+  const fetchAllRef = useRef<(silent?: boolean) => Promise<void>>(fetchAll);
   fetchAllRef.current = fetchAll;
 
   useEffect(() => {
@@ -232,12 +232,14 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
     if (!venueId) return;
     const channel = supabase
       .channel(`gestor-slots-${venueId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'slots' }, () => fetchAllRef.current())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => fetchAllRef.current())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'games' }, () => fetchAllRef.current())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'court_schedules' }, () => fetchAllRef.current())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'slots' }, () => fetchAllRef.current(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => fetchAllRef.current(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'games' }, () => fetchAllRef.current(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'court_schedules' }, () => fetchAllRef.current(true))
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    // Silent polling fallback: handles cases where realtime JWT isn't set at subscription time
+    const poll = setInterval(() => fetchAllRef.current(true), 15_000);
+    return () => { supabase.removeChannel(channel); clearInterval(poll); };
   }, [venueId]);
 
   useEffect(() => {
