@@ -98,6 +98,7 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
   const [showRemoveSlots, setShowRemoveSlots] = useState(false);
   const [selectedDynamic, setSelectedDynamic] = useState<{
     courtId: string; courtName: string; date: Date; hour: string; pricePerHour: number;
+    slotTotalPrice?: number;
     existingSlotId?: string; existingEndHour?: string;
   } | null>(null);
   const [collapsedCourts, setCollapsedCourts] = useState<Set<string>>(new Set());
@@ -558,17 +559,28 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
                             return (
                               <button
                                 key={hour}
-                                onClick={() => setSelectedDynamic({
-                                  courtId: court.id,
-                                  courtName: court.name,
-                                  date: day,
-                                  hour,
-                                  pricePerHour: slot?.price_override ?? sched?.price ?? 0,
-                                  ...(slot ? {
-                                    existingSlotId: slot.id,
-                                    existingEndHour: slot.end_time?.substring(11, 16),
-                                  } : {}),
-                                })}
+                                onClick={() => {
+                                  const slotEndHour = slot?.end_time?.substring(11, 16);
+                                  const slotDurationMin = slot && slotEndHour
+                                    ? (() => {
+                                        const [eh, em] = slotEndHour.split(':').map(Number);
+                                        const [sh, sm] = hour.split(':').map(Number);
+                                        return (eh * 60 + em) - (sh * 60 + sm);
+                                      })()
+                                    : 0;
+                                  // CreateAvailability slots: price_override is a per-session total (duration > 30 min)
+                                  // CreateSchedule slots: price_override is per-hour (duration = 30 min)
+                                  const isSessionSlot = slot?.price_override != null && slotDurationMin > 30;
+                                  setSelectedDynamic({
+                                    courtId: court.id,
+                                    courtName: court.name,
+                                    date: day,
+                                    hour,
+                                    pricePerHour: isSessionSlot ? 0 : (slot?.price_override ?? sched?.price ?? 0),
+                                    slotTotalPrice: isSessionSlot ? slot!.price_override! : undefined,
+                                    ...(slot ? { existingSlotId: slot.id, existingEndHour: slotEndHour } : {}),
+                                  });
+                                }}
                                 className={`w-full h-10 ${borderClass} bg-green-50/60 border-l-[2px] border-l-green-200 flex items-center hover:bg-green-100/70 transition-colors group`}
                               >
                                 <span className="text-[9px] text-green-400 ml-2 tabular-nums leading-none group-hover:text-green-600">{hour}</span>
@@ -700,6 +712,7 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
           date={selectedDynamic.date}
           hour={selectedDynamic.hour}
           pricePerHour={selectedDynamic.pricePerHour}
+          slotTotalPrice={selectedDynamic.slotTotalPrice}
           existingSlotId={selectedDynamic.existingSlotId}
           existingEndHour={selectedDynamic.existingEndHour}
           onClose={() => setSelectedDynamic(null)}

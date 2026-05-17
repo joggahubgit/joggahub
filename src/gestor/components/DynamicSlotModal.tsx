@@ -13,6 +13,7 @@ interface Props {
   date: Date;
   hour: string;           // "09:00"
   pricePerHour: number;
+  slotTotalPrice?: number; // fixed total price for the slot (CreateAvailability); overrides per-hour calc
   existingSlotId?: string; // set when slot record already exists (e.g. after cancelled booking)
   existingEndHour?: string; // end time of the existing slot, e.g. "23:30"
   onClose: () => void;
@@ -35,7 +36,7 @@ function buildISO(date: Date, time: string): string {
   return `${isoDate(date)}T${time}:00`;
 }
 
-export function DynamicSlotModal({ courtId, courtName, date, hour, pricePerHour, existingSlotId, existingEndHour, onClose, onRefresh }: Props) {
+export function DynamicSlotModal({ courtId, courtName, date, hour, pricePerHour, slotTotalPrice, existingSlotId, existingEndHour, onClose, onRefresh }: Props) {
   const [view, setView] = useState<View>('choose');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -54,7 +55,9 @@ export function DynamicSlotModal({ courtId, courtName, date, hour, pricePerHour,
   const durationMinutes = existingSlotId && existingEndHour
     ? (() => { const [h, m] = existingEndHour.split(':').map(Number); const [sh, sm] = hour.split(':').map(Number); return (h * 60 + m) - (sh * 60 + sm); })()
     : duration;
-  const autoPrice = (pricePerHour * (durationMinutes / 60)).toFixed(0);
+  const autoPrice = slotTotalPrice !== undefined
+    ? slotTotalPrice.toFixed(0)
+    : (pricePerHour * (durationMinutes / 60)).toFixed(0);
 
   useEffect(() => {
     if (search.length < 2) { setSearchResults([]); return; }
