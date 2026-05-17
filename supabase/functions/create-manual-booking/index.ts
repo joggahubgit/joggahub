@@ -121,6 +121,7 @@ serve(async (req) => {
           max_players: 10,
           current_players: 1,
           price_per_player: price ?? 0,
+          court_price: price ?? 0,
           sport_type: court?.sport_type ?? 'football',
           xp_distributed: false,
         })

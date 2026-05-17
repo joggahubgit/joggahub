@@ -13,6 +13,7 @@ interface Booking {
   slot_id: string;
   user_id: string;
   total_price: number;
+  court_price: number | null;
   payment_status: string;
   start_time?: string;
   court_name?: string;
@@ -70,12 +71,26 @@ export function SimpleDashboard({ venueId, onCreateAvailability, onNavigate }: P
       const profileMap: Record<string, { name: string; phone: string }> = {};
       (profiles ?? []).forEach(p => { profileMap[p.id] = p; });
 
-      // 5. Combine
+      // 5. Fetch linked game court_price for each booking
+      const bookingIds = bookingRows.map(b => b.id);
+      const courtPriceByBooking: Record<string, number | null> = {};
+      if (bookingIds.length) {
+        const { data: linkedGames } = await supabase
+          .from('games')
+          .select('booking_id, court_price')
+          .in('booking_id', bookingIds);
+        (linkedGames ?? []).forEach(g => {
+          if (g.booking_id) courtPriceByBooking[g.booking_id] = g.court_price ?? null;
+        });
+      }
+
+      // 6. Combine
       const combined: Booking[] = bookingRows.map(b => ({
         id: b.id,
         slot_id: b.slot_id,
         user_id: b.created_by,
         total_price: b.total_price,
+        court_price: courtPriceByBooking[b.id] ?? null,
         payment_status: b.payment_status,
         start_time: slotMap[b.slot_id]?.start_time,
         court_name: courtMap[slotMap[b.slot_id]?.court_id],
@@ -93,9 +108,11 @@ export function SimpleDashboard({ venueId, onCreateAvailability, onNavigate }: P
     fetchTodayBookings();
   }
 
+  const netCourtPrice = (cp: number | null, total: number) =>
+    cp != null ? cp : Math.round((total - 2.50) / 1.08 * 100) / 100;
   const todayRevenue = bookings
     .filter(b => b.payment_status === 'paid')
-    .reduce((sum, b) => sum + (b.total_price ?? 0), 0);
+    .reduce((sum, b) => sum + netCourtPrice(b.court_price, b.total_price ?? 0), 0);
 
   const pendingCount = bookings.filter(b => b.payment_status === 'pending').length;
   const paidCount = bookings.filter(b => b.payment_status === 'paid').length;

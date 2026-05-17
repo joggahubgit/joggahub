@@ -25,6 +25,7 @@ interface Slot {
     id: string;
     payment_status: string;
     total_price: number;
+    court_price: number | null;
     status: string;
     profiles: { name: string; phone: string } | null;
   } | null;
@@ -177,8 +178,25 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
           .from('profiles').select('id, name, phone').in('id', userIds);
         (profiles ?? []).forEach(p => { profileMap[p.id] = p; });
       }
+
+      const bookingIds = (bookingRows ?? []).map(b => b.id);
+      const courtPriceByBooking: Record<string, number | null> = {};
+      if (bookingIds.length) {
+        const { data: linkedGames } = await supabase
+          .from('games')
+          .select('booking_id, court_price')
+          .in('booking_id', bookingIds);
+        (linkedGames ?? []).forEach(g => {
+          if (g.booking_id) courtPriceByBooking[g.booking_id] = g.court_price ?? null;
+        });
+      }
+
       (bookingRows ?? []).forEach(b => {
-        bookingBySlot[b.slot_id] = { ...b, profiles: profileMap[b.created_by] ?? null };
+        bookingBySlot[b.slot_id] = {
+          ...b,
+          profiles: profileMap[b.created_by] ?? null,
+          court_price: courtPriceByBooking[b.id] ?? null,
+        };
       });
 
       const { data: gameRows } = await supabase
@@ -287,9 +305,11 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
   const statsSlots = selectedCourtId === 'all' ? slots : slots.filter(s => s.court_id === selectedCourtId);
   const bookedSlots = statsSlots.filter(s => s.booking).length;
   const pendingSlots = statsSlots.filter(s => s.booking?.payment_status === 'pending').length;
+  const netCourtPrice = (cp: number | null | undefined, total: number | undefined) =>
+    cp != null ? cp : Math.round(((total ?? 0) - 2.50) / 1.08 * 100) / 100;
   const paidRevenue = statsSlots
     .filter(s => s.booking?.payment_status === 'paid')
-    .reduce((sum, s) => sum + (s.booking?.total_price ?? 0), 0);
+    .reduce((sum, s) => sum + netCourtPrice(s.booking?.court_price, s.booking?.total_price), 0);
   const hasSchedule = Object.keys(courtSchedules).length > 0 || slots.length > 0;
 
   const isShowingToday = viewMode === 'day' && sameDay(focusedDate, today);
@@ -590,7 +610,7 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
                                     {slot.booking.payment_status === 'paid'
                                       ? <CheckCircle className="w-2.5 h-2.5 flex-shrink-0" />
                                       : <AlertCircle className="w-2.5 h-2.5 flex-shrink-0" />}
-                                    R$ {slot.booking.total_price}
+                                    R$ {netCourtPrice(slot.booking.court_price, slot.booking.total_price).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </div>
                                 </div>
                               )}

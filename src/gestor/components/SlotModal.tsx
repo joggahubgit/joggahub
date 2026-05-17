@@ -38,6 +38,9 @@ interface Props {
 
 type View = 'main' | 'reserve' | 'cancel' | 'delete_slot';
 
+const netCourtPrice = (cp: number | null | undefined, total: number) =>
+  cp != null ? cp : Math.round((total - 2.50) / 1.08 * 100) / 100;
+
 function formatDateTime(iso: string) {
   // Parse date part directly to avoid timezone shifts on date display
   const [datePart] = iso.split('T');
@@ -104,6 +107,7 @@ export function SlotModal({ slot, courtName, onClose, onRefresh }: Props) {
   const [linkedGame, setLinkedGame] = useState<{
     id: string; status: string; current_players: number;
     max_players: number; price_per_player: number; organizer_id: string;
+    court_price: number | null;
   } | null>(null);
   const [gamePlayers, setGamePlayers] = useState<{ player_id: string; player_name: string; paid: boolean }[]>([]);
   const [gameLoading, setGameLoading] = useState(false);
@@ -114,7 +118,7 @@ export function SlotModal({ slot, courtName, onClose, onRefresh }: Props) {
   const [searchResults, setSearchResults] = useState<Profile[]>([]);
   const [searching, setSearching] = useState(false);
   const [selectedUser, setSelectedUser] = useState<Profile | null>(null);
-  const [reservePrice, setReservePrice] = useState(String(slot.price_override ?? ''));
+  const reservePrice = String(slot.price_override ?? 0);
   const paymentStatus = 'pending' as const;
   // Open game fields
   const maxPlayers = 18;
@@ -131,7 +135,7 @@ export function SlotModal({ slot, courtName, onClose, onRefresh }: Props) {
     setGameLoading(true);
     supabase
       .from('games')
-      .select('id, status, current_players, max_players, price_per_player, organizer_id')
+      .select('id, status, current_players, max_players, price_per_player, organizer_id, court_price')
       .eq('booking_id', slot.booking.id)
       .maybeSingle()
       .then(async ({ data: g }) => {
@@ -346,7 +350,7 @@ export function SlotModal({ slot, courtName, onClose, onRefresh }: Props) {
                       )}
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <p className="text-lg font-bold text-gray-900">R$ {slot.booking.total_price}</p>
+                      <p className="text-lg font-bold text-gray-900">R$ {netCourtPrice(linkedGame?.court_price, slot.booking.total_price).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                       <div className={`flex items-center gap-1 text-xs font-semibold mt-0.5 justify-end ${isPaid ? 'text-green-600' : 'text-orange-500'}`}>
                         {isPaid
                           ? <><CheckCircle className="w-3.5 h-3.5" /> Pago</>
@@ -509,7 +513,7 @@ export function SlotModal({ slot, courtName, onClose, onRefresh }: Props) {
                     <div className="border-t border-gray-200 pt-3 space-y-1.5 text-sm">
                       <div className="flex justify-between">
                         <span className="text-gray-500">Valor</span>
-                        <span className="font-bold text-gray-900">R$ {slot.booking.total_price}</span>
+                        <span className="font-bold text-gray-900">R$ {netCourtPrice(linkedGame?.court_price, slot.booking.total_price).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-500">Pagamento</span>
@@ -701,15 +705,6 @@ export function SlotModal({ slot, courtName, onClose, onRefresh }: Props) {
                 </div>
               )}
 
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">Valor cobrado (R$)</label>
-                <div className="relative">
-                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input type="number" min="0" step="0.01" placeholder="0,00" value={reservePrice}
-                    onChange={e => setReservePrice(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2.5 border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:border-purple-400" />
-                </div>
-              </div>
 
 
 </>

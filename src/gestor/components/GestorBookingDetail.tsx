@@ -15,6 +15,7 @@ interface Detail {
   id: string;
   slot_id: string;
   total_price: number;
+  court_price: number | null;
   payment_status: string;
   status: string;
   created_at: string;
@@ -29,6 +30,9 @@ interface Detail {
 function fmt(iso: string, opts: Intl.DateTimeFormatOptions) {
   return new Date(iso).toLocaleDateString('pt-BR', opts);
 }
+
+const netCourtPrice = (cp: number | null | undefined, total: number) =>
+  cp != null ? cp : Math.round((total - 2.50) / 1.08 * 100) / 100;
 
 export function GestorBookingDetail({ bookingId, onClose, onChanged }: Props) {
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -92,10 +96,18 @@ export function GestorBookingDetail({ bookingId, onClose, onChanged }: Props) {
       player_phone = profile?.phone ?? '—';
     }
 
+    const { data: linkedGame } = await supabase
+      .from('games')
+      .select('court_price')
+      .eq('booking_id', b.id)
+      .maybeSingle();
+    const court_price = linkedGame?.court_price ?? null;
+
     setDetail({
       id: b.id,
       slot_id: b.slot_id,
       total_price: b.total_price,
+      court_price,
       payment_status: b.payment_status,
       status: b.status,
       created_at: b.created_at,
@@ -176,7 +188,7 @@ export function GestorBookingDetail({ bookingId, onClose, onChanged }: Props) {
                   </span>
                 )}
                 <span className="bg-white/20 rounded-lg px-3 py-1 text-sm font-semibold">
-                  R$ {(detail.total_price ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  R$ {(netCourtPrice(detail.court_price, detail.total_price) ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
             </div>
@@ -235,7 +247,7 @@ export function GestorBookingDetail({ bookingId, onClose, onChanged }: Props) {
                 <InfoRow
                   icon={DollarSign}
                   label="Valor"
-                  value={`R$ ${(detail.total_price ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  value={`R$ ${(netCourtPrice(detail.court_price, detail.total_price) ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 />
               </div>
 

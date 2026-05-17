@@ -44,16 +44,35 @@ export function SimpleRevenue({ venueId }: SimpleRevenueProps) {
 
     const { data: bookingRows } = await supabase
       .from('bookings')
-      .select('total_price, payment_status, status')
+      .select('id, total_price, payment_status, status')
       .in('slot_id', allSlots.map(s => s.id));
 
     const bks = bookingRows ?? [];
+
+    const bookingIds = bks.map(b => b.id);
+    const courtPriceByBooking: Record<string, number | null> = {};
+    if (bookingIds.length) {
+      const { data: linkedGames } = await supabase
+        .from('games')
+        .select('booking_id, court_price')
+        .in('booking_id', bookingIds);
+      (linkedGames ?? []).forEach(g => {
+        if (g.booking_id) courtPriceByBooking[g.booking_id] = g.court_price ?? null;
+      });
+    }
+
+    const netAmount = (b: { id: string; total_price: number }) => {
+      const cp = courtPriceByBooking[b.id];
+      if (cp != null) return cp;
+      return Math.round(((b.total_price ?? 0) - 2.50) / 1.08 * 100) / 100;
+    };
+
     const confirmed = bks.filter(b => b.payment_status === 'paid' && b.status !== 'cancelled');
     const pending = bks.filter(b => b.payment_status === 'pending' && b.status !== 'cancelled');
     const cancelled = bks.filter(b => b.status === 'cancelled');
 
-    setConfirmedRevenue(confirmed.reduce((sum, b) => sum + (b.total_price || 0), 0));
-    setPendingRevenue(pending.reduce((sum, b) => sum + (b.total_price || 0), 0));
+    setConfirmedRevenue(confirmed.reduce((sum, b) => sum + netAmount(b), 0));
+    setPendingRevenue(pending.reduce((sum, b) => sum + netAmount(b), 0));
     setConfirmedCount(confirmed.length);
     setPendingCount(pending.length);
     setCancelledCount(cancelled.length);
