@@ -568,17 +568,18 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
                                         return (eh * 60 + em) - (sh * 60 + sm);
                                       })()
                                     : 0;
-                                  // CreateAvailability slots: price_override is a per-session total (duration > 30 min)
-                                  // CreateSchedule slots: price_override is per-hour (duration = 30 min)
-                                  const isSessionSlot = slot?.price_override != null && slotDurationMin > 30;
+                                  // CreateAvailability slots (duration > 30 min): price_override is the per-session total
+                                  // CreateSchedule slots (duration = 30 min): price_override is per-hour; don't lock duration
+                                  const isSessionSlot = slotDurationMin > 30;
                                   setSelectedDynamic({
                                     courtId: court.id,
                                     courtName: court.name,
                                     date: day,
                                     hour,
                                     pricePerHour: isSessionSlot ? 0 : (slot?.price_override ?? sched?.price ?? 0),
-                                    slotTotalPrice: isSessionSlot ? slot!.price_override! : undefined,
-                                    ...(slot ? { existingSlotId: slot.id, existingEndHour: slotEndHour } : {}),
+                                    slotTotalPrice: isSessionSlot && slot?.price_override != null ? slot.price_override : undefined,
+                                    // Only lock to existing slot when it has a fixed session duration (> 30 min)
+                                    ...(isSessionSlot && slot ? { existingSlotId: slot.id, existingEndHour: slotEndHour } : {}),
                                   });
                                 }}
                                 className={`w-full h-10 ${borderClass} bg-green-50/60 border-l-[2px] border-l-green-200 flex items-center hover:bg-green-100/70 transition-colors group`}
