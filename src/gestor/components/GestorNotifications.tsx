@@ -51,7 +51,7 @@ export function GestorNotifications({ venueId }: Props) {
     return stored ? new Date(stored) : new Date(0);
   });
   const panelRef = useRef<HTMLDivElement>(null);
-  const loadRef  = useRef(load);
+  const loadRef = useRef<(silent?: boolean) => Promise<void>>(load);
   loadRef.current = load;
 
   // Initial load + realtime
@@ -60,10 +60,13 @@ export function GestorNotifications({ venueId }: Props) {
     loadRef.current();
     const channel = supabase
       .channel(`gestor-notif-${venueId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => loadRef.current())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_players' }, () => loadRef.current())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' },     () => loadRef.current(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'slots' },        () => loadRef.current(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'games' },        () => loadRef.current(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_players' }, () => loadRef.current(true))
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    const poll = setInterval(() => loadRef.current(true), 15_000);
+    return () => { supabase.removeChannel(channel); clearInterval(poll); };
   }, [venueId]);
 
   // Close panel on outside click
@@ -76,8 +79,8 @@ export function GestorNotifications({ venueId }: Props) {
     return () => document.removeEventListener('mousedown', onDown);
   }, [open]);
 
-  async function load() {
-    setLoading(true);
+  async function load(silent = false) {
+    if (!silent) setLoading(true);
     try {
       const since = new Date();
       since.setDate(since.getDate() - 14);
@@ -184,7 +187,7 @@ export function GestorNotifications({ venueId }: Props) {
         .slice(0, 50);
       setItems(all);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
