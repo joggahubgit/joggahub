@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   X, ChevronLeft, CalendarCheck, Ban, Search, Loader2,
-  DollarSign, CheckCircle,
+  CheckCircle,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
 
@@ -47,7 +47,6 @@ export function DynamicSlotModal({ courtId, courtName, date, hour, pricePerHour,
   const [searchResults, setSearchResults] = useState<Profile[]>([]);
   const [searching, setSearching] = useState(false);
   const [selectedUser, setSelectedUser] = useState<Profile | null>(null);
-  const [price, setPrice] = useState('');
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // When an existing slot is reused, end time is fixed; otherwise compute from duration
@@ -56,11 +55,6 @@ export function DynamicSlotModal({ courtId, courtName, date, hour, pricePerHour,
     ? (() => { const [h, m] = existingEndHour.split(':').map(Number); const [sh, sm] = hour.split(':').map(Number); return (h * 60 + m) - (sh * 60 + sm); })()
     : duration;
   const autoPrice = (pricePerHour * (durationMinutes / 60)).toFixed(0);
-
-  // Auto-fill price when duration changes
-  useEffect(() => {
-    setPrice(autoPrice);
-  }, [duration, pricePerHour]);
 
   useEffect(() => {
     if (search.length < 2) { setSearchResults([]); return; }
@@ -110,8 +104,8 @@ export function DynamicSlotModal({ courtId, courtName, date, hour, pricePerHour,
     const endTime = buildISO(date, endHour);
 
     const body = existingSlotId
-      ? { type: 'private', slotId: existingSlotId, userId: selectedUser.id, price: parseFloat(price) || 0 }
-      : { type: 'private', courtId, startTime, endTime, userId: selectedUser.id, price: parseFloat(price) || 0 };
+      ? { type: 'private', slotId: existingSlotId, userId: selectedUser.id, price: parseFloat(autoPrice) || 0 }
+      : { type: 'private', courtId, startTime, endTime, userId: selectedUser.id, price: parseFloat(autoPrice) || 0 };
 
     const { error: fnErr } = await supabase.functions.invoke('create-manual-booking', { body });
     setBusy(false);
@@ -281,21 +275,12 @@ export function DynamicSlotModal({ courtId, courtName, date, hour, pricePerHour,
                 </div>
               )}
 
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">
-                  Valor cobrado (R$)
-                  <span className="text-xs font-normal text-gray-400 ml-2">Sugerido: R$ {autoPrice}</span>
-                </label>
-                <div className="relative">
-                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input
-                    type="number" min="0" step="5"
-                    value={price}
-                    onChange={e => setPrice(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2.5 border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:border-purple-400"
-                  />
+              {autoPrice !== '0' && (
+                <div className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
+                  <span className="text-sm text-gray-500">Valor da reserva</span>
+                  <span className="font-bold text-gray-900">R$ {autoPrice}</span>
                 </div>
-              </div>
+              )}
 
               {error && <p className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2 border border-red-100">{error}</p>}
 
