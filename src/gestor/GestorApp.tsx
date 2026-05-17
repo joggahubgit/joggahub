@@ -108,31 +108,31 @@ export default function GestorApp() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-purple-700 sticky top-0 z-40 shadow-md">
+      <header className="bg-white border-b-2 border-gray-100 sticky top-0 z-40 shadow-sm">
         <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4">
           <div className="flex items-center gap-2 md:gap-3">
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2 hover:bg-purple-600 rounded-lg transition-colors"
+              className="lg:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors"
             >
-              {mobileMenuOpen ? <X className="w-6 h-6 text-white" /> : <Menu className="w-6 h-6 text-white" />}
+              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
             <div className="flex items-center gap-2">
               <img src="/logo.png" alt="JoggaHub" className="w-8 h-8 md:w-10 md:h-10 rounded-xl object-contain" />
               <div>
-                <h1 className="font-bold text-lg md:text-xl text-white">JoggaHub</h1>
-                <p className="text-xs text-purple-200 hidden md:block">Gestor de Quadras</p>
+                <h1 className="font-bold text-lg md:text-xl text-gray-900">JoggaHub</h1>
+                <p className="text-xs text-gray-600 hidden md:block">Gestor de Quadras</p>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2 md:gap-4">
             <div className="hidden md:flex flex-col items-end">
-              <span className="text-sm font-medium text-white">{venue?.name ?? 'Minha Quadra'}</span>
-              <span className="text-xs text-purple-200">Administrador</span>
+              <span className="text-sm font-medium text-gray-900">{venue?.name ?? 'Minha Quadra'}</span>
+              <span className="text-xs text-gray-600">Administrador</span>
             </div>
             {venue?.id && <GestorNotifications venueId={venue.id} />}
-            <div className="w-9 h-9 md:w-10 md:h-10 bg-white/20 rounded-full flex items-center justify-center text-white font-semibold shadow-md text-sm md:text-base">
+            <div className="w-9 h-9 md:w-10 md:h-10 bg-gradient-to-br from-purple-600 to-purple-700 rounded-full flex items-center justify-center text-white font-semibold shadow-md text-sm md:text-base">
               {venueInitials}
             </div>
           </div>
