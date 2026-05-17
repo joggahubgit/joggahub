@@ -237,9 +237,7 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'games' }, () => fetchAllRef.current())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'court_schedules' }, () => fetchAllRef.current())
       .subscribe();
-    // Polling fallback: RLS may prevent realtime events for player-created bookings
-    const poll = setInterval(() => fetchAllRef.current(), 30_000);
-    return () => { supabase.removeChannel(channel); clearInterval(poll); };
+    return () => { supabase.removeChannel(channel); };
   }, [venueId]);
 
   useEffect(() => {
