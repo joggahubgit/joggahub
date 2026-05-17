@@ -118,9 +118,7 @@ export default function GestorApp() {
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 md:w-10 md:h-10 bg-purple-600 rounded-xl flex items-center justify-center shadow-md">
-                <span className="text-white font-bold text-sm">JH</span>
-              </div>
+              <img src="/logo.png" alt="JoggaHub" className="w-8 h-8 md:w-10 md:h-10 rounded-xl object-contain" />
               <div>
                 <h1 className="font-bold text-lg md:text-xl text-gray-900">JoggaHub</h1>
                 <p className="text-xs text-gray-600 hidden md:block">Gestor de Quadras</p>

@@ -20,9 +20,7 @@ export function LoginPage() {
     <div className="min-h-screen bg-gradient-to-br from-purple-600 to-purple-900 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
         <div className="text-center pt-8 pb-6 px-8">
-          <div className="w-16 h-16 bg-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-3">
-            <span className="text-white text-2xl font-bold">J</span>
-          </div>
+          <img src="/logo.png" alt="JoggaHub" className="w-16 h-16 rounded-2xl object-contain mx-auto mb-3" />
           <h1 className="text-2xl font-bold text-gray-900">JoggaHub</h1>
           <p className="text-gray-500 text-sm mt-1">Gestor de Quadras</p>
         </div>
