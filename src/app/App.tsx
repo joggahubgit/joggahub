@@ -3,6 +3,7 @@ import { LanguageProvider } from './contexts/LanguageContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Landing from './components/Landing';
 import Auth from './components/Auth';
+import AuthCallback from './components/AuthCallback';
 import Onboarding from './components/Onboarding';
 import Home from './components/Home';
 import FindCourts from './components/FindCourts';
@@ -67,6 +68,7 @@ function AppRoutes() {
         {/* Public */}
         <Route path="/" element={<Landing />} />
         <Route path="/auth" element={<Auth />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
 
