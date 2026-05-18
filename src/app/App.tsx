@@ -54,8 +54,8 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   // Also checks localStorage to avoid a race condition where the profile
   // context hasn't updated yet right after onboarding is saved.
   const onboardingDone = !!localStorage.getItem(`onboarding_done_${user.id}`);
-  const profileComplete = !!profile?.preferred_position;
-  if (!onboardingDone && !profileComplete && location.pathname !== '/onboarding') {
+  const profileComplete = !!profile?.onboarding_completed || !!profile?.preferred_position;
+  if (profile && !onboardingDone && !profileComplete && location.pathname !== '/onboarding') {
     return <Navigate to="/onboarding" replace />;
   }
   return <>{children}</>;

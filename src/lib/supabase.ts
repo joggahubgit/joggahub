@@ -22,6 +22,7 @@ export interface Profile {
   availability: { days: string[]; periods: string[] } | null
   bio: string | null
   role: 'player' | 'venue_admin'
+  onboarding_completed: boolean
   xp: number
   games_played: number
   created_at: string

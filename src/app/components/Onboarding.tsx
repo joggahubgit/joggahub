@@ -111,20 +111,6 @@ export default function Onboarding() {
     return true; // step 3 is skippable
   }
 
-  async function handleSkip() {
-    if (!user) return;
-    // Save whatever has been filled so far (name/city from step 1 if present)
-    if (name.trim() || city.trim()) {
-      await supabase.from('profiles').upsert({
-        id: user.id,
-        ...(name.trim() && { name: name.trim() }),
-        ...(city.trim() && { location: city.trim() }),
-      }, { onConflict: 'id' });
-    }
-    localStorage.setItem(`onboarding_done_${user.id}`, '1');
-    navigate('/home');
-  }
-
   async function handleFinish() {
     if (!user) return;
     setSaving(true);
@@ -155,6 +141,7 @@ export default function Onboarding() {
         preferred_position: position,
         dominant_foot: foot || null,
         availability: (days.length > 0 || periods.length > 0) ? { days, periods } : null,
+        onboarding_completed: true,
       }, { onConflict: 'id' });
 
       // Increment XP directly in DB to avoid stale-context race condition
@@ -190,12 +177,6 @@ export default function Onboarding() {
       <div className="bg-violet-600 text-white px-6 pt-12 pb-6">
         <div className="flex items-center justify-between mb-3">
           <span className="text-sm font-medium text-violet-200">Passo {step} de {TOTAL_STEPS}</span>
-          <button
-            onClick={step === TOTAL_STEPS ? handleFinish : handleSkip}
-            className="text-sm text-violet-200 underline"
-          >
-            Pular
-          </button>
         </div>
         <div className="flex gap-1.5">
           {Array.from({ length: TOTAL_STEPS }).map((_, i) => (

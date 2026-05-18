@@ -14,7 +14,13 @@ export default function AuthCallback() {
       return;
     }
 
-    const profileComplete = !!profile?.preferred_position;
+    // If profile failed to load, go to home — ProtectedRoute will decide
+    if (!profile) {
+      navigate('/home', { replace: true });
+      return;
+    }
+
+    const profileComplete = !!profile.onboarding_completed || !!profile.preferred_position;
     const onboardingDone = !!localStorage.getItem(`onboarding_done_${user.id}`);
 
     if (!profileComplete && !onboardingDone) {
