@@ -1,106 +1,268 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, CreditCard, Plus, Check, Calendar, MapPin, Users } from 'lucide-react';
+import { ArrowLeft, CreditCard, Calendar, MapPin, Users, Loader2, ShieldCheck, Clock } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
+
+type GameRow = {
+  scheduled_at: string | null;
+  court_price: number | null;
+  price_per_player: number | null;
+  current_players: number;
+  pay_mode: string | null;
+  is_open: boolean;
+  status: string;
+  stripe_split_captured: boolean;
+  courts: { name: string; venues: { name: string } | null } | null;
+};
+
+type PaymentEntry = {
+  game_id: string;
+  stripe_payment_intent_id: string | null;
+  games: GameRow | null;
+};
+
+function formatDate(iso: string | null) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
+}
+
+function formatTime(iso: string | null) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function gameTypeLabel(g: GameRow | null) {
+  if (!g) return 'Partida';
+  if (g.is_open) return 'Partida Aberta';
+  if (g.pay_mode === 'split') return 'Privada · Divisão';
+  return 'Privada · Total';
+}
+
+function calcAmount(g: GameRow | null): number {
+  if (!g) return 0;
+  const cp = g.court_price ?? 0;
+  if (cp <= 0) return Math.round(((g.price_per_player ?? 0) * 1.08 + 2.50) * 100) / 100;
+  if (g.pay_mode === 'full') return Math.round((cp * 1.08 + 2.50) * 100) / 100;
+  const N = Math.max(g.current_players, g.is_open ? 1 : 10);
+  return Math.round(((cp / N) * 1.08 + 2.50) * 100) / 100;
+}
+
+function paymentStatus(g: GameRow | null): 'paid' | 'hold' | 'refunded' {
+  if (!g) return 'hold';
+  if (g.status === 'cancelled' || g.status === 'expired') return 'refunded';
+  if (g.stripe_split_captured) return 'paid';
+  return 'hold';
+}
 
 export default function PaymentsPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'history' | 'methods'>('history');
+  const [entries, setEntries] = useState<PaymentEntry[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const paymentHistory = [
-    { id: 1, date: '27/02/2026', time: '19:00', court: 'Arena Sports Center', location: 'Vila Mariana, SP', amount: 25.00, status: 'paid', type: 'Reserva de Quadra', players: 10 },
-    { id: 2, date: '25/02/2026', time: '18:30', court: 'Soccer Park', location: 'Moema, SP', amount: 30.00, status: 'paid', type: 'Jogo Aberto', players: 8 },
-    { id: 3, date: '22/02/2026', time: '20:00', court: 'Futsal Pro', location: 'Pinheiros, SP', amount: 22.50, status: 'refunded', type: 'Reserva de Quadra', players: 10 },
-    { id: 4, date: '20/02/2026', time: '19:30', court: 'Arena Sports Center', location: 'Vila Mariana, SP', amount: 25.00, status: 'paid', type: 'Jogo Recorrente', players: 10 },
-    { id: 5, date: '18/02/2026', time: '18:00', court: 'Champions Field', location: 'Itaim Bibi, SP', amount: 35.00, status: 'paid', type: 'Reserva de Quadra', players: 12 }
-  ];
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from('game_players')
+      .select(`
+        game_id,
+        stripe_payment_intent_id,
+        games!game_id (
+          scheduled_at,
+          court_price,
+          price_per_player,
+          current_players,
+          pay_mode,
+          is_open,
+          status,
+          stripe_split_captured,
+          courts!court_id (
+            name,
+            venues!venue_id (
+              name
+            )
+          )
+        )
+      `)
+      .eq('player_id', user.id)
+      .eq('paid', true)
+      .limit(40)
+      .then(({ data }) => {
+        const sorted = ((data as unknown as PaymentEntry[]) ?? []).sort((a, b) => {
+          const da = a.games?.scheduled_at ?? '';
+          const db = b.games?.scheduled_at ?? '';
+          return db.localeCompare(da);
+        });
+        setEntries(sorted);
+        setLoading(false);
+      });
+  }, [user]);
 
-  const paymentMethods = [
-    { id: 1, type: 'credit', brand: 'Visa', last4: '4242', expiry: '12/28', isDefault: true },
-    { id: 2, type: 'credit', brand: 'Mastercard', last4: '8888', expiry: '09/27', isDefault: false }
-  ];
+  const now = new Date();
+  const thisMonthEntries = entries.filter(e => {
+    const s = e.games?.scheduled_at;
+    if (!s) return false;
+    const d = new Date(s);
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  });
+  const thisMonthTotal = thisMonthEntries.reduce((sum, e) => sum + calcAmount(e.games), 0);
+  const avgPerGame = thisMonthEntries.length > 0 ? thisMonthTotal / thisMonthEntries.length : 0;
 
-  const getStatusBadge = (status: string) => {
-    if (status === 'paid') return <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full">Pago</span>;
-    if (status === 'refunded') return <span className="px-3 py-1 bg-orange-100 text-orange-700 text-xs font-semibold rounded-full">Reembolsado</span>;
-    return null;
+  const statusBadge = (g: GameRow | null) => {
+    const s = paymentStatus(g);
+    if (s === 'paid') return <span className="px-2.5 py-0.5 bg-green-100 text-green-700 text-xs font-semibold rounded-full">Pago</span>;
+    if (s === 'hold') return <span className="px-2.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">Bloqueado</span>;
+    return <span className="px-2.5 py-0.5 bg-orange-100 text-orange-700 text-xs font-semibold rounded-full">Reembolsado</span>;
   };
 
   return (
     <div className="min-h-screen bg-gray-50 pb-6">
-      <div className="bg-white border-b border-gray-200">
-        <div className="px-6 py-4">
-          <div className="flex items-center gap-4">
-            <button onClick={() => navigate(-1)} className="text-gray-600 hover:text-gray-900"><ArrowLeft className="w-6 h-6" /></button>
-            <h1 className="text-xl font-bold text-gray-900">Pagamentos</h1>
-          </div>
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="px-6 py-4 flex items-center gap-4">
+          <button onClick={() => navigate(-1)} className="text-gray-600 hover:text-gray-900"><ArrowLeft className="w-6 h-6" /></button>
+          <h1 className="text-xl font-bold text-gray-900">Pagamentos</h1>
         </div>
         <div className="flex border-t border-gray-200">
           <button onClick={() => setActiveTab('history')} className={`flex-1 py-3 text-sm font-semibold transition-colors ${activeTab === 'history' ? 'text-violet-600 border-b-2 border-violet-600' : 'text-gray-500'}`}>Histórico</button>
-          <button onClick={() => setActiveTab('methods')} className={`flex-1 py-3 text-sm font-semibold transition-colors ${activeTab === 'methods' ? 'text-violet-600 border-b-2 border-violet-600' : 'text-gray-500'}`}>Formas de Pagamento</button>
+          <button onClick={() => setActiveTab('methods')} className={`flex-1 py-3 text-sm font-semibold transition-colors ${activeTab === 'methods' ? 'text-violet-600 border-b-2 border-violet-600' : 'text-gray-500'}`}>Sobre pagamentos</button>
         </div>
       </div>
 
       {activeTab === 'history' && (
         <div className="px-6 py-6 space-y-4">
           <div className="bg-gradient-to-br from-violet-600 to-violet-700 rounded-2xl p-6 text-white shadow-lg">
-            <p className="text-sm text-violet-100 mb-1">Total gasto este mês</p>
-            <h2 className="text-3xl font-bold mb-4">R$ 137,50</h2>
-            <div className="flex gap-6 text-sm">
-              <div><p className="text-violet-100">Jogos</p><p className="font-semibold">5 partidas</p></div>
-              <div><p className="text-violet-100">Média por jogo</p><p className="font-semibold">R$ 27,50</p></div>
-            </div>
+            <p className="text-sm text-violet-100 mb-1">Total comprometido este mês</p>
+            {loading ? (
+              <Loader2 className="w-6 h-6 animate-spin my-2" />
+            ) : (
+              <>
+                <h2 className="text-3xl font-bold mb-4">R$ {thisMonthTotal.toFixed(2)}</h2>
+                <div className="flex gap-6 text-sm">
+                  <div><p className="text-violet-100">Partidas</p><p className="font-semibold">{thisMonthEntries.length}</p></div>
+                  {thisMonthEntries.length > 0 && (
+                    <div><p className="text-violet-100">Média por partida</p><p className="font-semibold">R$ {avgPerGame.toFixed(2)}</p></div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
-          <div className="space-y-3">
-            <h3 className="font-semibold text-gray-900 px-2">Transações recentes</h3>
-            {paymentHistory.map((payment) => (
-              <div key={payment.id} className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1"><h4 className="font-semibold text-gray-900">{payment.court}</h4>{getStatusBadge(payment.status)}</div>
-                    <div className="flex items-center gap-1 text-sm text-gray-500 mb-1"><MapPin className="w-3 h-3" /><span>{payment.location}</span></div>
-                    <div className="flex items-center gap-1 text-sm text-gray-500"><Calendar className="w-3 h-3" /><span>{payment.date} às {payment.time}</span></div>
+          {loading ? (
+            <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-violet-500" /></div>
+          ) : entries.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <CreditCard className="w-12 h-12 mx-auto mb-3 opacity-40" />
+              <p className="font-medium text-gray-500">Nenhum pagamento encontrado</p>
+              <p className="text-sm mt-1">Suas reservas e partidas aparecerão aqui</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <h3 className="font-semibold text-gray-900 px-1">Transações</h3>
+              {entries.map((entry) => {
+                const g = entry.games;
+                const amount = calcAmount(g);
+                const status = paymentStatus(g);
+                return (
+                  <div key={entry.game_id} className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1 min-w-0 pr-3">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <h4 className="font-semibold text-gray-900 truncate">{g?.courts?.name ?? '—'}</h4>
+                          {statusBadge(g)}
+                        </div>
+                        {g?.courts?.venues?.name && (
+                          <div className="flex items-center gap-1 text-sm text-gray-500 mb-1">
+                            <MapPin className="w-3 h-3 flex-shrink-0" /><span className="truncate">{g.courts.venues.name}</span>
+                          </div>
+                        )}
+                        {g?.scheduled_at && (
+                          <div className="flex items-center gap-1 text-sm text-gray-500">
+                            <Calendar className="w-3 h-3 flex-shrink-0" />
+                            <span>{formatDate(g.scheduled_at)} às {formatTime(g.scheduled_at)}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className={`text-lg font-bold ${status === 'refunded' ? 'text-orange-600' : 'text-gray-900'}`}>
+                          {status === 'refunded' ? '–' : ''}R$ {amount.toFixed(2)}
+                        </p>
+                        <p className="text-xs text-gray-500">{gameTypeLabel(g)}</p>
+                      </div>
+                    </div>
+                    <div className="pt-3 border-t border-gray-100 flex items-center gap-4">
+                      {g && (
+                        <div className="flex items-center gap-1 text-sm text-gray-500">
+                          <Users className="w-4 h-4" /><span>{g.current_players} jogadores</span>
+                        </div>
+                      )}
+                      {status === 'hold' && (
+                        <div className="flex items-center gap-1 text-sm text-blue-600">
+                          <Clock className="w-4 h-4" /><span>Aguardando cobrança</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-right"><p className="text-lg font-bold text-gray-900">R$ {payment.amount.toFixed(2)}</p><p className="text-xs text-gray-500">{payment.type}</p></div>
-                </div>
-                <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
-                  <div className="flex items-center gap-1 text-sm text-gray-600"><Users className="w-4 h-4" /><span>{payment.players} jogadores</span></div>
-                  <button className="text-sm text-violet-600 font-semibold">Ver detalhes</button>
-                </div>
-              </div>
-            ))}
-          </div>
+                );
+              })}
+            </div>
+          )}
+
+          {entries.length > 0 && (
+            <p className="text-center text-xs text-gray-400 pt-2">
+              Valores estimados com base no número atual de jogadores. O valor final pode variar.
+            </p>
+          )}
         </div>
       )}
 
       {activeTab === 'methods' && (
         <div className="px-6 py-6 space-y-4">
-          <button className="w-full bg-violet-600 text-white py-4 rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-violet-700 transition-colors"><Plus className="w-5 h-5" />Adicionar cartão</button>
-
-          <div className="space-y-3">
-            <h3 className="font-semibold text-gray-900 px-2">Seus cartões</h3>
-            {paymentMethods.map((method) => (
-              <div key={method.id} className="bg-white rounded-xl p-5 shadow-sm border-2 border-gray-200 relative overflow-hidden">
-                {method.isDefault && (
-                  <div className="absolute top-3 right-3"><span className="px-2 py-1 bg-violet-100 text-violet-700 text-xs font-semibold rounded-full flex items-center gap-1"><Check className="w-3 h-3" />Padrão</span></div>
-                )}
-                <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 bg-gradient-to-br from-violet-600 to-violet-700 rounded-xl flex items-center justify-center text-white"><CreditCard className="w-7 h-7" /></div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1"><h4 className="font-semibold text-gray-900">{method.brand}</h4><span className="text-gray-500">•••• {method.last4}</span></div>
-                    <p className="text-sm text-gray-500">Validade {method.expiry}</p>
-                  </div>
-                </div>
-                <div className="flex gap-2 mt-4 pt-4 border-t border-gray-100">
-                  {!method.isDefault && <button className="flex-1 text-sm text-violet-600 font-semibold py-2">Definir como padrão</button>}
-                  <button className="flex-1 text-sm text-red-600 font-semibold py-2">Remover</button>
-                </div>
+          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-violet-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                <ShieldCheck className="w-6 h-6 text-violet-600" />
               </div>
-            ))}
+              <div>
+                <h3 className="font-semibold text-gray-900">Pagamentos via Stripe</h3>
+                <p className="text-sm text-gray-500">Seus dados nunca passam pelos nossos servidores</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              Todas as transações são processadas com segurança pelo Stripe. Seus dados de cartão são criptografados e armazenados diretamente pelo Stripe, nunca pelo JoggaHub.
+            </p>
           </div>
 
-          <div className="bg-violet-50 border border-violet-200 rounded-xl p-4 mt-6">
-            <p className="text-sm text-violet-900"><strong>Pagamento seguro:</strong> Seus dados de pagamento são criptografados e nunca são armazenados em nossos servidores.</p>
+          <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-200 space-y-3">
+            <h3 className="font-semibold text-gray-900">Como funciona o bloqueio</h3>
+            <div className="space-y-3 text-sm text-gray-600">
+              <div className="flex gap-3">
+                <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span className="text-blue-700 text-xs font-bold">1</span>
+                </div>
+                <p>Ao se inscrever, reservamos o valor no seu cartão (bloqueio temporário — sem cobrança ainda).</p>
+              </div>
+              <div className="flex gap-3">
+                <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span className="text-blue-700 text-xs font-bold">2</span>
+                </div>
+                <p>A cobrança efetiva ocorre quando a partida for confirmada: 24h antes (privada) ou 2h antes (aberta/split).</p>
+              </div>
+              <div className="flex gap-3">
+                <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span className="text-blue-700 text-xs font-bold">3</span>
+                </div>
+                <p>Se a partida for cancelada antes da cobrança, o bloqueio é liberado sem nenhuma taxa.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-violet-50 border border-violet-200 rounded-xl p-4">
+            <p className="text-sm text-violet-900 leading-relaxed">
+              <strong>Taxa de serviço:</strong> 8% + R$ 2,50 por transação, incluída no valor mostrado no momento da reserva.
+            </p>
           </div>
         </div>
       )}
