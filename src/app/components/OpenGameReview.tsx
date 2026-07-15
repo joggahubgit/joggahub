@@ -210,16 +210,15 @@ export default function OpenGameReview() {
           {policyExpanded && (
             <div className="px-5 pb-5 space-y-4 border-t border-gray-100 pt-4">
               <div>
-                <p className="font-bold text-gray-900 mb-2">Antes de todas as vagas serem preenchidas</p>
+                <p className="font-bold text-gray-900 mb-2">Antes do mínimo de jogadores ser atingido</p>
                 <p className="text-sm text-gray-500 leading-relaxed">
-                  A partida fica pendente de confirmação e pode ser cancelada por falta de jogadores.
-                  Se isso acontecer, você receberá o reembolso integral em até 10 dias úteis no método de pagamento utilizado.
+                  A partida fica pendente. Se não atingir o mínimo de {state.minPlayers} jogadores até 2h antes do início, será cancelada automaticamente e você receberá o reembolso integral.
                 </p>
               </div>
               <div>
-                <p className="font-bold text-gray-900 mb-2">Quando todas as vagas forem preenchidas</p>
+                <p className="font-bold text-gray-900 mb-2">Após o mínimo ser atingido</p>
                 <p className="text-sm text-gray-500 leading-relaxed">
-                  Você pode cancelar sua vaga até 24 horas antes do início da partida.
+                  Você pode cancelar sua vaga até 24 horas antes do início da partida e receber reembolso integral.
                   Cancelamentos com menos de 24 horas de antecedência não são reembolsáveis.
                 </p>
               </div>

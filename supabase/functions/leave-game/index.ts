@@ -7,7 +7,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const CANCEL_CUTOFF_HOURS = 12;
+const CANCEL_CUTOFF_HOURS = 24;
+const OPEN_GAME_MIN_PLAYERS = 10;
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -72,7 +73,7 @@ serve(async (req) => {
       if (slot?.start_time) {
         const hoursUntil = (new Date(slot.start_time).getTime() - Date.now()) / (1000 * 60 * 60);
         if (hoursUntil < CANCEL_CUTOFF_HOURS) {
-          throw new Error('Cancelamento não permitido dentro das 12h anteriores à partida');
+          throw new Error('Cancelamento não permitido dentro das 24h anteriores à partida');
         }
       }
     }
@@ -127,7 +128,18 @@ serve(async (req) => {
 
     // Remove player and decrement count
     await supabase.from('game_players').delete().eq('game_id', gameId).eq('player_id', playerBeingRemoved);
-    await supabase.from('games').update({ current_players: game.current_players - 1 }).eq('id', gameId);
+    const newPlayerCount = game.current_players - 1;
+    const gameUpdate: Record<string, unknown> = { current_players: newPlayerCount };
+
+    // Open game: if confirmed_booking drops below minimum, revert to scheduled so new players can join
+    if (game.status === 'confirmed_booking' && newPlayerCount < OPEN_GAME_MIN_PLAYERS) {
+      const { data: gameRow } = await supabase.from('games').select('is_open').eq('id', gameId).single();
+      if (gameRow?.is_open) {
+        gameUpdate.status = 'scheduled';
+      }
+    }
+
+    await supabase.from('games').update(gameUpdate).eq('id', gameId);
 
     // Notify the player being removed
     const message = gp.paid

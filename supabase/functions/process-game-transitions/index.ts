@@ -152,14 +152,11 @@ serve(async (req) => {
   }
 
   // ─────────────────────────────────────────────────────────────────────
-  // -1. AUTO-CANCEL: scheduled open games with insufficient players
+  // -1. AUTO-CANCEL: scheduled open games with insufficient players at 2h before start
   //
-  //   fill_rate = current_players / min_players_for_sport
-  //
-  //   fill_rate ≤ 20%          → cancel when ≤ 6h before start
-  //   fill_rate ≤ 40%          → cancel when ≤ 4h before start
-  //   fill_rate > 40% but < 1  → cancel when ≤ 2h before start
-  //   fill_rate ≥ 1            → already confirmed_booking, skip
+  //   Only fires when hoursUntilStart ≤ 2 AND current_players < min_players.
+  //   Games that previously reached confirmed_booking reverted to scheduled via
+  //   leave-game when players dropped below min — they are eligible here too.
   // ─────────────────────────────────────────────────────────────────────
   {
     const { data: openScheduled, error: openErr } = await supabase
@@ -186,44 +183,16 @@ serve(async (req) => {
         const startMs = new Date(slot.start_time).getTime();
         const hoursUntilStart = (startMs - now) / (1000 * 60 * 60);
 
-        // Skip games that haven't reached a cancel window yet or already started
-        if (hoursUntilStart > 6 || hoursUntilStart < 0) continue;
+        // Only act in the 2h window before start
+        if (hoursUntilStart > 2 || hoursUntilStart < 0) continue;
 
-        // Resolve min players using court sport_type
-        let sportType: string | null = null;
-        if (game.court_id) {
-          const { data: court } = await supabase
-            .from('courts')
-            .select('sport_type')
-            .eq('id', game.court_id)
-            .single();
-          sportType = court?.sport_type ?? null;
-        }
-        const minPlayers = resolveMinPlayers(sportType);
+        const minPlayers = resolveMinPlayers(null);
         const currentPlayers = game.current_players ?? 0;
-        const fillRate = currentPlayers / minPlayers;
 
-        // Already has minimum players — skip (should have been confirmed_booking already)
-        if (fillRate >= 1.0) continue;
+        // Has minimum players — should have been confirmed already, skip
+        if (currentPlayers >= minPlayers) continue;
 
-        // Determine whether this game should be cancelled now
-        const shouldCancel =
-          (fillRate <= 0.20 && hoursUntilStart <= 6) ||
-          (fillRate <= 0.40 && hoursUntilStart <= 4) ||
-          (fillRate > 0.40 && fillRate < 1.0 && hoursUntilStart <= 2);
-
-        if (!shouldCancel) continue;
-
-        // Build cancellation reason for notifications
-        const pct = fillLabel(currentPlayers, minPlayers);
-        let reason: string;
-        if (fillRate <= 0.20) {
-          reason = `A partida foi cancelada automaticamente: apenas ${pct} das vagas mínimas foram preenchidas (${currentPlayers}/${minPlayers} jogadores) e faltam menos de 6h para o início.`;
-        } else if (fillRate <= 0.40) {
-          reason = `A partida foi cancelada automaticamente: apenas ${pct} das vagas mínimas foram preenchidas (${currentPlayers}/${minPlayers} jogadores) e faltam menos de 4h para o início.`;
-        } else {
-          reason = `A partida foi cancelada automaticamente: ${pct} das vagas mínimas foram preenchidas (${currentPlayers}/${minPlayers} jogadores) e faltam menos de 2h para o início.`;
-        }
+        const reason = `A partida foi cancelada automaticamente: apenas ${currentPlayers}/${minPlayers} jogadores confirmados faltando menos de 2h para o início.`;
 
         // Mark game as expired + close it
         const { error: cancelErr } = await supabase
