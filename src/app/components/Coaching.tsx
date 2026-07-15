@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Star, GraduationCap, MapPin, Search } from 'lucide-react';
+import ComingSoonBanner from './ComingSoonBanner';
 
 export default function Coaching() {
   const navigate = useNavigate();
@@ -64,6 +65,7 @@ export default function Coaching() {
           />
         </div>
       </div>
+      <ComingSoonBanner />
 
       {/* Hero Banner */}
       <div className="bg-gradient-to-r from-purple-500 to-purple-700 text-white px-6 py-8 mb-6">

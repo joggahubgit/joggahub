@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Calendar, Users, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import ComingSoonBanner from './ComingSoonBanner';
 
 export default function MyGroups() {
   const navigate = useNavigate();
@@ -44,6 +45,7 @@ export default function MyGroups() {
           <button onClick={() => navigate('/find-courts')} className="bg-white/20 backdrop-blur-sm p-3 rounded-full hover:bg-white/30 transition-colors"><Plus className="w-6 h-6" /></button>
         </div>
       </div>
+      <ComingSoonBanner />
 
       <div className="px-6 py-4">
         <div className="bg-white rounded-xl p-1 shadow-sm inline-flex">

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Calendar, Clock, Users, DollarSign, Info } from 'lucide-react';
+import ComingSoonBanner from './ComingSoonBanner';
 
 export default function RecurringBookingSetup() {
   const navigate = useNavigate();
@@ -53,6 +54,7 @@ export default function RecurringBookingSetup() {
         <h1 className="text-2xl font-bold mb-2">Reserva Recorrente</h1>
         <p className="text-purple-100">Configure seu horário fixo semanal</p>
       </div>
+      <ComingSoonBanner />
 
       <div className="px-6 py-6 space-y-6">
         {/* Court Info Card */}

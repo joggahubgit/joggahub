@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle, Calendar, Users, DollarSign, Share2 } from 'lucide-react';
+import ComingSoonBanner from './ComingSoonBanner';
 
 export default function SubscriptionConfirmation() {
   const navigate = useNavigate();
@@ -22,6 +23,7 @@ export default function SubscriptionConfirmation() {
         <h1 className="text-3xl font-bold mb-2">Assinatura confirmada!</h1>
         <p className="text-green-100">Você agora faz parte do grupo fixo</p>
       </div>
+      <ComingSoonBanner />
 
       <div className="px-6 py-6 space-y-6">
         {/* Subscription Details */}

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Upload, Copy, Share2, Check } from 'lucide-react';
+import ComingSoonBanner from './ComingSoonBanner';
 
 export default function RecurringGroupCreation() {
   const navigate = useNavigate();
@@ -68,6 +69,7 @@ export default function RecurringGroupCreation() {
         <h1 className="text-2xl font-bold mb-2">Criar Grupo Fixo</h1>
         <p className="text-purple-100">Defina as informações do grupo</p>
       </div>
+      <ComingSoonBanner />
 
       <div className="px-6 py-6 space-y-6">
         {/* Group Summary */}

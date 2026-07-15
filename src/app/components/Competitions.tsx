@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Trophy, Calendar, Users, DollarSign, Search } from 'lucide-react';
+import ComingSoonBanner from './ComingSoonBanner';
 
 export default function Competitions() {
   const navigate = useNavigate();
@@ -70,6 +71,7 @@ export default function Competitions() {
           />
         </div>
       </div>
+      <ComingSoonBanner />
 
       {/* Hero Banner */}
       <div className="bg-gradient-to-r from-yellow-400 to-yellow-600 text-gray-900 px-6 py-8 mb-6">

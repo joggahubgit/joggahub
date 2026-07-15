@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, TrendingUp, Users, Calendar, DollarSign, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
+import ComingSoonBanner from './ComingSoonBanner';
 
 export default function CourtManagerDashboard() {
   const navigate = useNavigate();
@@ -36,6 +37,7 @@ export default function CourtManagerDashboard() {
         <h1 className="text-2xl font-bold mb-2">Dashboard de Grupos Fixos</h1>
         <p className="text-purple-100">Arena Sports Center</p>
       </div>
+      <ComingSoonBanner />
 
       <div className="px-6 py-4">
         <div className="bg-white rounded-xl p-1 shadow-sm inline-flex">

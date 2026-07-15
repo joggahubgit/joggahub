@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Heart, MessageCircle, Share2, Trophy, TrendingUp, Search, Users, User, Home as HomeIcon, Send, Calendar } from 'lucide-react';
+import ComingSoonBanner from './ComingSoonBanner';
 
 export default function Community() {
   const navigate = useNavigate();
@@ -37,6 +38,7 @@ export default function Community() {
           <Search className="w-6 h-6 cursor-pointer" />
         </div>
       </div>
+      <ComingSoonBanner />
 
       <div className="bg-white border-b border-gray-200 px-6 sticky top-[76px] z-10">
         <div className="flex gap-6">

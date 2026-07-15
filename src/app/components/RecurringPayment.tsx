@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Calendar, MapPin, Users, CreditCard, Zap } from 'lucide-react';
+import ComingSoonBanner from './ComingSoonBanner';
 
 export default function RecurringPayment() {
   const navigate = useNavigate();
@@ -40,6 +41,7 @@ export default function RecurringPayment() {
         <h1 className="text-2xl font-bold mb-2">Pagamento</h1>
         <p className="text-purple-100">Confirme sua participação no grupo</p>
       </div>
+      <ComingSoonBanner />
 
       <div className="px-6 py-6 space-y-6">
         {/* Group Info */}

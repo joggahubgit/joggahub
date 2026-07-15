@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Calendar, MapPin, Clock, Users, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import ComingSoonBanner from './ComingSoonBanner';
 
 export default function WeeklyConfirmation() {
   const navigate = useNavigate();
@@ -60,6 +61,7 @@ export default function WeeklyConfirmation() {
         <h1 className="text-2xl font-bold mb-2">Confirme sua presença</h1>
         <p className="text-purple-100">Responda até {gameData.deadline}</p>
       </div>
+      <ComingSoonBanner />
 
       <div className="px-6 py-6 space-y-6">
         {/* Urgency Banner */}

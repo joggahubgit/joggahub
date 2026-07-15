@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Calendar, Users, TrendingUp, CheckCircle, AlertCircle, Clock, Settings, Bell } from 'lucide-react';
+import ComingSoonBanner from './ComingSoonBanner';
 
 export default function FixedGroups() {
   const navigate = useNavigate();
@@ -31,6 +32,7 @@ export default function FixedGroups() {
           <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3"><div className="text-2xl font-bold">R$ {myGroups.reduce((sum, g) => sum + g.monthlyPrice, 0)}</div><div className="text-xs text-purple-100">Mensais</div></div>
         </div>
       </div>
+      <ComingSoonBanner />
 
       {isManager && (
         <div className="px-6 py-4">

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Share2, Users, Calendar, MapPin, DollarSign, CheckCircle, AlertCircle, XCircle, Copy, Check } from 'lucide-react';
+import ComingSoonBanner from './ComingSoonBanner';
 
 interface Member {
   id: number;
@@ -121,7 +122,7 @@ export default function SubscriptionGroupDetails() {
         <h1 className="text-2xl font-bold mb-1">Racha Fixo - {dayLabels[groupData.dayOfWeek as string] || 'Terça-feira'}</h1>
         <p className="text-purple-100">Grupo de assinatura mensal</p>
       </div>
-
+      <ComingSoonBanner />
       <div className="px-6 py-6 space-y-6">
         {/* Status Banner */}
         <div className={`${statusConfig.bgColor} border-2 ${statusConfig.borderColor} rounded-2xl p-6`}>

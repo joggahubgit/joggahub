@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { ArrowLeft, Share2, Settings, Users, Calendar, MapPin, DollarSign, UserPlus, Copy, Check, X } from 'lucide-react';
+import ComingSoonBanner from './ComingSoonBanner';
 
 interface Member {
   id: number;
@@ -89,6 +90,7 @@ export default function GroupDetails() {
         <h1 className="text-2xl font-bold mb-1">{(group?.name as string) || 'Racha das Quartas'}</h1>
         <p className="text-purple-100">Gerenciar grupo recorrente</p>
       </div>
+      <ComingSoonBanner />
 
       <div className="px-6 py-6 space-y-6">
         {/* Game Info Card */}

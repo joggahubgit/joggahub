@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Search, ChevronDown, ChevronUp, MessageCircle, Mail, Phone, Calendar, CreditCard, Users, MapPin } from 'lucide-react';
+import { ArrowLeft, Search, ChevronDown, ChevronUp, Mail, Phone, Calendar, CreditCard, Users } from 'lucide-react';
 
 export default function HelpPage() {
   const navigate = useNavigate();
@@ -9,30 +9,24 @@ export default function HelpPage() {
 
   const faqCategories = [
     { icon: Calendar, name: 'Reservas', color: 'bg-violet-100 text-violet-600', faqs: [
-      { question: 'Como fazer uma reserva de quadra?', answer: 'Para fazer uma reserva, vá em "Buscar Quadras" no menu principal, escolha a quadra desejada, selecione data e horário disponível e confirme o pagamento.' },
-      { question: 'Posso cancelar uma reserva?', answer: 'Sim! Você pode cancelar até 24h antes do horário marcado e receber reembolso total. Cancelamentos com menos de 24h terão taxa de 50%.' },
-      { question: 'Como funcionam as reservas recorrentes?', answer: 'Reservas recorrentes permitem que você reserve a mesma quadra no mesmo horário semanalmente. Você paga mensalmente e pode cancelar a qualquer momento.' }
+      { question: 'Como fazer uma reserva de quadra?', answer: 'Na tela inicial, toque em "Buscar quadras" (ou em Explorar → Encontrar Quadras), escolha a quadra, o horário disponível e confirme o pagamento.' },
+      { question: 'Posso cancelar uma reserva?', answer: 'Sim. Até 24h antes do horário, o cancelamento libera o valor bloqueado no cartão, sem nenhuma cobrança. Depois desse prazo, o cancelamento pelo app fica bloqueado — entre em contato com o suporte.' }
     ]},
     { icon: Users, name: 'Jogos Abertos', color: 'bg-green-100 text-green-600', faqs: [
       { question: 'O que são jogos abertos?', answer: 'Jogos abertos são partidas criadas por outros jogadores onde você pode entrar e jogar. É uma ótima forma de conhecer novos jogadores.' },
-      { question: 'Como criar um jogo aberto?', answer: 'Clique no botão "+" no menu inferior, selecione "Criar Jogo Aberto", escolha quadra, data, horário e defina o número de jogadores.' },
-      { question: 'E se não completar os jogadores?', answer: 'Se não atingir o número mínimo até 2h antes do horário, o jogo será cancelado automaticamente e todos receberão reembolso integral.' }
+      { question: 'Como criar um jogo aberto?', answer: 'Escolha uma quadra e um horário disponível na página da quadra e selecione a opção "Partida aberta" ao reservar. Outros jogadores poderão entrar até a partida ficar completa.' },
+      { question: 'E se não completar os jogadores?', answer: 'Se o número mínimo de jogadores não for atingido até 2h antes do horário, a partida é cancelada automaticamente e o valor bloqueado no cartão de cada jogador é liberado, sem cobrança.' }
     ]},
     { icon: CreditCard, name: 'Pagamentos', color: 'bg-purple-100 text-purple-600', faqs: [
-      { question: 'Quais formas de pagamento são aceitas?', answer: 'Aceitamos cartões de crédito (Visa, Mastercard, Elo, Amex), cartões de débito e PIX.' },
-      { question: 'Como funciona o rateio de valores?', answer: 'Em jogos abertos, o valor da quadra é dividido igualmente entre todos os jogadores confirmados.' },
-      { question: 'Recebi reembolso, quando cai na conta?', answer: 'Reembolsos são processados em até 5 dias úteis, estornados no mesmo método de pagamento utilizado.' }
-    ]},
-    { icon: MapPin, name: 'Quadras', color: 'bg-orange-100 text-orange-600', faqs: [
-      { question: 'Como avaliar uma quadra?', answer: 'Após o jogo, você receberá uma notificação para avaliar a quadra de 1 a 5 estrelas.' },
-      { question: 'Como favoritar quadras?', answer: 'Na página de detalhes da quadra, clique no ícone de coração.' }
+      { question: 'Quais formas de pagamento são aceitas?', answer: 'Aceitamos cartão de crédito e débito. PIX ainda não está disponível.' },
+      { question: 'Como funciona o rateio de valores?', answer: 'Em jogos abertos e em partidas privadas com rateio, o valor da quadra é dividido proporcionalmente entre os jogadores confirmados, mais a taxa de serviço.' },
+      { question: 'Recebi reembolso, quando cai na conta?', answer: 'Se o cancelamento acontece antes da cobrança, o valor bloqueado no cartão é apenas liberado — não há reembolso a processar. Se o valor já foi cobrado, o reembolso é processado em até 5 dias úteis, no mesmo método de pagamento.' }
     ]}
   ];
 
   const contactOptions = [
-    { icon: MessageCircle, title: 'Chat ao vivo', description: 'Resposta em até 5 minutos', action: 'Iniciar chat', color: 'bg-violet-600' },
-    { icon: Mail, title: 'E-mail', description: 'suporte@joggahub.com', action: 'Enviar e-mail', color: 'bg-purple-600' },
-    { icon: Phone, title: 'Telefone', description: '(11) 4002-8922', action: 'Ligar agora', color: 'bg-green-600' }
+    { icon: Mail, title: 'E-mail', description: 'info@joggahub.com', action: 'Enviar e-mail', color: 'bg-purple-600', href: 'mailto:info@joggahub.com' },
+    { icon: Phone, title: 'Telefone', description: '+353 83 085 9505', action: 'Ligar agora', color: 'bg-green-600', href: 'tel:+353830859505' }
   ];
 
   const toggleFaq = (categoryIndex: number, faqIndex: number) => {
@@ -68,11 +62,11 @@ export default function HelpPage() {
             {contactOptions.map((option, index) => {
               const Icon = option.icon;
               return (
-                <button key={index} className="bg-white rounded-xl p-4 shadow-sm border border-gray-200 flex items-center gap-4 hover:bg-gray-50 transition-colors">
+                <a key={index} href={option.href} className="bg-white rounded-xl p-4 shadow-sm border border-gray-200 flex items-center gap-4 hover:bg-gray-50 transition-colors">
                   <div className={`w-12 h-12 ${option.color} rounded-xl flex items-center justify-center text-white`}><Icon className="w-6 h-6" /></div>
                   <div className="flex-1 text-left"><h3 className="font-semibold text-gray-900">{option.title}</h3><p className="text-sm text-gray-500">{option.description}</p></div>
                   <span className="text-sm text-violet-600 font-semibold">{option.action}</span>
-                </button>
+                </a>
               );
             })}
           </div>
@@ -116,7 +110,7 @@ export default function HelpPage() {
         <div className="bg-violet-50 border border-violet-200 rounded-xl p-4">
           <h3 className="font-semibold text-violet-900 mb-2">Ainda precisa de ajuda?</h3>
           <p className="text-sm text-violet-800 mb-3">Nossa equipe está pronta para ajudar você com qualquer dúvida!</p>
-          <button className="w-full bg-violet-600 text-white py-3 rounded-lg font-semibold hover:bg-violet-700 transition-colors">Falar com suporte</button>
+          <a href="mailto:info@joggahub.com" className="block text-center w-full bg-violet-600 text-white py-3 rounded-lg font-semibold hover:bg-violet-700 transition-colors">Falar com suporte</a>
         </div>
       </div>
     </div>

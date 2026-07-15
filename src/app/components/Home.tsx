@@ -529,13 +529,15 @@ export default function Home() {
             <div className="text-sm text-gray-600 text-left">Quadras</div>
           </button>
 
-          <button onClick={() => navigate('/coaching')} className="flex-shrink-0 bg-white rounded-xl p-4 border-2 border-gray-200 hover:border-purple-600 transition-colors min-w-[160px]">
+          <button onClick={() => navigate('/coaching')} className="relative flex-shrink-0 bg-white rounded-xl p-4 border-2 border-gray-200 hover:border-purple-600 transition-colors min-w-[160px]">
+            <span className="absolute top-2 right-2 bg-amber-100 text-amber-700 text-[10px] font-semibold px-2 py-0.5 rounded-full">Em breve</span>
             <div className="bg-purple-100 rounded-full p-3 w-fit mb-3"><GraduationCap className="w-6 h-6 text-purple-600" /></div>
             <div className="font-semibold text-gray-900 text-left">Aulas</div>
             <div className="text-sm text-gray-600 text-left">Aprenda</div>
           </button>
 
-          <button onClick={() => navigate('/competitions')} className="flex-shrink-0 bg-white rounded-xl p-4 border-2 border-gray-200 hover:border-yellow-600 transition-colors min-w-[160px]">
+          <button onClick={() => navigate('/competitions')} className="relative flex-shrink-0 bg-white rounded-xl p-4 border-2 border-gray-200 hover:border-yellow-600 transition-colors min-w-[160px]">
+            <span className="absolute top-2 right-2 bg-amber-100 text-amber-700 text-[10px] font-semibold px-2 py-0.5 rounded-full">Em breve</span>
             <div className="bg-yellow-100 rounded-full p-3 w-fit mb-3"><Trophy className="w-6 h-6 text-yellow-600" /></div>
             <div className="font-semibold text-gray-900 text-left">Competições</div>
             <div className="text-sm text-gray-600 text-left">Participe</div>
