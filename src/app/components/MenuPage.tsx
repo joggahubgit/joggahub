@@ -4,7 +4,7 @@ import { useAuth } from '@/app/contexts/AuthContext';
 
 export default function MenuPage() {
   const navigate = useNavigate();
-  const { profile, signOut } = useAuth();
+  const { user, profile, signOut } = useAuth();
 
   const menuItems = [
     { icon: Calendar, label: 'Minhas Reservas', description: 'Histórico e gestão de reservas', onClick: () => navigate('/my-bookings'), color: 'blue' },
@@ -42,7 +42,7 @@ export default function MenuPage() {
             <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm"><User className="w-8 h-8" /></div>
             <div>
               <h2 className="text-xl font-bold">{profile?.name ?? 'Jogador'}</h2>
-              <p className="text-sm text-violet-100">jogador@joggahub.com</p>
+              <p className="text-sm text-violet-100">{user?.email}</p>
             </div>
           </div>
         </div>
