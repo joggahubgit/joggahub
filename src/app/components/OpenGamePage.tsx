@@ -409,9 +409,8 @@ export default function OpenGamePage() {
     const { data: prof } = await supabase.from('profiles').select('name').eq('id', user.id).single();
     const firstName = prof?.name?.split(' ')[0] ?? 'Jogador';
 
-    const { error: delErr } = await supabase.from('game_players').delete().eq('game_id', id).eq('player_id', user.id);
-    if (delErr) { setLeaving(false); setShowPlayerLeaveConfirm(false); return; }
-    await supabase.from('games').update({ current_players: currentPlayers - 1 }).eq('id', id);
+    const { error } = await supabase.functions.invoke('leave-game', { body: { gameId: id } });
+    if (error) { setLeaving(false); setShowPlayerLeaveConfirm(false); return; }
 
     await notifyGamePlayers(
       id!,
@@ -426,10 +425,8 @@ export default function OpenGamePage() {
   }
 
   async function handleRemovePlayer(index: number, player: Player) {
-    // Guard: block removal within 12h window (same rule as self-cancel)
     if (withinCancelCutoff) return;
 
-    // Fetch player_id to notify them
     const { data: gp } = await supabase
       .from('game_players')
       .select('player_id')
@@ -437,27 +434,17 @@ export default function OpenGamePage() {
       .eq('player_name', player.name)
       .single();
 
-    await supabase.from('game_players').delete().eq('game_id', id).eq('player_name', player.name);
-    await supabase.from('games').update({ current_players: currentPlayers - 1 }).eq('id', id);
+    if (!gp?.player_id) return;
 
-    // Notify the removed player
-    if (gp?.player_id) {
-      await notify(
-        gp.player_id,
-        'game_removed',
-        'Você foi removido de uma partida',
-        `Você foi removido da partida de ${sportLabel(courtSport)} em ${courtName}${date ? ` (${new Date(date + 'T00:00:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })})` : ''}. O estorno será processado conforme as políticas do JoggaHub.`,
-        id,
-      );
-      // Notify remaining players
-      await notifyGamePlayers(
-        id!,
-        gp.player_id,
-        'game_left',
-        'Jogador saiu da partida',
-        `${player.name.split(' ')[0]} foi removido da partida. Agora são ${currentPlayers - 1}/${maxPlayers} jogadores.`,
-      );
-    }
+    await supabase.functions.invoke('leave-game', { body: { gameId: id, targetPlayerId: gp.player_id } });
+
+    await notifyGamePlayers(
+      id!,
+      gp.player_id,
+      'game_left',
+      'Jogador saiu da partida',
+      `${player.name.split(' ')[0]} foi removido da partida. Agora são ${currentPlayers - 1}/${maxPlayers} jogadores.`,
+    );
 
     setPlayers(prev => prev.filter((_, pi) => pi !== index));
     setCurrentPlayers(p => p - 1);
