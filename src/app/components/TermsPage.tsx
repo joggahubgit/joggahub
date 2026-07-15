@@ -8,8 +8,8 @@ export default function TermsPage() {
     { title: '1. Aceitação dos Termos', content: 'Ao acessar e usar o JoggaHub, você concorda em cumprir e estar vinculado aos seguintes termos e condições de uso.' },
     { title: '2. Descrição do Serviço', content: 'O JoggaHub é uma plataforma digital que conecta jogadores amadores de futebol e facilita a reserva de quadras esportivas.' },
     { title: '3. Cadastro e Conta de Usuário', content: 'Para utilizar nossos serviços, você deve criar uma conta fornecendo informações precisas e completas. É obrigatório ter pelo menos 16 anos de idade.' },
-    { title: '4. Reservas e Pagamentos', content: 'Todas as reservas estão sujeitas à disponibilidade e confirmação. Os pagamentos devem ser realizados através dos métodos aceitos pela plataforma.' },
-    { title: '5. Política de Cancelamento', content: 'Cancelamentos com mais de 24h: reembolso integral. Entre 12-24h: taxa de 50%. Menos de 12h: sem reembolso. Em caso de condições climáticas extremas, reembolso integral.' },
+    { title: '4. Reservas e Pagamentos', content: 'Todas as reservas estão sujeitas à disponibilidade e confirmação. Os pagamentos são processados via Stripe com tecnologia de bloqueio temporário (hold): o valor é reservado no cartão no momento da inscrição e cobrado efetivamente apenas quando a partida for confirmada, conforme as regras de cada modalidade. A taxa de serviço JoggaHub (8% + R$ 2,50 por transação) é aplicada sobre o valor de cada jogador.' },
+    { title: '5. Política de Cancelamento', content: 'As regras de cancelamento variam por tipo de partida:\n\n• Partida Aberta: cancelamento com reembolso integral permitido até 24h antes do início. Após 24h, cancelamentos não são aceitos. Se o número mínimo de jogadores não for atingido até 2h antes do início, a partida é cancelada automaticamente e todos os bloqueios são liberados sem custo.\n\n• Partida Privada (Pagamento Total): o organizador pode cancelar com reembolso integral até 24h antes. Após 24h, o cancelamento é bloqueado e o valor é capturado automaticamente. Jogadores adicionados via link não têm custo e podem sair até 24h antes.\n\n• Partida Privada (Divisão): cancelamento com reembolso integral até 24h antes para todos os participantes. Após 24h, cancelamentos são bloqueados. A cobrança final ocorre 2h antes do início, proporcional ao número de jogadores confirmados — se o mínimo não for atingido, o organizador cobre a diferença.' },
     { title: '6. Conduta do Usuário', content: 'Você concorda em usar o JoggaHub apenas para fins legais. É proibido publicar conteúdo ofensivo, usar a plataforma para atividades fraudulentas ou fazer reservas falsas.' },
     { title: '7. Responsabilidades e Limitações', content: 'O JoggaHub atua como intermediário entre jogadores e quadras esportivas. Não somos responsáveis por lesões ou danos ocorridos durante os jogos.' },
     { title: '8. Propriedade Intelectual', content: 'Todo o conteúdo disponível no JoggaHub é propriedade do JoggaHub ou de seus fornecedores e está protegido por leis de direitos autorais.' },
@@ -33,7 +33,7 @@ export default function TermsPage() {
         <div className="bg-gradient-to-br from-violet-600 to-violet-700 rounded-2xl p-6 text-white">
           <div className="flex items-start gap-4 mb-4">
             <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm flex-shrink-0"><FileText className="w-6 h-6" /></div>
-            <div><h2 className="text-xl font-bold mb-2">Termos de Uso do JoggaHub</h2><p className="text-sm text-violet-100">Última atualização: 27 de fevereiro de 2026</p></div>
+            <div><h2 className="text-xl font-bold mb-2">Termos de Uso do JoggaHub</h2><p className="text-sm text-violet-100">Última atualização: 15 de julho de 2026</p></div>
           </div>
           <p className="text-sm text-violet-50">Leia atentamente estes termos antes de utilizar nossos serviços.</p>
         </div>
@@ -41,7 +41,7 @@ export default function TermsPage() {
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
           <h3 className="font-semibold text-gray-900 mb-3">Pontos Principais</h3>
           <div className="space-y-2">
-            {['Idade mínima de 16 anos para usar a plataforma', 'Cancelamento gratuito até 24h antes do jogo', 'Você é responsável pela segurança de sua conta', 'Conduta respeitosa é obrigatória'].map((point, i) => (
+            {['Idade mínima de 16 anos para usar a plataforma', 'Cancelamento com reembolso integral até 24h antes — após isso, sem reembolso', 'O valor é bloqueado no cartão e cobrado apenas quando a partida for confirmada', 'Conduta respeitosa é obrigatória'].map((point, i) => (
               <div key={i} className="flex items-start gap-2"><CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" /><p className="text-sm text-gray-600">{point}</p></div>
             ))}
           </div>
@@ -51,7 +51,11 @@ export default function TermsPage() {
           {sections.map((section, index) => (
             <div key={index} className="bg-white rounded-xl p-5 shadow-sm border border-gray-200">
               <h3 className="font-semibold text-gray-900 mb-2">{section.title}</h3>
-              <p className="text-sm text-gray-600 leading-relaxed">{section.content}</p>
+              <div className="text-sm text-gray-600 leading-relaxed space-y-2">
+                {section.content.split('\n\n').map((block, i) => (
+                  <p key={i}>{block}</p>
+                ))}
+              </div>
             </div>
           ))}
         </div>
