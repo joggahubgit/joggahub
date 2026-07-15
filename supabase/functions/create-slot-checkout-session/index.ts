@@ -86,16 +86,16 @@ serve(async (req) => {
     if (!courtPrice) throw new Error('Preço da quadra não encontrado');
 
     const isSplit = payMode === 'split';
+    const isFull = payMode === 'full';
     // Service fee: 8% + R$2,50 per transaction (same model as create-checkout-session)
     const serviceFee = Math.round((courtPrice * 0.08 + 2.50) * 100) / 100;
-    // Split: hold = courtPrice + serviceFee as guarantee (manual capture at cutoff)
-    // Full: charge courtPrice + serviceFee immediately
+    // Split and Full: hold = courtPrice + serviceFee (manual capture at cutoff)
     const totalCharge = Math.round((courtPrice + serviceFee) * 100) / 100;
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       mode: 'payment',
-      ...(isSplit && {
+      ...((isSplit || isFull) && {
         payment_intent_data: {
           capture_method: 'manual',
         },
@@ -106,10 +106,10 @@ serve(async (req) => {
             currency: 'brl',
             unit_amount: Math.round(courtPrice * 100),
             product_data: {
-              name: isSplit ? `Garantia de reserva — ${courtName}` : `Reserva — ${courtName}`,
+              name: isSplit ? `Garantia de reserva — ${courtName}` : `Bloqueio de reserva — ${courtName}`,
               description: isSplit
                 ? `${venueName} · ${date} · ${time}${endTime ? ` – ${endTime}` : ''} · Valor retido até o fim da partida`
-                : `${venueName} · ${date} · ${time}${endTime ? ` – ${endTime}` : ''}`,
+                : `${venueName} · ${date} · ${time}${endTime ? ` – ${endTime}` : ''} · Valor cobrado 24h antes da partida`,
             },
           },
           quantity: 1,

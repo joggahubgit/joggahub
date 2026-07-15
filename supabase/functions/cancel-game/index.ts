@@ -103,24 +103,38 @@ serve(async (req) => {
     const refunds: { name: string; status: string }[] = [];
 
     if (isPrivateGame && slotId) {
-      // Private game: payment was made via slot checkout session — search by slotId
-      const sessions = await stripe.checkout.sessions.list({ limit: 100 });
-      const matching = sessions.data.find(
-        s => s.metadata?.slotId === slotId && s.payment_status === 'paid'
-      );
+      // Private game: resolve PI from stripe_session_id (if stored) or search by slotId
+      let paymentIntentId: string | null = null;
 
-      if (matching) {
-        const paymentIntentId = typeof matching.payment_intent === 'string'
-          ? matching.payment_intent
-          : matching.payment_intent?.id;
+      if (game?.stripe_session_id) {
+        try {
+          const orgSession = await stripe.checkout.sessions.retrieve(game.stripe_session_id);
+          paymentIntentId = typeof orgSession.payment_intent === 'string'
+            ? orgSession.payment_intent
+            : orgSession.payment_intent?.id ?? null;
+        } catch (_) { /* fall through to slotId search */ }
+      }
 
-        if (paymentIntentId) {
-          try {
-            const refund = await stripe.refunds.create({ payment_intent: paymentIntentId });
-            refunds.push({ name: 'Organizador', status: refund.status });
-          } catch (e: any) {
-            refunds.push({ name: 'Organizador', status: e.message ?? 'error' });
-          }
+      if (!paymentIntentId) {
+        // Fallback: search by slotId (covers old games without stripe_session_id)
+        const sessions = await stripe.checkout.sessions.list({ limit: 100 });
+        const matching = sessions.data.find(
+          s => s.metadata?.slotId === slotId &&
+               (s.payment_status === 'paid' || s.payment_status === 'unpaid'),
+        );
+        if (matching) {
+          paymentIntentId = typeof matching.payment_intent === 'string'
+            ? matching.payment_intent
+            : matching.payment_intent?.id ?? null;
+        }
+      }
+
+      if (paymentIntentId) {
+        try {
+          await cancelOrReleasePi(stripe, paymentIntentId);
+          refunds.push({ name: 'Organizador', status: 'released' });
+        } catch (e: any) {
+          refunds.push({ name: 'Organizador', status: e.message ?? 'error' });
         }
       } else {
         refunds.push({ name: 'Organizador', status: 'manual_required' });

@@ -384,13 +384,86 @@ serve(async (req) => {
   }
 
   // ─────────────────────────────────────────────────────────────────────
-  // S. SPLIT PAYMENT CAPTURE: 12h before game start (cancel cutoff)
+  // F. FULL PRIVATE CAPTURE: 24h before game start
   //
-  //    For each split private game where cutoff has been reached:
-  //    - Each joiner: capture court_price / max(N,10) * 1.15
-  //    - Organizer:   capture the remainder so total = court_price * 1.15
-  //      → if N >= 10: court_price / N * 1.15
-  //      → if N <  10: court_price * 1.15 * (11 - N) / 10  (covers shortfall)
+  //    For confirmed private full games (is_open=false, pay_mode='full'):
+  //    - Retrieve organizer's PI from games.stripe_session_id
+  //    - Capture full amount (court_price + service fee already included in hold)
+  //    - Mark stripe_split_captured = true to prevent double-capture
+  // ─────────────────────────────────────────────────────────────────────
+  {
+    const stripeKeyFull = Deno.env.get('STRIPE_SECRET_KEY') ?? '';
+
+    const { data: fullGames, error: fullErr } = await supabase
+      .from('games')
+      .select('id, slot_id, stripe_session_id')
+      .eq('is_open', false)
+      .eq('pay_mode', 'full')
+      .eq('stripe_split_captured', false)
+      .eq('status', 'confirmed_booking')
+      .not('stripe_session_id', 'is', null);
+
+    if (fullErr) {
+      results.errors.push(`full-capture fetch: ${fullErr.message}`);
+    } else {
+      for (const game of fullGames ?? []) {
+        if (!game.slot_id) continue;
+
+        const { data: slot } = await supabase
+          .from('slots')
+          .select('start_time')
+          .eq('id', game.slot_id)
+          .single();
+
+        if (!slot?.start_time) continue;
+
+        // Trigger at 24h before start
+        const cutoffMs = new Date(slot.start_time).getTime() - 24 * 60 * 60 * 1000;
+        if (Date.now() < cutoffMs) continue;
+
+        try {
+          const sessRes = await fetch(
+            `https://api.stripe.com/v1/checkout/sessions/${game.stripe_session_id}`,
+            { headers: { Authorization: `Bearer ${stripeKeyFull}` } },
+          );
+          const sessData = await sessRes.json();
+          const piId = sessData?.payment_intent;
+
+          if (!piId) {
+            results.errors.push(`full-capture game ${game.id}: no payment_intent on session`);
+            continue;
+          }
+
+          const captureRes = await fetch(
+            `https://api.stripe.com/v1/payment_intents/${piId}/capture`,
+            {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${stripeKeyFull}` },
+            },
+          );
+          const captureData = await captureRes.json();
+
+          if (captureData.error) {
+            results.errors.push(`full-capture game ${game.id}: ${captureData.error.message}`);
+            continue;
+          }
+
+          await supabase.from('games').update({ stripe_split_captured: true }).eq('id', game.id);
+        } catch (e: any) {
+          results.errors.push(`full-capture game ${game.id}: ${e.message}`);
+        }
+      }
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // S. SPLIT PAYMENT CAPTURE: 2h before game start (player entry closes)
+  //
+  //    For each split private game where 2h cutoff has been reached:
+  //    - Each joiner: capture court_price / max(N,10) * 1.08 + 2.50
+  //    - Organizer:   capture the remainder so total = court_price * 1.08 + 2.50
+  //      → if N >= 10: court_price / N * 1.08 + 2.50
+  //      → if N <  10: organizer covers shortfall
   //
   //    Joiner PIs stored in game_players.stripe_payment_intent_id.
   //    Organizer PI resolved from games.stripe_session_id via Stripe API.
@@ -421,8 +494,8 @@ serve(async (req) => {
 
         if (!slot?.start_time) continue;
 
-        // Trigger at 12h before start (cancel cutoff)
-        const cutoffMs = new Date(slot.start_time).getTime() - 12 * 60 * 60 * 1000;
+        // Trigger at 2h before start (player entry closes + capture)
+        const cutoffMs = new Date(slot.start_time).getTime() - 2 * 60 * 60 * 1000;
         if (Date.now() < cutoffMs) continue;
 
         // court_price: authoritative column, fallback to price_per_player * 10
@@ -438,7 +511,6 @@ serve(async (req) => {
         const joinerShare = (courtPriceVal / Math.max(N, 10)) * (1 + PLATFORM_FEE_PERCENT) + PLATFORM_FEE_FIXED;
 
         // Organizer capture = their court share + platform fee
-        const joinersCount = N - 1;
         let organizerCapture: number;
         if (N >= 10) {
           organizerCapture = (courtPriceVal / N) * (1 + PLATFORM_FEE_PERCENT) + PLATFORM_FEE_FIXED;
