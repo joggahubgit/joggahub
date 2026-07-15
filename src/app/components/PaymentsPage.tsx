@@ -49,9 +49,13 @@ function calcAmount(g: GameRow | null): number {
   return Math.round(((cp / N) * 1.08 + 2.50) * 100) / 100;
 }
 
-function paymentStatus(g: GameRow | null): 'paid' | 'hold' | 'refunded' {
+function paymentStatus(g: GameRow | null): 'paid' | 'hold' | 'refunded' | 'released' {
   if (!g) return 'hold';
-  if (g.status === 'cancelled' || g.status === 'expired') return 'refunded';
+  if (g.status === 'cancelled' || g.status === 'expired') {
+    // Money only actually moved if the hold had already been captured before cancellation.
+    // Most cancellations happen before the capture cutoff, so the hold is just released — no charge, no refund.
+    return g.stripe_split_captured ? 'refunded' : 'released';
+  }
   if (g.stripe_split_captured) return 'paid';
   return 'hold';
 }
@@ -108,14 +112,21 @@ export default function PaymentsPage() {
     const d = new Date(s);
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   });
-  const thisMonthTotal = thisMonthEntries.reduce((sum, e) => sum + calcAmount(e.games), 0);
-  const avgPerGame = thisMonthEntries.length > 0 ? thisMonthTotal / thisMonthEntries.length : 0;
+  // Only count money that's actually committed right now (charged or on hold) —
+  // released/refunded games shouldn't inflate "total comprometido".
+  const committedThisMonth = thisMonthEntries.filter(e => {
+    const s = paymentStatus(e.games);
+    return s === 'paid' || s === 'hold';
+  });
+  const thisMonthTotal = committedThisMonth.reduce((sum, e) => sum + calcAmount(e.games), 0);
+  const avgPerGame = committedThisMonth.length > 0 ? thisMonthTotal / committedThisMonth.length : 0;
 
   const statusBadge = (g: GameRow | null) => {
     const s = paymentStatus(g);
     if (s === 'paid') return <span className="px-2.5 py-0.5 bg-green-100 text-green-700 text-xs font-semibold rounded-full">Pago</span>;
     if (s === 'hold') return <span className="px-2.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">Bloqueado</span>;
-    return <span className="px-2.5 py-0.5 bg-orange-100 text-orange-700 text-xs font-semibold rounded-full">Reembolsado</span>;
+    if (s === 'refunded') return <span className="px-2.5 py-0.5 bg-orange-100 text-orange-700 text-xs font-semibold rounded-full">Reembolsado</span>;
+    return <span className="px-2.5 py-0.5 bg-gray-100 text-gray-600 text-xs font-semibold rounded-full">Liberado</span>;
   };
 
   return (
@@ -141,8 +152,8 @@ export default function PaymentsPage() {
               <>
                 <h2 className="text-3xl font-bold mb-4">R$ {thisMonthTotal.toFixed(2)}</h2>
                 <div className="flex gap-6 text-sm">
-                  <div><p className="text-violet-100">Partidas</p><p className="font-semibold">{thisMonthEntries.length}</p></div>
-                  {thisMonthEntries.length > 0 && (
+                  <div><p className="text-violet-100">Partidas</p><p className="font-semibold">{committedThisMonth.length}</p></div>
+                  {committedThisMonth.length > 0 && (
                     <div><p className="text-violet-100">Média por partida</p><p className="font-semibold">R$ {avgPerGame.toFixed(2)}</p></div>
                   )}
                 </div>
@@ -186,7 +197,7 @@ export default function PaymentsPage() {
                         )}
                       </div>
                       <div className="text-right flex-shrink-0">
-                        <p className={`text-lg font-bold ${status === 'refunded' ? 'text-orange-600' : 'text-gray-900'}`}>
+                        <p className={`text-lg font-bold ${status === 'refunded' ? 'text-orange-600' : status === 'released' ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
                           {status === 'refunded' ? '–' : ''}R$ {amount.toFixed(2)}
                         </p>
                         <p className="text-xs text-gray-500">{gameTypeLabel(g)}</p>
@@ -195,12 +206,17 @@ export default function PaymentsPage() {
                     <div className="pt-3 border-t border-gray-100 flex items-center gap-4">
                       {g && (
                         <div className="flex items-center gap-1 text-sm text-gray-500">
-                          <Users className="w-4 h-4" /><span>{g.current_players} jogadores</span>
+                          <Users className="w-4 h-4" /><span>{g.current_players} {g.current_players === 1 ? 'jogador' : 'jogadores'}</span>
                         </div>
                       )}
                       {status === 'hold' && (
                         <div className="flex items-center gap-1 text-sm text-blue-600">
                           <Clock className="w-4 h-4" /><span>Aguardando cobrança</span>
+                        </div>
+                      )}
+                      {status === 'released' && (
+                        <div className="flex items-center gap-1 text-sm text-gray-400">
+                          <span>Bloqueio liberado, sem cobrança</span>
                         </div>
                       )}
                     </div>
