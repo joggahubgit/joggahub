@@ -329,6 +329,11 @@ export default function OpenGamePage() {
         time,
         endTime,
         pricePerPlayer,
+        mode: 'join_other',
+        isPrivate,
+        gamePayMode,
+        currentPlayers,
+        maxPlayers,
       },
     });
   }

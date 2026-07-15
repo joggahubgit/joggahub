@@ -59,7 +59,7 @@ export default function JoinGameReview() {
     : '';
 
   const isSelf = state.mode === 'join_self';
-  const isFree = state.gamePayMode === 'full' || state.pricePerPlayer === 0;
+  const isFree = (state.isPrivate && state.gamePayMode === 'full') || state.pricePerPlayer === 0;
   const { fee, total: priceTotal } = calcFees(state.pricePerPlayer);
 
   async function handleConfirmFree() {
@@ -131,6 +131,8 @@ export default function JoinGameReview() {
         time: state.time,
         vagaPrice: state.pricePerPlayer,
         mode: isSelf ? 'join_self' : 'join_other',
+        captureManual: true,
+        payMode: 'split',
       });
     } catch (e: any) {
       setError(e.message);
