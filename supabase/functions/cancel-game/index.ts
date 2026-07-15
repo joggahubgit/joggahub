@@ -181,7 +181,7 @@ serve(async (req) => {
 
     // For private games: also cancel the associated booking
     if (isPrivateGame) {
-      const refunded = refunds.some(r => r.status === 'succeeded');
+      const refunded = refunds.some(r => r.status === 'released');
       await supabase
         .from('bookings')
         .update({ status: 'cancelled', payment_status: refunded ? 'refunded' : 'failed' })
@@ -218,7 +218,7 @@ serve(async (req) => {
 
     // Notify organizer for private games
     if (isPrivateGame && organizerId) {
-      const refunded = refunds.some(r => r.status === 'succeeded');
+      const refunded = refunds.some(r => r.status === 'released');
       await supabase.from('notifications').insert({
         user_id: organizerId,
         type: 'game_cancelled',
