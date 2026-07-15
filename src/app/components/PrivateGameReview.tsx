@@ -53,11 +53,12 @@ export default function PrivateGameReview() {
   const formattedDate = date ? formatDate(date) : '';
   const origin = window.location.origin;
 
-  // Cutoff = 12 hours before the slot start time
+  // Cutoff for split = 2h before (capture), for full = 24h before (capture + cancel lock)
+  const cutoffHours = payMode === 'full' ? 24 : 2;
   const deadlineLabel = (() => {
     if (!date || !time) return '';
     const start = new Date(date + 'T' + time + ':00');
-    start.setHours(start.getHours() - 12);
+    start.setHours(start.getHours() - cutoffHours);
     const dayMonth = start.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' });
     const hhmm = `${String(start.getHours()).padStart(2, '0')}:${String(start.getMinutes()).padStart(2, '0')}`;
     return `${dayMonth} às ${hhmm}`;
@@ -232,9 +233,14 @@ export default function PrivateGameReview() {
               <span className="font-semibold text-gray-900">R$ {fee.toFixed(2)}</span>
             </div>
             <div className="flex justify-between pt-3 mt-1 border-t border-gray-100">
-              <span className="font-bold text-gray-900">Você paga agora</span>
+              <div>
+                <span className="font-bold text-gray-900">Bloqueio no cartão</span>
+                {payMode === 'full' && (
+                  <p className="text-xs text-gray-400 mt-0.5">Cobrado 24h antes da partida</p>
+                )}
+              </div>
               <div className="text-right">
-                <span className="text-xl font-black text-violet-600">R$ {total.toFixed(2)}</span>
+                <span className="text-xl font-black text-violet-600">R$ {(payMode === 'split' ? total : holdTotal).toFixed(2)}</span>
                 {payMode === 'split' && (
                   <p className="text-xs text-gray-400 mt-0.5">R$ {holdTotal.toFixed(2)} retidos como garantia</p>
                 )}
@@ -244,7 +250,19 @@ export default function PrivateGameReview() {
         </div>
 
 
-        {/* Hold info — split only */}
+        {/* Hold info */}
+        {payMode === 'full' && (
+          <div className="bg-blue-50 rounded-2xl p-3.5 border border-blue-100 space-y-1.5">
+            <p className="text-xs text-blue-900 leading-relaxed">
+              Retemos <strong>R$ {holdTotal.toFixed(2)}</strong> no seu cartão como garantia. A cobrança acontece apenas 24h antes da partida.
+            </p>
+            {deadlineLabel && (
+              <p className="text-xs text-blue-700 leading-relaxed">
+                Cobrança e bloqueio de cancelamento: <strong>{deadlineLabel}</strong>.
+              </p>
+            )}
+          </div>
+        )}
         {payMode === 'split' && (
           <div className="bg-blue-50 rounded-2xl p-3.5 border border-blue-100 space-y-1.5">
             <p className="text-xs text-blue-900 leading-relaxed">
@@ -252,7 +270,7 @@ export default function PrivateGameReview() {
             </p>
             {deadlineLabel && (
               <p className="text-xs text-blue-700 leading-relaxed">
-                12h antes do jogo (<strong>{deadlineLabel}</strong>) o valor é ajustado pelo número real de jogadores e cobrado de cada um.
+                2h antes do jogo (<strong>{deadlineLabel}</strong>) o valor é ajustado pelo número real de jogadores e cobrado de cada um.
               </p>
             )}
           </div>
@@ -291,17 +309,15 @@ export default function PrivateGameReview() {
         >
           {loading
             ? <><Loader2 className="w-5 h-5 animate-spin" /> Aguarde...</>
-            : <><CreditCard className="w-5 h-5" /> Pagar R$ {total.toFixed(2)} <ChevronRight className="w-5 h-5" /></>}
+            : <><CreditCard className="w-5 h-5" /> Garantir reserva · R$ {holdTotal.toFixed(2)} <ChevronRight className="w-5 h-5" /></>}
         </button>
 
         <p className="text-center text-xs text-gray-400">
           Você será redirecionado para a página segura do Stripe
         </p>
-        {payMode === 'split' && (
-          <p className="text-center text-xs text-gray-400 -mt-1">
-            R$ {holdTotal.toFixed(2)} serão retidos no cartão como garantia da reserva completa
-          </p>
-        )}
+        <p className="text-center text-xs text-gray-400 -mt-1">
+          R$ {holdTotal.toFixed(2)} retidos agora · cobrança real {payMode === 'full' ? '24h antes' : '2h antes'}
+        </p>
 
       </div>
     </div>

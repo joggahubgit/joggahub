@@ -147,7 +147,7 @@ export default function PaymentSuccess() {
               is_open: false,
               status: 'confirmed_booking',
               game_type: 'casual',
-              ...(payMode === 'split' && sessionId ? { stripe_session_id: sessionId } : {}),
+              ...(sessionId ? { stripe_session_id: sessionId } : {}),
             })
             .select('id')
             .single();
