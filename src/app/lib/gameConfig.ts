@@ -16,7 +16,7 @@ export const PLATFORM_FEE_FIXED = 2.50;
 export const DEFAULT_MIN_PLAYERS = 10;
 
 /** Hours before game start within which a player cannot self-cancel. */
-export const PLAYER_CANCEL_CUTOFF_HOURS = 12;
+export const PLAYER_CANCEL_CUTOFF_HOURS = 24;
 
 /** Minutes after game end before automatic transition to pending_results. */
 export const PENDING_RESULTS_DELAY_MINUTES = 5;

@@ -7,6 +7,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Hours before game start within which only the venue admin can cancel (organizer self-cancel is blocked).
+const CANCEL_CUTOFF_HOURS = 24;
+
 // Cancel hold (requires_capture) or refund if already captured
 async function cancelOrReleasePi(stripe: Stripe, piId: string): Promise<void> {
   try {
@@ -60,12 +63,11 @@ serve(async (req) => {
     const slotId = game?.slot_id ?? null;
     const bookingId = game?.booking_id ?? null;
     const isPrivateGame = !!bookingId;
-    const isOpenGame = game?.is_open === true;
 
-    // ── Authorization: venue admin OR organizer of an open game ──
-    const isOrganizerCancelling = isOpenGame && game?.organizer_id === callerId;
+    // ── Authorization: venue admin OR the game's organizer (open or private) ──
+    const isOrganizerCancelling = !!game?.organizer_id && game.organizer_id === callerId;
 
-    // Fetch slot data upfront — needed for auth check and slot release
+    // Fetch slot data upfront — needed for auth check, cutoff check, and slot release
     const { data: slotData } = slotId
       ? await supabase.from('slots').select('court_id, start_time').eq('id', slotId).single()
       : { data: null };
@@ -78,6 +80,17 @@ serve(async (req) => {
       const { data: venueData } = await supabase.from('venues').select('admin_id').eq('id', courtData?.venue_id ?? '').single();
       if (venueData?.admin_id !== callerId) {
         return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: corsHeaders });
+      }
+    }
+
+    // ── Cutoff: organizer self-cancel is blocked within 24h of start; the venue admin can still act ──
+    if (isOrganizerCancelling && slotData?.start_time) {
+      const hoursUntil = (new Date(slotData.start_time).getTime() - Date.now()) / (1000 * 60 * 60);
+      if (hoursUntil < CANCEL_CUTOFF_HOURS) {
+        return new Response(
+          JSON.stringify({ error: `Cancelamento não permitido dentro das ${CANCEL_CUTOFF_HOURS}h anteriores à partida. Entre em contato com o clube.` }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
       }
     }
 

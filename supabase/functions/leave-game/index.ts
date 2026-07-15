@@ -62,7 +62,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: corsHeaders });
     }
 
-    // Check cutoff: must be before 12h before game start
+    // Check cutoff: must be before 24h before game start
     if (game.slot_id) {
       const { data: slot } = await supabase
         .from('slots')

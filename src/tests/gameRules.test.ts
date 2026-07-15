@@ -110,16 +110,16 @@ describe('Game confirmation — minimum players rule', () => {
   });
 });
 
-describe('Player cancel window — 12h rule', () => {
+describe('Player cancel window — 24h rule', () => {
   const hoursToMs = (h: number) => h * 60 * 60 * 1000;
 
-  it('allows cancel when more than 12h before start', () => {
-    const futureStart = new Date(Date.now() + hoursToMs(13)).toISOString();
+  it('allows cancel when more than 24h before start', () => {
+    const futureStart = new Date(Date.now() + hoursToMs(25)).toISOString();
     expect(isWithinCancelCutoff(futureStart)).toBe(false);
   });
 
-  it('blocks cancel when less than 12h before start', () => {
-    const nearStart = new Date(Date.now() + hoursToMs(11)).toISOString();
+  it('blocks cancel when less than 24h before start', () => {
+    const nearStart = new Date(Date.now() + hoursToMs(23)).toISOString();
     expect(isWithinCancelCutoff(nearStart)).toBe(true);
   });
 
@@ -128,14 +128,14 @@ describe('Player cancel window — 12h rule', () => {
     expect(isWithinCancelCutoff(pastStart)).toBe(true);
   });
 
-  it('blocks cancel at exactly 12h before start (boundary — cutoff is strict <)', () => {
+  it('blocks cancel at exactly 24h before start (boundary — cutoff is strict <)', () => {
     // exactly at cutoff: msUntilStart == CUTOFF_HOURS * 3600 * 1000
-    // isWithinCancelCutoff uses strict < so exactly 12h should NOT be blocked
+    // isWithinCancelCutoff uses strict < so exactly 24h should NOT be blocked
     const exactCutoff = new Date(Date.now() + hoursToMs(PLAYER_CANCEL_CUTOFF_HOURS)).toISOString();
     expect(isWithinCancelCutoff(exactCutoff)).toBe(false);
   });
 
-  it('blocks cancel at 12h - 1ms before start', () => {
+  it('blocks cancel at 24h - 1ms before start', () => {
     const justBeforeCutoff = new Date(Date.now() + hoursToMs(PLAYER_CANCEL_CUTOFF_HOURS) - 1).toISOString();
     expect(isWithinCancelCutoff(justBeforeCutoff)).toBe(true);
   });
