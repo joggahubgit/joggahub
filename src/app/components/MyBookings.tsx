@@ -313,6 +313,7 @@ export default function MyBookings() {
 
   function canCancel(item: Item) {
     if (item.type === 'game_player') return false; // player can't cancel whole game
+    if (item.type === 'game_organizer') return false; // organizer cancels from the game details page instead
     if (!isUpcoming(item)) return false;
     if (item.withinCancelCutoff) return false; // within 12h — only club can cancel
     return true;
@@ -440,7 +441,7 @@ export default function MyBookings() {
                 className="flex items-center gap-1.5 text-sm text-red-500 font-semibold hover:text-red-700 transition-colors"
               >
                 <XCircle className="w-4 h-4" />
-                {item.type === 'game_organizer' ? 'Cancelar partida' : 'Cancelar'}
+                Cancelar
               </button>
             ) : item.withinCancelCutoff && isUpcoming(item) && item.type === 'game_organizer' ? (
               <span className="flex items-center gap-1 text-[10px] text-gray-400 font-semibold">
