@@ -98,7 +98,8 @@ export default function OpenGameReview() {
         mode: 'organizer',
         slotId: state.slotId,
         durationMins,
-        successUrl: `${origin}/payment-success?${successParams}`,
+        captureManual: true,
+        successUrl: `${origin}/payment-success?${successParams}&session_id={CHECKOUT_SESSION_ID}`,
         cancelUrl: `${origin}/court-details/${state.courtId}`,
       });
     } catch (e: any) {
@@ -185,8 +186,8 @@ export default function OpenGameReview() {
             </div>
             <div className="border-t border-gray-100 pt-3 flex items-center justify-between">
               <div>
-                <p className="font-bold text-gray-900">Total</p>
-                <p className="text-xs text-gray-400 mt-0.5">Você paga agora</p>
+                <p className="font-bold text-gray-900">Bloqueio no cartão</p>
+                <p className="text-xs text-gray-400 mt-0.5">O valor cobrado será proporcional aos jogadores confirmados</p>
               </div>
               <p className="text-2xl font-bold text-violet-600">R$ {total.toFixed(2)}</p>
             </div>
@@ -243,7 +244,7 @@ export default function OpenGameReview() {
         >
           {creating
             ? <><Loader2 className="w-5 h-5 animate-spin" /> Processando...</>
-            : <><CheckCircle className="w-5 h-5" /> Pagar minha parte · R$ {total.toFixed(2)}</>}
+            : <><CheckCircle className="w-5 h-5" /> Garantir minha vaga · R$ {total.toFixed(2)}</>}
         </button>
       </div>
     </div>

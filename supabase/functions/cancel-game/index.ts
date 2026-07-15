@@ -7,6 +7,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Cancel hold (requires_capture) or refund if already captured
+async function cancelOrReleasePi(stripe: Stripe, piId: string): Promise<void> {
+  try {
+    await stripe.paymentIntents.cancel(piId);
+  } catch (_) {
+    await stripe.refunds.create({ payment_intent: piId });
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -41,26 +50,35 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     );
 
-    // Fetch game — need slot_id and booking_id to handle private vs open games
+    // Fetch game — need slot_id, booking_id, organizer_id, is_open, and stripe_session_id for hold release
     const { data: game } = await supabase
       .from('games')
-      .select('slot_id, booking_id, scheduled_end_at')
+      .select('slot_id, booking_id, scheduled_end_at, organizer_id, is_open, stripe_session_id')
       .eq('id', gameId)
       .single();
 
     const slotId = game?.slot_id ?? null;
     const bookingId = game?.booking_id ?? null;
     const isPrivateGame = !!bookingId;
+    const isOpenGame = game?.is_open === true;
 
-    // ── Authorization: caller must be the venue admin ──
-    if (!slotId) {
-      return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: corsHeaders });
-    }
-    const { data: slotData } = await supabase.from('slots').select('court_id, start_time').eq('id', slotId).single();
-    const { data: courtData } = await supabase.from('courts').select('venue_id').eq('id', slotData?.court_id ?? '').single();
-    const { data: venueData } = await supabase.from('venues').select('admin_id').eq('id', courtData?.venue_id ?? '').single();
-    if (venueData?.admin_id !== callerId) {
-      return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: corsHeaders });
+    // ── Authorization: venue admin OR organizer of an open game ──
+    const isOrganizerCancelling = isOpenGame && game?.organizer_id === callerId;
+
+    // Fetch slot data upfront — needed for auth check and slot release
+    const { data: slotData } = slotId
+      ? await supabase.from('slots').select('court_id, start_time').eq('id', slotId).single()
+      : { data: null };
+
+    if (!isOrganizerCancelling) {
+      if (!slotId || !slotData) {
+        return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: corsHeaders });
+      }
+      const { data: courtData } = await supabase.from('courts').select('venue_id').eq('id', slotData.court_id ?? '').single();
+      const { data: venueData } = await supabase.from('venues').select('admin_id').eq('id', courtData?.venue_id ?? '').single();
+      if (venueData?.admin_id !== callerId) {
+        return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: corsHeaders });
+      }
     }
 
     // Fetch organizer from booking (private game) for notifications
@@ -107,35 +125,36 @@ serve(async (req) => {
       } else {
         refunds.push({ name: 'Organizador', status: 'manual_required' });
       }
-    } else if (!isPrivateGame && paidPlayers.length > 0) {
-      // Open game: payment sessions are tagged with gameId metadata
-      const sessions = await stripe.checkout.sessions.list({ limit: 100 });
-      const matchingSessions = sessions.data.filter(
-        s => s.metadata?.gameId === gameId && s.payment_status === 'paid'
-      );
+    } else if (!isPrivateGame) {
+      // Open game: cancel each player's hold via game_players.stripe_payment_intent_id
+      const { data: playersWithPI } = await supabase
+        .from('game_players')
+        .select('player_id, player_name, stripe_payment_intent_id')
+        .eq('game_id', gameId)
+        .not('stripe_payment_intent_id', 'is', null);
 
-      for (const session of matchingSessions) {
-        const playerName = session.metadata?.playerName ?? 'Jogador';
-        const paymentIntentId = typeof session.payment_intent === 'string'
-          ? session.payment_intent
-          : session.payment_intent?.id;
-
-        if (!paymentIntentId) {
-          refunds.push({ name: playerName, status: 'no_payment_intent' });
-          continue;
-        }
-
+      for (const gp of playersWithPI ?? []) {
         try {
-          const refund = await stripe.refunds.create({ payment_intent: paymentIntentId });
-          refunds.push({ name: playerName, status: refund.status });
+          await cancelOrReleasePi(stripe, gp.stripe_payment_intent_id!);
+          refunds.push({ name: gp.player_name, status: 'released' });
         } catch (e: any) {
-          refunds.push({ name: playerName, status: e.message ?? 'error' });
+          refunds.push({ name: gp.player_name, status: e.message ?? 'error' });
         }
       }
 
-      if (matchingSessions.length === 0) {
-        for (const p of paidPlayers) {
-          refunds.push({ name: p.player_name, status: 'manual_required' });
+      // Organizer's hold is via games.stripe_session_id (gameId was '' at checkout time)
+      if (game?.stripe_session_id) {
+        try {
+          const orgSession = await stripe.checkout.sessions.retrieve(game.stripe_session_id);
+          const orgPI = typeof orgSession.payment_intent === 'string'
+            ? orgSession.payment_intent
+            : orgSession.payment_intent?.id;
+          if (orgPI) {
+            await cancelOrReleasePi(stripe, orgPI);
+            refunds.push({ name: 'Organizador', status: 'released' });
+          }
+        } catch (e: any) {
+          refunds.push({ name: 'Organizador', status: e.message ?? 'error' });
         }
       }
     }

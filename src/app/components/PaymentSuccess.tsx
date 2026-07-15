@@ -203,6 +203,7 @@ export default function PaymentSuccess() {
               is_open: true,
               game_type: 'casual',
               status: 'scheduled',
+              ...(sessionId ? { stripe_session_id: sessionId } : {}),
             })
             .select('id')
             .single();

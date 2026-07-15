@@ -164,7 +164,7 @@ serve(async (req) => {
   {
     const { data: openScheduled, error: openErr } = await supabase
       .from('games')
-      .select('id, slot_id, court_id, current_players, organizer_id')
+      .select('id, slot_id, court_id, current_players, organizer_id, stripe_session_id')
       .eq('status', 'scheduled')
       .eq('is_open', true)
       .not('slot_id', 'is', null);
@@ -259,6 +259,22 @@ serve(async (req) => {
           }
         }
 
+        // Cancel organizer's hold via session (gameId was '' at checkout time)
+        if (game.stripe_session_id) {
+          const orgSessRes = await fetch(
+            `https://api.stripe.com/v1/checkout/sessions/${game.stripe_session_id}`,
+            { headers: { Authorization: `Bearer ${stripeKeyCancelAuto}` } },
+          );
+          const orgSessData = await orgSessRes.json();
+          const orgPI = orgSessData?.payment_intent;
+          if (orgPI) {
+            await fetch(`https://api.stripe.com/v1/payment_intents/${orgPI}/cancel`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${stripeKeyCancelAuto}` },
+            });
+          }
+        }
+
         const playerIds = (gamePlayers ?? []).map((p: { player_id: string }) => p.player_id);
 
         if (playerIds.length > 0) {
@@ -302,7 +318,7 @@ serve(async (req) => {
 
     const { data: openConfirmed, error: openConfirmedErr } = await supabase
       .from('games')
-      .select('id, current_players, court_price, price_per_player, slot_id')
+      .select('id, current_players, court_price, price_per_player, slot_id, stripe_session_id, organizer_id')
       .eq('is_open', true)
       .eq('status', 'confirmed_booking')
       .eq('stripe_split_captured', false)
@@ -340,6 +356,8 @@ serve(async (req) => {
           .not('stripe_payment_intent_id', 'is', null);
 
         let captureErrors = 0;
+
+        // Capture each joiner's hold (organizer excluded — they have no PI in game_players)
         for (const p of players ?? []) {
           const res = await fetch(
             `https://api.stripe.com/v1/payment_intents/${p.stripe_payment_intent_id}/capture`,
@@ -356,6 +374,35 @@ serve(async (req) => {
           if (data.error) {
             results.errors.push(`open-capture player ${p.player_id} game ${game.id}: ${data.error.message}`);
             captureErrors++;
+          }
+        }
+
+        // Capture organizer's hold via their checkout session
+        if (game.stripe_session_id && game.organizer_id) {
+          const orgSessRes = await fetch(
+            `https://api.stripe.com/v1/checkout/sessions/${game.stripe_session_id}`,
+            { headers: { Authorization: `Bearer ${stripeKeyOpen}` } },
+          );
+          const orgSessData = await orgSessRes.json();
+          const orgPI = orgSessData?.payment_intent;
+
+          if (orgPI) {
+            const orgCaptureRes = await fetch(
+              `https://api.stripe.com/v1/payment_intents/${orgPI}/capture`,
+              {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${stripeKeyOpen}`,
+                  'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `amount_to_capture=${Math.round(capturePerPlayer * 100)}`,
+              },
+            );
+            const orgCaptureData = await orgCaptureRes.json();
+            if (orgCaptureData.error) {
+              results.errors.push(`open-capture organizer game ${game.id}: ${orgCaptureData.error.message}`);
+              captureErrors++;
+            }
           }
         }
 

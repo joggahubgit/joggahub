@@ -87,18 +87,19 @@ serve(async (req) => {
 
     if (!gp) throw new Error('Jogador não encontrado na partida');
 
-    // Attempt refund if player paid
+    // Release payment: cancel hold if not yet captured, otherwise refund
     let refunded = false;
     if (gp.paid) {
       let paymentIntentId: string | null = gp.stripe_payment_intent_id ?? null;
 
       // Fallback: search checkout sessions by gameId + playerId
+      // payment_status 'unpaid' = hold authorized but not captured
       if (!paymentIntentId) {
         const sessions = await stripe.checkout.sessions.list({ limit: 100 });
         const match = sessions.data.find(
           s => s.metadata?.gameId === gameId &&
                s.metadata?.playerId === playerBeingRemoved &&
-               s.payment_status === 'paid',
+               (s.payment_status === 'paid' || s.payment_status === 'unpaid'),
         );
         if (match) {
           paymentIntentId = typeof match.payment_intent === 'string'
@@ -109,10 +110,17 @@ serve(async (req) => {
 
       if (paymentIntentId) {
         try {
-          await stripe.refunds.create({ payment_intent: paymentIntentId });
+          // Try to cancel hold (PI in requires_capture state) — no Stripe fee
+          await stripe.paymentIntents.cancel(paymentIntentId);
           refunded = true;
         } catch (_) {
-          // Refund failed — player will be notified to contact support
+          // PI already captured — refund instead
+          try {
+            await stripe.refunds.create({ payment_intent: paymentIntentId });
+            refunded = true;
+          } catch (_2) {
+            // Both failed — player will be notified to contact support
+          }
         }
       }
     }
