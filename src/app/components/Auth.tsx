@@ -40,7 +40,11 @@ export default function Auth() {
 
   async function handleResend() {
     setResent(false);
-    await supabase.auth.resend({ type: 'signup', email: formData.email });
+    await supabase.auth.resend({
+      type: 'signup',
+      email: formData.email,
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+    });
     setResent(true);
   }
 
