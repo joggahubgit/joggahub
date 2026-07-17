@@ -4,7 +4,7 @@ import { ArrowLeft, Share2, MessageCircle, Calendar, CheckCircle, Copy, Loader2,
 import { supabase } from '@/lib/supabase';
 import { notify, notifyGamePlayers } from '@/app/lib/notify';
 import { redirectToCheckout, calcFees } from '@/app/lib/checkout';
-import { PLAYER_CANCEL_CUTOFF_HOURS, getMinPlayersForSport } from '@/app/lib/gameConfig';
+import { PLAYER_CANCEL_CUTOFF_HOURS, CAPTURE_CUTOFF_HOURS, getMinPlayersForSport } from '@/app/lib/gameConfig';
 
 const SPORT_LABELS: Record<string, string> = {
   football: 'Society', society: 'Society', futsal: 'Futsal',
@@ -72,7 +72,7 @@ export default function OpenGamePage() {
   const [gameStatus, setGameStatus] = useState<'scheduled' | 'confirmed_booking' | 'pending_results' | 'completed' | 'expired'>('scheduled');
   const [gameStartTime, setGameStartTime] = useState<string | null>(null); // ISO UTC from slots.start_time
   const [withinCancelCutoff, setWithinCancelCutoff] = useState(false); // true = player cannot self-cancel
-  const [withinJoinCutoff, setWithinJoinCutoff] = useState(false); // true = no new players allowed (< 15 min)
+  const [withinJoinCutoff, setWithinJoinCutoff] = useState(false); // true = no new players allowed (< CAPTURE_CUTOFF_HOURS)
   const [isPrivate, setIsPrivate] = useState(false);
   const [gamePayMode, setGamePayMode] = useState<'split' | 'full'>('split');
   const [courtPrice, setCourtPrice] = useState(0);
@@ -212,7 +212,7 @@ export default function OpenGamePage() {
           setGameStartTime(slot.start_time);
           const msUntilStart = new Date(slot.start_time).getTime() - Date.now();
           setWithinCancelCutoff(msUntilStart < PLAYER_CANCEL_CUTOFF_HOURS * 60 * 60 * 1000);
-          setWithinJoinCutoff(msUntilStart < 15 * 60 * 1000);
+          setWithinJoinCutoff(msUntilStart < CAPTURE_CUTOFF_HOURS * 60 * 60 * 1000);
         }
       }
     }
@@ -1186,7 +1186,7 @@ export default function OpenGamePage() {
             {withinJoinCutoff ? (
               <div className="w-full flex items-center justify-center gap-2 bg-gray-100 text-gray-500 py-4 rounded-2xl font-semibold text-sm">
                 <Shield className="w-4 h-4 flex-shrink-0" />
-                Entradas encerradas (menos de 15 min)
+                Entradas encerradas (menos de 2h para o início)
               </div>
             ) : (
               <button

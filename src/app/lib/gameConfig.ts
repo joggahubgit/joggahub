@@ -18,6 +18,15 @@ export const DEFAULT_MIN_PLAYERS = 10;
 /** Hours before game start within which a player cannot self-cancel. */
 export const PLAYER_CANCEL_CUTOFF_HOURS = 24;
 
+/**
+ * Hours before game start at which split-payment holds are captured by the cron
+ * (process-game-transitions, blocks O and S), and at which new players can no
+ * longer join. Must match those blocks' cutoff — entry has to close here because
+ * per-player price is fixed at join time and never redistributed once the group
+ * has been captured, so a later join would overcharge past the court's total price.
+ */
+export const CAPTURE_CUTOFF_HOURS = 2;
+
 /** Minutes after game end before automatic transition to pending_results. */
 export const PENDING_RESULTS_DELAY_MINUTES = 5;
 
