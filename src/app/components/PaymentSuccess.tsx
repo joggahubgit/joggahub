@@ -4,6 +4,13 @@ import { CheckCircle, Loader2, Share2, Copy } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { notify, notifyGamePlayers } from '@/app/lib/notify';
 import { getMinPlayersForSport } from '@/app/lib/gameConfig';
+import { sendEmail, bookingConfirmedEmail } from '@/app/lib/emailTemplates';
+
+async function sendBookingConfirmedEmail(bodyText: string, details: Parameters<typeof bookingConfirmedEmail>[1]) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.email) return;
+  await sendEmail(user.email, 'Reserva confirmada no JoggaHub ⚽', bookingConfirmedEmail(bodyText, details));
+}
 
 export default function PaymentSuccess() {
   const navigate = useNavigate();
@@ -78,6 +85,9 @@ export default function PaymentSuccess() {
           }
 
           console.log('[PaymentSuccess] slot booking confirmed:', data);
+          sendBookingConfirmedEmail('Seu horário está garantido. Prepare-se para jogar!', {
+            courtName, venueName, date, time, price,
+          });
           setDone(true);
           return;
         }
@@ -177,6 +187,12 @@ export default function PaymentSuccess() {
             setPrivateGameId(gameRow.id);
           }
 
+          sendBookingConfirmedEmail(
+            payMode === 'split'
+              ? 'Sua partida privada foi criada. Compartilhe o link com os outros jogadores para eles confirmarem a parte deles.'
+              : 'Sua partida privada está confirmada. Compartilhe com seus amigos!',
+            { courtName, venueName, date, time, endTime, price },
+          );
           setDone(true);
           return;
         }
@@ -232,6 +248,9 @@ export default function PaymentSuccess() {
           }
 
           setCreatedGameId(gameRow!.id);
+          sendBookingConfirmedEmail('Sua partida foi criada e está aberta para outros jogadores!', {
+            courtName, venueName, date, time,
+          });
           setDone(true);
           return;
         }
@@ -265,6 +284,9 @@ export default function PaymentSuccess() {
           }
 
           setCreatedGameId(gameId);
+          sendBookingConfirmedEmail('Seu pagamento foi confirmado. Sua vaga na partida está garantida.', {
+            courtName, venueName, date, time,
+          });
           setDone(true);
           return;
         }
@@ -345,6 +367,12 @@ export default function PaymentSuccess() {
             `Seu pagamento foi confirmado e você está inscrito na partida.`, gameId);
         }
 
+        sendBookingConfirmedEmail(
+          mode === 'join_other'
+            ? `${playerName} foi adicionado à partida com sucesso.`
+            : 'Você está inscrito na partida. Boa sorte!',
+          { courtName, venueName, date, time },
+        );
         setDone(true);
       } catch (e: any) {
         setError(e.message ?? 'Erro inesperado.');

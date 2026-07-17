@@ -24,3 +24,6 @@ verify_jwt = false
 
 [functions.process-game-transitions]
 verify_jwt = false
+
+[functions.send-notification-email]
+verify_jwt = false

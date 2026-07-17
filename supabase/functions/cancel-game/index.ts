@@ -19,6 +19,53 @@ async function cancelOrReleasePi(stripe: Stripe, piId: string): Promise<void> {
   }
 }
 
+function cancelledEmailHtml(title: string, message: string): string {
+  return `<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8"></head>
+<body style="margin:0; padding:0; background-color:#f9fafb; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f9fafb; padding:32px 16px;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px; background-color:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+        <tr><td style="background:linear-gradient(135deg,#7c3aed,#6d28d9); padding:32px 32px 28px; text-align:center;">
+          <div style="font-size:28px; margin-bottom:4px;">⚽</div>
+          <div style="color:#ffffff; font-size:20px; font-weight:700;">JoggaHub</div>
+        </td></tr>
+        <tr><td style="padding:36px 32px 32px;">
+          <h1 style="margin:0 0 12px; font-size:20px; font-weight:700; color:#111827;">${title}</h1>
+          <p style="margin:0; font-size:15px; line-height:1.6; color:#4b5563;">${message}</p>
+        </td></tr>
+        <tr><td style="padding:20px 32px; background-color:#f9fafb; border-top:1px solid #f0f0f0;" align="center">
+          <p style="margin:0; font-size:12px; color:#9ca3af;">JoggaHub · Reserve quadras e monte sua partida</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+}
+
+async function sendCancelledEmail(supabase: ReturnType<typeof createClient>, userId: string, title: string, message: string) {
+  try {
+    const { data } = await supabase.auth.admin.getUserById(userId);
+    const email = data?.user?.email;
+    if (!email) return;
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${Deno.env.get('RESEND_API_KEY') ?? ''}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: 'JoggaHub <confirmacao@joggahub.com>',
+        to: email,
+        subject: title,
+        html: cancelledEmailHtml(title, message),
+      }),
+    });
+  } catch (e) {
+    console.error('[cancel-game] email send failed:', e);
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -227,20 +274,30 @@ serve(async (req) => {
           game_id: gameId,
         })),
       );
+      await Promise.all(allPlayers.map(p => sendCancelledEmail(
+        supabase,
+        p.player_id,
+        'Partida cancelada',
+        p.paid
+          ? 'A partida em que você estava inscrito foi cancelada. O reembolso será processado em breve.'
+          : 'A partida em que você estava inscrito foi cancelada.',
+      )));
     }
 
     // Notify organizer for private games
     if (isPrivateGame && organizerId) {
       const refunded = refunds.some(r => r.status === 'released');
+      const orgMessage = refunded
+        ? 'Sua partida privada foi cancelada. O reembolso será creditado em breve.'
+        : 'Sua partida privada foi cancelada. Entre em contato para informações sobre reembolso.';
       await supabase.from('notifications').insert({
         user_id: organizerId,
         type: 'game_cancelled',
         title: 'Partida privada cancelada',
-        message: refunded
-          ? 'Sua partida privada foi cancelada. O reembolso será creditado em breve.'
-          : 'Sua partida privada foi cancelada. Entre em contato para informações sobre reembolso.',
+        message: orgMessage,
         game_id: gameId,
       });
+      await sendCancelledEmail(supabase, organizerId, 'Partida privada cancelada', orgMessage);
     }
 
     return new Response(
