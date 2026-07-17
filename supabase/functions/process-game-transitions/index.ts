@@ -4,10 +4,7 @@
  * Cron-triggered Edge Function that handles automatic game status transitions:
  *
  * -1. scheduled → expired (auto-cancel — insufficient players before start)
- *    Rules based on fill_rate = current_players / min_players:
- *      fill_rate ≤ 20%  → cancel 6h before start
- *      fill_rate ≤ 40%  → cancel 4h before start
- *      fill_rate > 50% but < 100% → cancel 2h before start
+ *    When: hoursUntilStart <= 2 AND current_players < min_players (10)
  *    Effect: status = 'expired', is_open = false, slot freed, players notified
  *
  * 0. scheduled → confirmed_booking OR expired (retroactive, after slot ends)
@@ -73,11 +70,6 @@ serve(async (req) => {
   // Helper: resolve min players for a sport type
   function resolveMinPlayers(_sportType: string | null): number {
     return 10;
-  }
-
-  // Helper: format fill rate as readable percentage
-  function fillLabel(current: number, min: number): string {
-    return `${Math.round((current / min) * 100)}%`;
   }
 
   // ─────────────────────────────────────────────────────────────────────
