@@ -576,7 +576,7 @@ export default function Home() {
                     )}
                   </div>
                   <div className="text-right">
-                    <div className="font-semibold text-violet-600">R$ {game.price_per_player}</div>
+                    <div className="font-semibold text-violet-600">R$ {Number(game.price_per_player).toFixed(2)}</div>
                     <div className="text-xs text-gray-500">por pessoa</div>
                   </div>
                 </div>

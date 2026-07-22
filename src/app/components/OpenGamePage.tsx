@@ -249,8 +249,9 @@ export default function OpenGamePage() {
       playerLines,
       ``,
       remaining > 0
-        ? `Ainda há ${remaining} ${remaining === 1 ? 'vaga' : 'vagas'}! Entre pelo JoggaHub para participar.`
-        : `Partida completa!`,
+        ? `Ainda há ${remaining} ${remaining === 1 ? 'vaga' : 'vagas'}! Entre pelo JoggaHub para participar:`
+        : `Partida completa! Acompanhe pelo link:`,
+      gameUrl,
     ].join('\n');
   }
 
