@@ -5,6 +5,7 @@ import {
   XCircle, Bell, CreditCard, Users, Lock, ShieldCheck, Hourglass, Star,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
+import { getMaxPlayersForSport } from '@/app/lib/gameConfig';
 
 interface Booking {
   id: string;
@@ -121,7 +122,8 @@ export function SlotModal({ slot, courtName, onClose, onRefresh }: Props) {
   const reservePrice = String(slot.price_override ?? 0);
   const paymentStatus = 'pending' as const;
   // Open game fields
-  const maxPlayers = 18;
+  const [courtSportType, setCourtSportType] = useState('');
+  const maxPlayers = getMaxPlayersForSport(courtSportType);
   const [pricePerPlayer, setPricePerPlayer] = useState(String(slot.price_override ?? ''));
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -129,6 +131,11 @@ export function SlotModal({ slot, courtName, onClose, onRefresh }: Props) {
   const { date, time } = formatDateTime(slot.start_time);
   const endTime = formatEndTime(slot.end_time);
   const isPaid = slot.booking?.payment_status === 'paid';
+
+  useEffect(() => {
+    supabase.from('courts').select('sport_type').eq('id', slot.court_id).maybeSingle()
+      .then(({ data }) => setCourtSportType(data?.sport_type ?? ''));
+  }, [slot.court_id]);
 
   useEffect(() => {
     if (!slot.booking?.id) return;

@@ -15,6 +15,24 @@ export const PLATFORM_FEE_FIXED = 2.50;
 /** Minimum players required to confirm any game. */
 export const DEFAULT_MIN_PLAYERS = 10;
 
+/**
+ * Player count rules per sport. Football-family sports fill a full pickup
+ * game (10-18); futevôlei is always a closed 2v2 — min and max are both 4,
+ * no rotation/waitlist. Any sport not listed falls back to the generic
+ * small-group default (4 min / 8 max) used before per-sport rules existed.
+ */
+const SPORT_PLAYER_RULES: Record<string, { min: number; max: number }> = {
+  football: { min: 10, max: 18 },
+  society: { min: 10, max: 18 },
+  futsal: { min: 10, max: 18 },
+  futevolei: { min: 4, max: 4 },
+};
+const FALLBACK_PLAYER_RULE = { min: 4, max: 8 };
+
+function playerRuleForSport(sportType: string) {
+  return SPORT_PLAYER_RULES[sportType] ?? FALLBACK_PLAYER_RULE;
+}
+
 /** Hours before game start within which a player cannot self-cancel. */
 export const PLAYER_CANCEL_CUTOFF_HOURS = 24;
 
@@ -40,6 +58,11 @@ export const XP_PARTICIPATION = 15;
 export const XP_MVP_BONUS = 30;
 
 /** Returns the minimum players needed to confirm a game by sport type. */
-export function getMinPlayersForSport(_sportType: string): number {
-  return DEFAULT_MIN_PLAYERS;
+export function getMinPlayersForSport(sportType: string): number {
+  return playerRuleForSport(sportType).min;
+}
+
+/** Returns the maximum players allowed in a game by sport type. */
+export function getMaxPlayersForSport(sportType: string): number {
+  return playerRuleForSport(sportType).max;
 }
