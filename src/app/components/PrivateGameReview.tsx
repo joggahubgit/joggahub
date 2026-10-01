@@ -7,6 +7,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { calcFees } from '@/app/lib/checkout';
+import { getMinPlayersForSport, getMaxPlayersForSport } from '@/app/lib/gameConfig';
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('pt-BR', {
@@ -42,11 +43,12 @@ export default function PrivateGameReview() {
   }
 
   const courtPrice = Number(price) || 0;
-  const players = Number(maxPlayers) || 18;
+  const minSplitPlayers = getMinPlayersForSport(courtSport ?? '');
+  const maxSplitPlayers = getMaxPlayersForSport(courtSport ?? '');
+  const players = Number(maxPlayers) || maxSplitPlayers;
 
-  // Split: organizer authorizes full court price as hold; display shows minimum share (÷ 10)
-  const MIN_SPLIT_PLAYERS = 10;
-  const myShare = payMode === 'split' ? courtPrice / MIN_SPLIT_PLAYERS : courtPrice;
+  // Split: organizer authorizes full court price as hold; display shows minimum share
+  const myShare = payMode === 'split' ? courtPrice / minSplitPlayers : courtPrice;
   const { base, fee, total } = calcFees(myShare);
   // For split: the hold = full court price + service fee
   const { total: holdTotal } = payMode === 'split' ? calcFees(courtPrice) : { total };
@@ -198,7 +200,11 @@ export default function PrivateGameReview() {
                 </div>
                 <div>
                   <span className="text-sm font-semibold text-gray-800">
-                    {payMode === 'split' ? 'Mínimo 10 · Máximo 18 jogadores' : `${players} jogadores`}
+                    {payMode === 'split'
+                      ? (minSplitPlayers === maxSplitPlayers
+                        ? `${minSplitPlayers} jogadores`
+                        : `Mínimo ${minSplitPlayers} · Máximo ${maxSplitPlayers} jogadores`)
+                      : `${players} jogadores`}
                   </span>
                   <p className="text-xs text-gray-400 mt-0.5">
                     {payMode === 'split' ? 'Mais jogadores = menos por pessoa' : 'Você paga o valor completo'}
@@ -218,7 +224,7 @@ export default function PrivateGameReview() {
                   <span className="font-semibold text-gray-900">R$ {courtPrice.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Sua parte mínima (÷ 10)</span>
+                  <span className="text-gray-600">Sua parte mínima (÷ {minSplitPlayers})</span>
                   <span className="font-semibold text-gray-900">R$ {base.toFixed(2)}</span>
                 </div>
               </>

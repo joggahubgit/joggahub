@@ -4,7 +4,7 @@
  * Cron-triggered Edge Function that handles automatic game status transitions:
  *
  * -1. scheduled → expired (auto-cancel — insufficient players before start)
- *    When: hoursUntilStart <= 2 AND current_players < min_players (10)
+ *    When: hoursUntilStart <= 2 AND current_players < min_players (per sport, see SPORT_MIN_PLAYERS)
  *    Effect: status = 'expired', is_open = false, slot freed, players notified
  *
  * 0. scheduled → confirmed_booking OR expired (retroactive, after slot ends)
@@ -46,6 +46,11 @@ const XP_MVP_BONUS = 30;
 const PLATFORM_FEE_PERCENT = 0.08;
 const PLATFORM_FEE_FIXED = 2.50;
 
+// Mirrors SPORT_PLAYER_RULES in src/app/lib/gameConfig.ts — keep both in sync.
+const SPORT_MIN_PLAYERS: Record<string, number> = {
+  football: 10, society: 10, futsal: 10, futevolei: 4,
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -68,8 +73,8 @@ serve(async (req) => {
   };
 
   // Helper: resolve min players for a sport type
-  function resolveMinPlayers(_sportType: string | null): number {
-    return 10;
+  function resolveMinPlayers(sportType: string | null): number {
+    return SPORT_MIN_PLAYERS[sportType ?? ''] ?? 4;
   }
 
   // ─────────────────────────────────────────────────────────────────────
@@ -153,7 +158,7 @@ serve(async (req) => {
   {
     const { data: openScheduled, error: openErr } = await supabase
       .from('games')
-      .select('id, slot_id, court_id, current_players, organizer_id, stripe_session_id')
+      .select('id, slot_id, court_id, current_players, organizer_id, stripe_session_id, sport_type')
       .eq('status', 'scheduled')
       .eq('is_open', true)
       .not('slot_id', 'is', null);
@@ -178,7 +183,7 @@ serve(async (req) => {
         // Only act in the 2h window before start
         if (hoursUntilStart > 2 || hoursUntilStart < 0) continue;
 
-        const minPlayers = resolveMinPlayers(null);
+        const minPlayers = resolveMinPlayers(game.sport_type ?? null);
         const currentPlayers = game.current_players ?? 0;
 
         // Has minimum players — should have been confirmed already, skip
@@ -270,9 +275,9 @@ serve(async (req) => {
   // O. OPEN GAME CAPTURE: 2h before game start
   //
   //    For confirmed open games (is_open=true, stripe_split_captured=false):
-  //    - Hold per player was court_price / 10 * 1.15
-  //    - Capture court_price / N * 1.15 from each player's PI (less if N > 10)
-  //    Games with N < 10 were already auto-cancelled by block -1.
+  //    - Hold per player was court_price / sport's min_players * 1.15
+  //    - Capture court_price / N * 1.15 from each player's PI (less if N > min_players)
+  //    Games with N < min_players were already auto-cancelled by block -1.
   // ─────────────────────────────────────────────────────────────────────
   {
     const stripeKeyOpen = Deno.env.get('STRIPE_SECRET_KEY') ?? '';
@@ -452,10 +457,11 @@ serve(async (req) => {
   // S. SPLIT PAYMENT CAPTURE: 2h before game start (player entry closes)
   //
   //    For each split private game where 2h cutoff has been reached:
-  //    - Each joiner: capture court_price / max(N,10) * 1.08 + 2.50
+  //    baseline = sport's min players (10 for football, 4 for futevôlei, etc.)
+  //    - Each joiner: capture court_price / max(N,baseline) * 1.08 + 2.50
   //    - Organizer:   capture the remainder so total = court_price * 1.08 + 2.50
-  //      → if N >= 10: court_price / N * 1.08 + 2.50
-  //      → if N <  10: organizer covers shortfall
+  //      → if N >= baseline: court_price / N * 1.08 + 2.50
+  //      → if N <  baseline: organizer covers shortfall
   //
   //    Joiner PIs stored in game_players.stripe_payment_intent_id.
   //    Organizer PI resolved from games.stripe_session_id via Stripe API.
@@ -465,7 +471,7 @@ serve(async (req) => {
 
     const { data: splitGames, error: splitErr } = await supabase
       .from('games')
-      .select('id, max_players, current_players, court_price, price_per_player, stripe_session_id, slot_id, organizer_id')
+      .select('id, max_players, current_players, court_price, price_per_player, stripe_session_id, slot_id, organizer_id, sport_type')
       .eq('is_open', false)
       .eq('pay_mode', 'split')
       .eq('stripe_split_captured', false)
@@ -490,8 +496,10 @@ serve(async (req) => {
         const cutoffMs = new Date(slot.start_time).getTime() - 2 * 60 * 60 * 1000;
         if (Date.now() < cutoffMs) continue;
 
-        // court_price: authoritative column, fallback to price_per_player * 10
-        const courtPriceVal: number = game.court_price ?? (game.price_per_player ?? 0) * 10;
+        const baseline = resolveMinPlayers(game.sport_type ?? null);
+
+        // court_price: authoritative column, fallback to price_per_player * baseline
+        const courtPriceVal: number = game.court_price ?? (game.price_per_player ?? 0) * baseline;
         if (courtPriceVal <= 0) {
           await supabase.from('games').update({ stripe_split_captured: true }).eq('id', game.id);
           continue;
@@ -499,15 +507,15 @@ serve(async (req) => {
 
         const N = game.current_players ?? 1; // total players incl. organizer
 
-        // Per-joiner capture (capped at hold: courtPrice/10 * 1.08 + 2.50)
-        const joinerShare = (courtPriceVal / Math.max(N, 10)) * (1 + PLATFORM_FEE_PERCENT) + PLATFORM_FEE_FIXED;
+        // Per-joiner capture (capped at hold: courtPrice/baseline * 1.08 + 2.50)
+        const joinerShare = (courtPriceVal / Math.max(N, baseline)) * (1 + PLATFORM_FEE_PERCENT) + PLATFORM_FEE_FIXED;
 
         // Organizer capture = their court share + platform fee
         let organizerCapture: number;
-        if (N >= 10) {
+        if (N >= baseline) {
           organizerCapture = (courtPriceVal / N) * (1 + PLATFORM_FEE_PERCENT) + PLATFORM_FEE_FIXED;
         } else {
-          organizerCapture = (courtPriceVal * (11 - N) / 10) * (1 + PLATFORM_FEE_PERCENT) + PLATFORM_FEE_FIXED;
+          organizerCapture = (courtPriceVal * (baseline + 1 - N) / baseline) * (1 + PLATFORM_FEE_PERCENT) + PLATFORM_FEE_FIXED;
         }
 
         try {
@@ -584,7 +592,7 @@ serve(async (req) => {
   // ─────────────────────────────────────────────────────────────────────
   const { data: scheduledGames, error: scheduledErr } = await supabase
     .from('games')
-    .select('id, slot_id, court_id, current_players')
+    .select('id, slot_id, court_id, current_players, sport_type')
     .eq('status', 'scheduled')
     .not('slot_id', 'is', null);
 
@@ -601,7 +609,7 @@ serve(async (req) => {
       if (!slot?.end_time) continue;
       if (new Date() < new Date(slot.end_time)) continue; // slot hasn't ended yet
 
-      const minPlayers = 10;
+      const minPlayers = resolveMinPlayers(game.sport_type ?? null);
 
       const hasEnoughPlayers = (game.current_players ?? 0) >= minPlayers;
       const newStatus = hasEnoughPlayers ? 'confirmed_booking' : 'expired';

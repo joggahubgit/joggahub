@@ -36,6 +36,7 @@ interface GameDetail {
 const SPORT_LABELS: Record<string, string> = {
   football: 'Society', society: 'Society', futsal: 'Futsal', tennis: 'Tênis',
   padel: 'Padel', basketball: 'Basquete', volleyball: 'Vôlei', beach_tennis: 'Beach Tennis',
+  futevolei: 'Futevôlei',
 };
 
 function formatDT(iso: string) {

@@ -7,6 +7,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Mirrors SPORT_PLAYER_RULES in src/app/lib/gameConfig.ts — keep both in sync.
+const SPORT_MIN_PLAYERS: Record<string, number> = {
+  football: 10, society: 10, futsal: 10, futevolei: 4,
+};
+function minPlayersForSport(sport: string): number {
+  return SPORT_MIN_PLAYERS[sport] ?? 4;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -74,7 +82,7 @@ serve(async (req) => {
       const pricePerHour = (slot?.price_override as number) ?? (court?.price_per_hour as number) ?? null;
       if (!pricePerHour) throw new Error('Preço da quadra não encontrado');
       const courtPrice = Math.round(pricePerHour * (durationMins / 60) * 100) / 100;
-      vagaPrice = Math.round(courtPrice / 10 * 100) / 100;
+      vagaPrice = Math.round(courtPrice / minPlayersForSport(sport) * 100) / 100;
     } else {
       const { data: game, error: gameErr } = await supabase
         .from('games')

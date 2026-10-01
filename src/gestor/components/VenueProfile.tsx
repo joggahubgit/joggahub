@@ -13,6 +13,7 @@ const SPORT_TYPES = [
   { id: 'society', label: 'Society' },
   { id: 'futsal', label: 'Futsal' },
   { id: 'football', label: 'Futebol' },
+  { id: 'futevolei', label: 'Futevôlei' },
   { id: 'beach_tennis', label: 'Beach Tennis' },
   { id: 'padel', label: 'Padel' },
   { id: 'volleyball', label: 'Vôlei' },

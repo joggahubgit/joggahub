@@ -9,7 +9,7 @@ import { PLAYER_CANCEL_CUTOFF_HOURS, CAPTURE_CUTOFF_HOURS, getMinPlayersForSport
 const SPORT_LABELS: Record<string, string> = {
   football: 'Society', society: 'Society', futsal: 'Futsal',
   tennis: 'Tênis', padel: 'Padel', basketball: 'Basquete',
-  volleyball: 'Vôlei', beach_tennis: 'Beach Tennis',
+  volleyball: 'Vôlei', beach_tennis: 'Beach Tennis', futevolei: 'Futevôlei',
 };
 
 function sportLabel(s: string) {
@@ -286,7 +286,7 @@ export default function OpenGamePage() {
         sport: sportLabel(courtSport),
         date,
         time,
-        vagaPrice: courtPrice / 10,
+        vagaPrice: courtPrice / getMinPlayersForSport(courtSport),
         mode: 'join_self',
         captureManual: true,
         payMode: 'split',
@@ -505,7 +505,7 @@ export default function OpenGamePage() {
             sport: sportLabel(courtSport),
             date,
             time,
-            vagaPrice: courtPrice / 10,
+            vagaPrice: courtPrice / getMinPlayersForSport(courtSport),
             mode: 'join_self',
             captureManual: true,
             payMode: 'split',

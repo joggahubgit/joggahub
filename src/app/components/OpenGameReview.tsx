@@ -28,6 +28,7 @@ const SPORT_LABELS: Record<string, string> = {
   basketball: 'Basquete',
   volleyball: 'Vôlei',
   beach_tennis: 'Beach Tennis',
+  futevolei: 'Futevôlei',
 };
 
 function sportLabel(s: string) {

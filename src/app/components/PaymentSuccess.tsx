@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle, Loader2, Share2, Copy } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { notify, notifyGamePlayers } from '@/app/lib/notify';
-import { getMinPlayersForSport } from '@/app/lib/gameConfig';
+import { getMinPlayersForSport, getMaxPlayersForSport } from '@/app/lib/gameConfig';
 import { sendEmail, bookingConfirmedEmail } from '@/app/lib/emailTemplates';
 
 async function sendBookingConfirmedEmail(bodyText: string, details: Parameters<typeof bookingConfirmedEmail>[1]) {
@@ -148,9 +148,9 @@ export default function PaymentSuccess() {
               booking_id: bookingId,
               scheduled_at: scheduledAt,
               scheduled_end_at: (date && endTime) ? `${date}T${endTime}:00` : null,
-              max_players: payMode === 'split' ? 18 : maxPlayers,
+              max_players: payMode === 'split' ? getMaxPlayersForSport(courtSport || '') : maxPlayers,
               current_players: 1,
-              price_per_player: payMode === 'split' ? courtPrice / 10 : 0,
+              price_per_player: payMode === 'split' ? courtPrice / getMinPlayersForSport(courtSport || '') : 0,
               court_price: courtPrice || null,
               pay_mode: payMode ?? 'full',
               sport_type: courtSport || null,

@@ -14,6 +14,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   getMinPlayersForSport,
+  getMaxPlayersForSport,
   DEFAULT_MIN_PLAYERS,
   PLAYER_CANCEL_CUTOFF_HOURS,
   PENDING_RESULTS_DELAY_MINUTES,
@@ -75,8 +76,31 @@ describe('getMinPlayersForSport', () => {
     expect(getMinPlayersForSport('society')).toBe(DEFAULT_MIN_PLAYERS);
   });
 
-  it('returns DEFAULT_MIN_PLAYERS for unknown sport', () => {
-    expect(getMinPlayersForSport('unknown_sport')).toBe(DEFAULT_MIN_PLAYERS);
+  it('returns the generic small-group fallback (4) for an unlisted sport', () => {
+    // Sports without explicit rules (padel, tennis, etc.) use the small-group
+    // default, not the football-sized DEFAULT_MIN_PLAYERS — see FALLBACK_PLAYER_RULE.
+    expect(getMinPlayersForSport('unknown_sport')).toBe(4);
+  });
+
+  it('returns 4 for futevolei (closed 2v2, no rotation)', () => {
+    expect(getMinPlayersForSport('futevolei')).toBe(4);
+  });
+});
+
+describe('getMaxPlayersForSport', () => {
+  it('returns DEFAULT_MIN_PLAYERS-family max (18) for football/society/futsal', () => {
+    expect(getMaxPlayersForSport('football')).toBe(18);
+    expect(getMaxPlayersForSport('society')).toBe(18);
+    expect(getMaxPlayersForSport('futsal')).toBe(18);
+  });
+
+  it('returns 4 for futevolei — min equals max, no rotation/waitlist', () => {
+    expect(getMaxPlayersForSport('futevolei')).toBe(4);
+    expect(getMaxPlayersForSport('futevolei')).toBe(getMinPlayersForSport('futevolei'));
+  });
+
+  it('returns the generic small-group fallback (8) for an unlisted sport', () => {
+    expect(getMaxPlayersForSport('unknown_sport')).toBe(8);
   });
 });
 
@@ -231,7 +255,7 @@ describe('XP distribution rules', () => {
   });
 });
 
-describe('Full lifecycle — all sports use same minimum', () => {
+describe('Full lifecycle — football-family sports share the same minimum', () => {
   it('futsal min players equals DEFAULT_MIN_PLAYERS', () => {
     expect(getMinPlayersForSport('futsal')).toBe(DEFAULT_MIN_PLAYERS);
   });
@@ -244,11 +268,18 @@ describe('Full lifecycle — all sports use same minimum', () => {
     expect(getMinPlayersForSport('society')).toBe(DEFAULT_MIN_PLAYERS);
   });
 
-  it('padel min players equals DEFAULT_MIN_PLAYERS', () => {
-    expect(getMinPlayersForSport('padel')).toBe(DEFAULT_MIN_PLAYERS);
+  // padel/tennis have no explicit rule yet — they fall back to the generic
+  // small-group default (4), same as any other sport without a dedicated entry.
+  it('padel min players uses the small-group fallback, not DEFAULT_MIN_PLAYERS', () => {
+    expect(getMinPlayersForSport('padel')).toBe(4);
   });
 
-  it('tennis min players equals DEFAULT_MIN_PLAYERS', () => {
-    expect(getMinPlayersForSport('tennis')).toBe(DEFAULT_MIN_PLAYERS);
+  it('tennis min players uses the small-group fallback, not DEFAULT_MIN_PLAYERS', () => {
+    expect(getMinPlayersForSport('tennis')).toBe(4);
+  });
+
+  it('futevolei is a closed 2v2 — min and max are both 4, independent of DEFAULT_MIN_PLAYERS', () => {
+    expect(getMinPlayersForSport('futevolei')).toBe(4);
+    expect(getMinPlayersForSport('futevolei')).not.toBe(DEFAULT_MIN_PLAYERS);
   });
 });

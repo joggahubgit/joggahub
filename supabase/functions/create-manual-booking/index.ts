@@ -6,6 +6,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Mirrors SPORT_PLAYER_RULES in src/app/lib/gameConfig.ts — keep both in sync.
+const SPORT_MAX_PLAYERS: Record<string, number> = {
+  football: 18, society: 18, futsal: 18, futevolei: 4,
+};
+function maxPlayersForSport(sport: string | null | undefined): number {
+  return SPORT_MAX_PLAYERS[sport ?? ''] ?? 8;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -118,7 +126,7 @@ serve(async (req) => {
           scheduled_at: slot.start_time,
           is_open: false,
           status: 'confirmed_booking',
-          max_players: 10,
+          max_players: maxPlayersForSport(court?.sport_type),
           current_players: 1,
           price_per_player: price ?? 0,
           court_price: price ?? 0,

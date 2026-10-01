@@ -453,7 +453,7 @@ export default function Home() {
               const isConfirmed = (isFull || game.status === 'confirmed_booking') && !isPendingPayment;
               const isPendingResults = game.status === 'pending_results';
 
-              const SPORT_LABELS: Record<string, string> = { football: 'Society', society: 'Society', futsal: 'Futsal' };
+              const SPORT_LABELS: Record<string, string> = { football: 'Society', society: 'Society', futsal: 'Futsal', futevolei: 'Futevôlei' };
               const spotsLeft = game.maxPlayers - game.currentPlayers;
 
               return (
