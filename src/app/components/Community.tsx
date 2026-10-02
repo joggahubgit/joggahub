@@ -394,7 +394,7 @@ export default function Community() {
               {activeRankings.length >= 3 && (
                 <div className="px-6 mb-6">
                   <div className="flex items-end justify-center gap-2 mb-6">
-                    <div className="flex-1 text-center">
+                    <div onClick={() => navigate(`/player/${activeRankings[1].id}`)} className="flex-1 text-center cursor-pointer">
                       <div className="bg-gray-300 rounded-t-xl p-4 pt-8">
                         <div className="w-16 h-16 bg-violet-600 rounded-full flex items-center justify-center text-white text-xl font-bold mx-auto mb-2 overflow-hidden">
                           {activeRankings[1].avatarUrl ? <img src={activeRankings[1].avatarUrl} alt="" className="w-full h-full object-cover" /> : activeRankings[1].avatar}
@@ -404,7 +404,7 @@ export default function Community() {
                         <div className="text-2xl font-bold text-gray-600 mt-2">2°</div>
                       </div>
                     </div>
-                    <div className="flex-1 text-center">
+                    <div onClick={() => navigate(`/player/${activeRankings[0].id}`)} className="flex-1 text-center cursor-pointer">
                       <div className="bg-yellow-400 rounded-t-xl p-4 pt-4">
                         <Trophy className="w-6 h-6 text-yellow-700 mx-auto mb-2" />
                         <div className="w-20 h-20 bg-violet-600 rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-2 overflow-hidden">
@@ -415,7 +415,7 @@ export default function Community() {
                         <div className="text-3xl font-bold text-yellow-700 mt-2">1°</div>
                       </div>
                     </div>
-                    <div className="flex-1 text-center">
+                    <div onClick={() => navigate(`/player/${activeRankings[2].id}`)} className="flex-1 text-center cursor-pointer">
                       <div className="bg-orange-300 rounded-t-xl p-4 pt-12">
                         <div className="w-14 h-14 bg-violet-600 rounded-full flex items-center justify-center text-white text-lg font-bold mx-auto mb-2 overflow-hidden">
                           {activeRankings[2].avatarUrl ? <img src={activeRankings[2].avatarUrl} alt="" className="w-full h-full object-cover" /> : activeRankings[2].avatar}
@@ -431,7 +431,7 @@ export default function Community() {
 
               <div className="px-6 space-y-2">
                 {activeRankings.slice(activeRankings.length >= 3 ? 3 : 0).map((player) => (
-                  <div key={player.id} className="bg-white rounded-xl p-4 border border-gray-200 flex items-center gap-3">
+                  <div key={player.id} onClick={() => navigate(`/player/${player.id}`)} className="bg-white rounded-xl p-4 border border-gray-200 flex items-center gap-3 cursor-pointer hover:border-violet-200 transition-colors">
                     <div className="text-lg font-bold text-gray-400 w-8 text-center">{player.position}°</div>
                     <div className="w-12 h-12 bg-violet-600 rounded-full flex items-center justify-center text-white text-lg font-bold overflow-hidden">
                       {player.avatarUrl ? <img src={player.avatarUrl} alt="" className="w-full h-full object-cover" /> : player.avatar}
@@ -454,7 +454,7 @@ export default function Community() {
 
               {myRanking && (
                 <div className="px-6 mt-6">
-                  <div className="bg-violet-600 text-white rounded-xl p-4 flex items-center gap-3">
+                  <div onClick={() => navigate('/profile')} className="bg-violet-600 text-white rounded-xl p-4 flex items-center gap-3 cursor-pointer">
                     <div className="text-lg font-bold w-8 text-center">{myRanking.position}°</div>
                     <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center text-lg font-bold overflow-hidden">
                       {myRanking.avatarUrl ? <img src={myRanking.avatarUrl} alt="" className="w-full h-full object-cover" /> : myRanking.avatar}
