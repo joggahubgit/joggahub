@@ -44,6 +44,7 @@ export default function Profile() {
   const [gamesAsOrganizer, setGamesAsOrganizer] = useState(0);
   const [gamesAsPlayer, setGamesAsPlayer] = useState(0);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarError, setAvatarError] = useState('');
   const [futevoleiRating, setFutevoleiRating] = useState<{ rating: number; matches_played: number } | null | undefined>(undefined);
   const [showLevelPicker, setShowLevelPicker] = useState(false);
   const [savingLevel, setSavingLevel] = useState(false);
@@ -97,17 +98,24 @@ export default function Profile() {
     const file = e.target.files?.[0];
     if (!file || !user) return;
     setUploadingAvatar(true);
+    setAvatarError('');
     try {
       const ext = file.name.split('.').pop();
       const path = `${user.id}/avatar.${ext}`;
       const { error: upErr } = await supabase.storage
         .from('avatars')
         .upload(path, file, { upsert: true });
-      if (!upErr) {
-        const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
-        await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id);
-        await refreshProfile();
+      if (upErr) {
+        setAvatarError('Não foi possível enviar a foto. Tente novamente.');
+        return;
       }
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
+      const { error: updateErr } = await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id);
+      if (updateErr) {
+        setAvatarError('Foto enviada, mas não foi possível salvar no seu perfil.');
+        return;
+      }
+      await refreshProfile();
     } finally {
       setUploadingAvatar(false);
     }
@@ -178,6 +186,8 @@ export default function Profile() {
             </button>
           </div>
         </div>
+
+        {avatarError && <p className="text-xs text-red-600 mb-3">{avatarError}</p>}
 
         {/* Tags: position + foot */}
         <div className="flex flex-wrap gap-2">

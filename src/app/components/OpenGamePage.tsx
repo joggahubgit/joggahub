@@ -41,6 +41,7 @@ interface Player {
   paid?: boolean;
   isCurrentUser?: boolean;
   team?: 'a' | 'b';
+  avatarUrl?: string | null;
 }
 
 export default function OpenGamePage() {
@@ -146,15 +147,17 @@ export default function OpenGamePage() {
       const organizerEntry = (gamePlayers ?? []).find(p => p.player_id === game.organizer_id);
       const orgIsPaid = organizerEntry?.paid ?? true; // default true for existing bookings
       if (userIsOrganizer) setOrganizerPaid(orgIsPaid);
-      const joined = (gamePlayers ?? [])
-        .filter(p => p.player_id !== game.organizer_id)
-        .map(p => ({ name: p.player_name, paid: p.paid, isCurrentUser: user ? p.player_id === user.id : false, team: p.team as 'a' | 'b' | undefined }));
-      setPlayers([{ name, isOrganizer: true, paid: orgIsPaid, team: (organizerEntry?.team as 'a' | 'b' | undefined) ?? 'a' }, ...joined]);
 
       const rosterIds = [game.organizer_id, ...(gamePlayers ?? []).filter(p => p.player_id !== game.organizer_id).map(p => p.player_id)];
       const { data: rosterProfiles } = await supabase.from('profiles').select('id, avatar_url').in('id', rosterIds);
       const avatarByPlayerId: Record<string, string | null> = {};
       (rosterProfiles ?? []).forEach(p => { avatarByPlayerId[p.id] = p.avatar_url ?? null; });
+
+      const joined = (gamePlayers ?? [])
+        .filter(p => p.player_id !== game.organizer_id)
+        .map(p => ({ name: p.player_name, paid: p.paid, isCurrentUser: user ? p.player_id === user.id : false, team: p.team as 'a' | 'b' | undefined, avatarUrl: avatarByPlayerId[p.player_id] ?? null }));
+      setPlayers([{ name, isOrganizer: true, paid: orgIsPaid, team: (organizerEntry?.team as 'a' | 'b' | undefined) ?? 'a', avatarUrl: avatarByPlayerId[game.organizer_id] ?? null }, ...joined]);
+
       setGamePlayerRoster([
         { id: game.organizer_id, name, avatarUrl: avatarByPlayerId[game.organizer_id] ?? null },
         ...(gamePlayers ?? [])
@@ -797,9 +800,13 @@ export default function OpenGamePage() {
                       <>
                         <div
                           onClick={() => player.isOrganizer && isOrganizer && setShowLeaveConfirm(true)}
-                          className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg ${player.paid ? 'bg-violet-600' : 'bg-gray-400'} ${player.isOrganizer && isOrganizer ? 'cursor-pointer ring-2 ring-offset-1 ring-violet-300' : ''}`}
+                          className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg overflow-hidden ${player.paid ? 'bg-violet-600' : 'bg-gray-400'} ${player.isOrganizer && isOrganizer ? 'cursor-pointer ring-2 ring-offset-1 ring-violet-300' : ''}`}
                         >
-                          {player.name.charAt(0).toUpperCase()}
+                          {player.avatarUrl ? (
+                            <img src={player.avatarUrl} alt={player.name} className="w-full h-full object-cover" />
+                          ) : (
+                            player.name.charAt(0).toUpperCase()
+                          )}
                         </div>
                         {/* Organizer crown */}
                         {player.isOrganizer && (
