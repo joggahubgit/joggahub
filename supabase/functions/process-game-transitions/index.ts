@@ -17,6 +17,11 @@
  *    When: slot.end_time + 12 hours <= now() AND xp_distributed = false
  *    Effect: status = 'completed', xp_distributed remains false
  *
+ * 3. game_results pending → confirmed (auto-confirm, futevôlei only)
+ *    When: created_at + 6 hours <= now() AND status = 'pending'
+ *    Effect: status = 'confirmed', ELO rating applied as if the losing
+ *            side had confirmed (same math as submit-game-result)
+ *
  * Idempotence: All queries use the current status as a filter guard,
  * so re-running the job never double-processes the same game.
  *
@@ -51,6 +56,59 @@ const SPORT_MIN_PLAYERS: Record<string, number> = {
   football: 10, society: 10, futsal: 10, futevolei: 4,
 };
 
+// Mirrors the ELO constants in submit-game-result/index.ts — keep both in sync.
+const RESULT_CONFIRM_TIMEOUT_HOURS = 6;
+const RATING_SCALE = 1.2;
+const RATING_MIN = 1.0;
+const RATING_MAX = 7.0;
+const RATING_DEFAULT = 3.0;
+function kFactorFor(matchesPlayed: number): number {
+  if (matchesPlayed < 5) return 0.8;
+  if (matchesPlayed < 15) return 0.5;
+  return 0.25;
+}
+function clampRating(r: number): number {
+  return Math.min(RATING_MAX, Math.max(RATING_MIN, r));
+}
+
+// ── Set-score validation (mirrors src/app/lib/futevoleiSetRules.ts) ──
+interface SetScore { a: number; b: number }
+
+function setTarget(setIndex: number): number {
+  return setIndex < 2 ? 18 : 15;
+}
+
+function isValidSetScore(a: number, b: number, target: number): boolean {
+  if (!Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0) return false;
+  const winner = Math.max(a, b);
+  const diff = Math.abs(a - b);
+  if (diff < 2) return false;
+  if (winner === target) return true;
+  if (winner > target) return diff === 2;
+  return false;
+}
+
+type MatchOutcome =
+  | { status: 'invalid' }
+  | { status: 'draw' }
+  | { status: 'confirmed'; winningTeam: 'a' | 'b' };
+
+function deriveOutcome(sets: SetScore[]): MatchOutcome {
+  if (!Array.isArray(sets) || sets.length < 1 || sets.length > 3) return { status: 'invalid' };
+  let setsA = 0;
+  let setsB = 0;
+  for (let i = 0; i < sets.length; i++) {
+    const s = sets[i];
+    if (!s || typeof s.a !== 'number' || typeof s.b !== 'number') return { status: 'invalid' };
+    if (!isValidSetScore(s.a, s.b, setTarget(i))) return { status: 'invalid' };
+    if (s.a > s.b) setsA++; else setsB++;
+  }
+  if (sets.length === 1) return { status: 'confirmed', winningTeam: setsA > setsB ? 'a' : 'b' };
+  if (setsA >= 2) return { status: 'confirmed', winningTeam: 'a' };
+  if (setsB >= 2) return { status: 'confirmed', winningTeam: 'b' };
+  return { status: 'draw' };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -69,6 +127,7 @@ serve(async (req) => {
     retroactivelyExpired: [] as string[],
     transitionedToPendingResults: [] as string[],
     transitionedToCompleted: [] as string[],
+    autoConfirmedResults: [] as string[],
     errors: [] as string[],
   };
 
@@ -740,6 +799,114 @@ serve(async (req) => {
       }
 
       results.transitionedToCompleted.push(game.id);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // 3. AUTO-CONFIRM GAME RESULTS: 6h timeout with no adversarial confirmation
+  //
+  //    If the losing side (per the original proposal) never confirms or
+  //    disputes a pending game_results row within RESULT_CONFIRM_TIMEOUT_HOURS,
+  //    the proposed result is accepted as-is and ratings are updated —
+  //    same ELO math as the manual-confirm path in submit-game-result.
+  // ─────────────────────────────────────────────────────────────────────
+  {
+    const cutoffIso = new Date(Date.now() - RESULT_CONFIRM_TIMEOUT_HOURS * 60 * 60 * 1000).toISOString();
+
+    const { data: pendingResults, error: pendingResultsErr } = await supabase
+      .from('game_results')
+      .select('id, game_id, sets, created_at')
+      .eq('status', 'pending')
+      .lt('created_at', cutoffIso);
+
+    if (pendingResultsErr) {
+      results.errors.push(`auto-confirm results fetch: ${pendingResultsErr.message}`);
+    } else {
+      for (const gr of pendingResults ?? []) {
+        try {
+          const outcome = deriveOutcome(gr.sets);
+
+          if (outcome.status !== 'confirmed') {
+            await supabase.from('game_results').update({
+              status: outcome.status,
+              confirmed_at: new Date().toISOString(),
+            }).eq('id', gr.id).eq('status', 'pending'); // idempotent guard
+            results.autoConfirmedResults.push(gr.id);
+            continue;
+          }
+
+          const { data: teamRows } = await supabase
+            .from('game_players').select('player_id, team').eq('game_id', gr.game_id);
+          const teamIds: { a: string[]; b: string[] } = { a: [], b: [] };
+          for (const p of teamRows ?? []) {
+            if (p.team === 'a') teamIds.a.push(p.player_id);
+            if (p.team === 'b') teamIds.b.push(p.player_id);
+          }
+          if (teamIds.a.length !== 2 || teamIds.b.length !== 2) {
+            results.errors.push(`auto-confirm result ${gr.id}: teams not fully assigned`);
+            continue;
+          }
+          const winnerIds = teamIds[outcome.winningTeam];
+          const loserIds = teamIds[outcome.winningTeam === 'a' ? 'b' : 'a'];
+          const playerIds = [...winnerIds, ...loserIds];
+
+          const { data: ratingRows } = await supabase
+            .from('player_ratings').select('player_id, rating, matches_played')
+            .eq('sport_type', 'futevolei').in('player_id', playerIds);
+
+          const ratingMap: Record<string, { rating: number; matches_played: number }> = {};
+          for (const pid of playerIds) ratingMap[pid] = { rating: RATING_DEFAULT, matches_played: 0 };
+          for (const r of ratingRows ?? []) ratingMap[r.player_id] = { rating: r.rating, matches_played: r.matches_played };
+
+          const winnerAvg = (ratingMap[winnerIds[0]].rating + ratingMap[winnerIds[1]].rating) / 2;
+          const loserAvg = (ratingMap[loserIds[0]].rating + ratingMap[loserIds[1]].rating) / 2;
+          const expectedWinnerWin = 1 / (1 + 10 ** (-(winnerAvg - loserAvg) / RATING_SCALE));
+          const movement = 1 - expectedWinnerWin;
+
+          const newRatings: Record<string, number> = {};
+          for (const pid of winnerIds) newRatings[pid] = clampRating(ratingMap[pid].rating + kFactorFor(ratingMap[pid].matches_played) * movement);
+          for (const pid of loserIds) newRatings[pid] = clampRating(ratingMap[pid].rating - kFactorFor(ratingMap[pid].matches_played) * movement);
+
+          for (const pid of playerIds) {
+            await supabase.from('player_ratings').upsert({
+              player_id: pid,
+              sport_type: 'futevolei',
+              rating: newRatings[pid],
+              matches_played: ratingMap[pid].matches_played + 1,
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'player_id,sport_type' });
+
+            await supabase.from('player_rating_history').insert({
+              player_id: pid,
+              sport_type: 'futevolei',
+              game_id: gr.game_id,
+              rating: newRatings[pid],
+              matches_played: ratingMap[pid].matches_played + 1,
+            });
+          }
+
+          await supabase.from('game_results').update({
+            status: 'confirmed',
+            winner_ids: winnerIds,
+            loser_ids: loserIds,
+            confirmed_at: new Date().toISOString(),
+          }).eq('id', gr.id).eq('status', 'pending'); // idempotent guard
+
+          await supabase.from('notifications').insert(
+            playerIds.map(pid => ({
+              user_id: pid,
+              type: 'rating_updated',
+              title: 'Resultado confirmado automaticamente',
+              message: `O time adversário não confirmou em ${RESULT_CONFIRM_TIMEOUT_HOURS}h, então o resultado registrado foi aceito. Seu rating de futevôlei mudou de ${ratingMap[pid].rating.toFixed(2)} para ${newRatings[pid].toFixed(2)}.`,
+              game_id: gr.game_id,
+            })),
+          );
+
+          results.autoConfirmedResults.push(gr.id);
+        } catch (e: any) {
+          results.errors.push(`auto-confirm result ${gr.id}: ${e.message}`);
+        }
+      }
     }
   }
 

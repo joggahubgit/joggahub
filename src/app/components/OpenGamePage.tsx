@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { notify, notifyGamePlayers } from '@/app/lib/notify';
 import { redirectToCheckout, calcFees } from '@/app/lib/checkout';
 import { PLAYER_CANCEL_CUTOFF_HOURS, CAPTURE_CUTOFF_HOURS, getMinPlayersForSport } from '@/app/lib/gameConfig';
+import GameResultSubmit from './GameResultSubmit';
 
 const SPORT_LABELS: Record<string, string> = {
   football: 'Society', society: 'Society', futsal: 'Futsal',
@@ -39,6 +40,7 @@ interface Player {
   isOrganizer?: boolean;
   paid?: boolean;
   isCurrentUser?: boolean;
+  team?: 'a' | 'b';
 }
 
 export default function OpenGamePage() {
@@ -79,6 +81,8 @@ export default function OpenGamePage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [organizerPaid, setOrganizerPaid] = useState(true);
   const [payingReservation, setPayingReservation] = useState(false);
+  const [gamePlayerRoster, setGamePlayerRoster] = useState<{ id: string; name: string }[]>([]);
+  const [pendingTeam, setPendingTeam] = useState<'a' | 'b'>('a');
 
 
   // Display values — from passed state (creator flow) or fetched
@@ -134,7 +138,7 @@ export default function OpenGamePage() {
       // Fetch all joined players
       const { data: gamePlayers } = await supabase
         .from('game_players')
-        .select('player_name, paid, player_id')
+        .select('player_name, paid, player_id, team')
         .eq('game_id', id)
         .order('id');
 
@@ -144,8 +148,14 @@ export default function OpenGamePage() {
       if (userIsOrganizer) setOrganizerPaid(orgIsPaid);
       const joined = (gamePlayers ?? [])
         .filter(p => p.player_id !== game.organizer_id)
-        .map(p => ({ name: p.player_name, paid: p.paid, isCurrentUser: user ? p.player_id === user.id : false }));
-      setPlayers([{ name, isOrganizer: true, paid: orgIsPaid }, ...joined]);
+        .map(p => ({ name: p.player_name, paid: p.paid, isCurrentUser: user ? p.player_id === user.id : false, team: p.team as 'a' | 'b' | undefined }));
+      setPlayers([{ name, isOrganizer: true, paid: orgIsPaid, team: (organizerEntry?.team as 'a' | 'b' | undefined) ?? 'a' }, ...joined]);
+      setGamePlayerRoster([
+        { id: game.organizer_id, name },
+        ...(gamePlayers ?? [])
+          .filter(p => p.player_id !== game.organizer_id)
+          .map(p => ({ id: p.player_id, name: p.player_name })),
+      ]);
 
       // Mark non-organizer player as enrolled only if payment confirmed
       if (user && !userIsOrganizer) {
@@ -290,6 +300,7 @@ export default function OpenGamePage() {
         mode: 'join_self',
         captureManual: true,
         payMode: 'split',
+        ...(courtSport === 'futevolei' ? { team: pendingTeam } : {}),
       });
     } catch (e: any) {
       setJoinError(e.message);
@@ -335,6 +346,7 @@ export default function OpenGamePage() {
         gamePayMode,
         currentPlayers,
         maxPlayers,
+        ...(courtSport === 'futevolei' ? { team: pendingTeam } : {}),
       },
     });
   }
@@ -456,9 +468,11 @@ export default function OpenGamePage() {
     setCurrentPlayers(p => p - 1);
   }
 
-  async function handleCircleClick() {
+  async function handleCircleClick(teamOverride?: 'a' | 'b') {
     if (gameStatus === 'completed' || gameStatus === 'expired' || gameStatus === 'pending_results') return;
     if (withinJoinCutoff) return;
+    const team: 'a' | 'b' = teamOverride ?? 'a';
+    setPendingTeam(team);
     if (isPrivate && !isEnrolled && !isOrganizer) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setJoinError('Você precisa estar logado para entrar.'); return; }
@@ -473,6 +487,7 @@ export default function OpenGamePage() {
           player_id: user.id,
           player_name: playerName,
           paid: true,
+          ...(courtSport === 'futevolei' ? { team } : {}),
         });
         if (insertErr && insertErr.code !== '23505') {
           setJoinError('Erro ao entrar na partida. Tente novamente.');
@@ -488,7 +503,7 @@ export default function OpenGamePage() {
           'Novo jogador entrou!',
           `${playerName} entrou na partida. Agora são ${newCount}/${maxPlayers} jogadores.`,
         );
-        setPlayers(prev => [...prev, { name: playerName, paid: true, isCurrentUser: true }]);
+        setPlayers(prev => [...prev, { name: playerName, paid: true, isCurrentUser: true, team }]);
         setCurrentPlayers(newCount);
         setIsEnrolled(true);
         setJoining(false);
@@ -509,6 +524,7 @@ export default function OpenGamePage() {
             mode: 'join_self',
             captureManual: true,
             payMode: 'split',
+            ...(courtSport === 'futevolei' ? { team } : {}),
           });
         } catch (e: any) {
           setJoinError(e.message);
@@ -600,8 +616,13 @@ export default function OpenGamePage() {
       )}
 
       {!loading && <div className="overflow-y-auto pb-8">
-        {/* Pending results banner — organizer action required */}
-        {gameStatus === 'pending_results' && isOrganizer && (
+        {/* Futevôlei: real result registration + rating update */}
+        {gameStatus === 'pending_results' && courtSport === 'futevolei' && (isOrganizer || isEnrolled) && (
+          <GameResultSubmit gameId={id!} players={gamePlayerRoster} currentUserId={currentUserId} />
+        )}
+
+        {/* Other sports: unchanged static MVP banners (no real submission flow yet) */}
+        {gameStatus === 'pending_results' && courtSport !== 'futevolei' && isOrganizer && (
           <div className="mx-5 mt-4 bg-orange-50 border border-orange-300 rounded-2xl px-4 py-3 flex items-center gap-3">
             <Zap className="w-5 h-5 text-orange-500 flex-shrink-0" />
             <div className="flex-1 min-w-0">
@@ -611,8 +632,7 @@ export default function OpenGamePage() {
           </div>
         )}
 
-        {/* Pending results banner — player vote required */}
-        {gameStatus === 'pending_results' && isEnrolled && !isOrganizer && (
+        {gameStatus === 'pending_results' && courtSport !== 'futevolei' && isEnrolled && !isOrganizer && (
           <div className="mx-5 mt-4 bg-amber-50 border border-amber-300 rounded-2xl px-4 py-3 flex items-center gap-3">
             <Zap className="w-5 h-5 text-amber-500 flex-shrink-0" />
             <div className="flex-1 min-w-0">
@@ -755,8 +775,8 @@ export default function OpenGamePage() {
             </div>
           </div>
 
-          <div className={`grid gap-3 ${maxPlayers <= 4 ? 'grid-cols-4' : maxPlayers <= 8 ? 'grid-cols-4' : 'grid-cols-5'}`}>
-            {Array.from({ length: maxPlayers }).map((_, i) => {
+          {(() => {
+            const renderSlot = (i: number, emptyTeam?: 'a' | 'b') => {
               const player = players[i];
               const filled = i < currentPlayers;
               const canRemove = isOrganizer && filled && player && !player.isOrganizer && !withinCancelCutoff;
@@ -803,7 +823,7 @@ export default function OpenGamePage() {
                       </div>
                     ) : (
                       <button
-                        onClick={handleCircleClick}
+                        onClick={() => handleCircleClick(emptyTeam)}
                         className="w-12 h-12 rounded-full border-2 border-dashed border-violet-300 flex items-center justify-center transition-colors hover:border-violet-500 hover:bg-violet-50 active:bg-violet-100"
                       >
                         <span className="text-xl font-light text-violet-400">+</span>
@@ -828,8 +848,43 @@ export default function OpenGamePage() {
                   )}
                 </div>
               );
-            })}
-          </div>
+            };
+
+            if (courtSport === 'futevolei' && maxPlayers === 4) {
+              // Group by each player's REAL team (from game_players.team), not by array
+              // position — fetch order is by row id (random UUID), not join/team order.
+              const teamAIndices = players.map((p, i) => ({ p, i })).filter(x => (x.p.team ?? 'a') === 'a').map(x => x.i);
+              const teamBIndices = players.map((p, i) => ({ p, i })).filter(x => x.p.team === 'b').map(x => x.i);
+              let nextEmptyIndex = currentPlayers;
+              const teamAEmpty = Array.from({ length: Math.max(0, 2 - teamAIndices.length) }, () => nextEmptyIndex++);
+              const teamBEmpty = Array.from({ length: Math.max(0, 2 - teamBIndices.length) }, () => nextEmptyIndex++);
+
+              return (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs font-bold text-violet-600 uppercase tracking-wide mb-2 text-center">Time A</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {teamAIndices.map(i => renderSlot(i))}
+                      {teamAEmpty.map(i => renderSlot(i, 'a'))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 text-center">Time B</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {teamBIndices.map(i => renderSlot(i))}
+                      {teamBEmpty.map(i => renderSlot(i, 'b'))}
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div className={`grid gap-3 ${maxPlayers <= 4 ? 'grid-cols-4' : maxPlayers <= 8 ? 'grid-cols-4' : 'grid-cols-5'}`}>
+                {Array.from({ length: maxPlayers }).map((_, i) => renderSlot(i))}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Action buttons */}

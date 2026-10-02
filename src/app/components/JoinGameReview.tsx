@@ -21,6 +21,7 @@ interface JoinState {
   currentPlayers?: number;
   maxPlayers?: number;
   gamePayMode?: 'split' | 'full';
+  team?: 'a' | 'b';
 }
 
 const SPORT_LABELS: Record<string, string> = {
@@ -85,6 +86,7 @@ export default function JoinGameReview() {
         player_id: state.playerId,
         player_name: state.playerName,
         paid: true,
+        ...(state.team ? { team: state.team } : {}),
       });
       if (insertErr) throw new Error(insertErr.message);
 
@@ -133,6 +135,7 @@ export default function JoinGameReview() {
         mode: isSelf ? 'join_self' : 'join_other',
         captureManual: true,
         payMode: 'split',
+        ...(state.team ? { team: state.team } : {}),
       });
     } catch (e: any) {
       setError(e.message);
