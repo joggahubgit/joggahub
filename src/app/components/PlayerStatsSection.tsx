@@ -219,7 +219,7 @@ export default function PlayerStatsSection({ userId }: Props) {
 
       // Compute deltas by walking the (ascending) history alongside chronologically sorted matches
       const chrono = [...summaries].sort((a, b) => (a.date ?? '').localeCompare(b.date ?? ''));
-      let prevRating = historyRows?.[0]?.rating ?? ratingRow?.rating ?? 3.0;
+      let prevRating = historyRows?.[0]?.rating ?? ratingRow?.rating ?? 1.5; // RATING_DEFAULT — mirrors submit-game-result
       const deltaByGame: Record<string, number> = {};
       for (const m of chrono) {
         if (m.ratingAfter != null) {

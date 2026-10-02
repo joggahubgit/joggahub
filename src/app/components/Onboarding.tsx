@@ -160,6 +160,16 @@ export default function Onboarding() {
             rating: level.rating,
             matches_played: 0,
           }, { onConflict: 'player_id,sport_type' });
+          // Baseline history row (game_id null) so the first confirmed match's
+          // "before" rating is the declared level, not the 3.0 default — otherwise
+          // the rating-evolution chart and per-match deltas understate their first game.
+          await supabase.from('player_rating_history').insert({
+            player_id: user.id,
+            sport_type: 'futevolei',
+            game_id: null,
+            rating: level.rating,
+            matches_played: 0,
+          });
         }
       }
 

@@ -170,7 +170,7 @@ export default function GameResultSubmit({ gameId, players, currentUserId }: Pro
           const idx = rows.findIndex(r => r.game_id === gameId);
           if (idx === -1) return null;
           const after = rows[idx].rating;
-          const before = idx > 0 ? rows[idx - 1].rating : 3.0; // RATING_DEFAULT
+          const before = idx > 0 ? rows[idx - 1].rating : 1.5; // RATING_DEFAULT — mirrors submit-game-result
           return { playerId: p.id, before, after };
         }).filter((d): d is { playerId: string; before: number; after: number } => d !== null);
         if (deltas.length > 0) setRatingDeltas(deltas);

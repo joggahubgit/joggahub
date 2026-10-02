@@ -385,6 +385,11 @@ export default function OpenGamePage() {
     setLeaving(true);
     const nextPlayer = players[1];
 
+    // Decrement the player count while the leaving user is still organizer_id —
+    // RLS on games.UPDATE is scoped to organizer/participants, so this must run
+    // before the organizer_id transfer below flips that ownership away.
+    await supabase.from('games').update({ current_players: currentPlayers - 1 }).eq('id', id);
+
     if (nextPlayer) {
       const { data: nextProfile } = await supabase
         .from('profiles')
@@ -405,8 +410,6 @@ export default function OpenGamePage() {
       }
       await supabase.from('game_players').delete().eq('game_id', id).eq('player_name', nextPlayer.name);
     }
-
-    await supabase.from('games').update({ current_players: currentPlayers - 1 }).eq('id', id);
 
     // Notify remaining players that organizer left
     if (currentUserId) {

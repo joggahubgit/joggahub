@@ -75,11 +75,20 @@ export default function Profile() {
       rating: level.rating,
       matches_played: 0,
     }, { onConflict: 'player_id,sport_type' });
-    setSavingLevel(false);
     if (!error) {
+      // Baseline history row (game_id null) so the first confirmed match's "before"
+      // rating is the declared level, not the 3.0 default.
+      await supabase.from('player_rating_history').insert({
+        player_id: user.id,
+        sport_type: 'futevolei',
+        game_id: null,
+        rating: level.rating,
+        matches_played: 0,
+      });
       setFutevoleiRating({ rating: level.rating, matches_played: 0 });
       setShowLevelPicker(false);
     }
+    setSavingLevel(false);
   }
 
   const totalGames = gamesAsOrganizer + gamesAsPlayer;

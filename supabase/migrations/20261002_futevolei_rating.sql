@@ -21,7 +21,7 @@ create table if not exists public.player_ratings (
   id uuid primary key default gen_random_uuid(),
   player_id uuid not null references public.profiles(id) on delete cascade,
   sport_type text not null,
-  rating numeric not null default 3.0 check (rating >= 1.0 and rating <= 7.0),
+  rating numeric not null default 1.5 check (rating >= 1.0 and rating <= 7.0),
   matches_played integer not null default 0,
   updated_at timestamptz not null default now(),
   unique (player_id, sport_type)

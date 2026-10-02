@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import SplashScreen from './components/SplashScreen';
 import Landing from './components/Landing';
 import Auth from './components/Auth';
 import AuthCallback from './components/AuthCallback';
@@ -44,6 +46,14 @@ import JoinGameReview from './components/JoinGameReview';
 import PaymentSuccess from './components/PaymentSuccess';
 import MyBookings from './components/MyBookings';
 
+/** Root route: already-logged-in visitors skip the marketing Landing and go straight to /home */
+function RootRoute() {
+  const { user, loading } = useAuth();
+  if (loading) return <div className="flex items-center justify-center min-h-screen"><div className="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin" /></div>;
+  if (user) return <Navigate to="/home" replace />;
+  return <Landing />;
+}
+
 /** Redirect to /auth if not logged in, else render children */
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, profile, loading } = useAuth();
@@ -63,10 +73,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function AppRoutes() {
   return (
-    <div className="max-w-md mx-auto bg-white shadow-xl min-h-screen">
-      <Routes>
+    <div className="min-h-screen bg-gradient-to-br from-violet-700 via-violet-600 to-indigo-800">
+      <div className="max-w-md mx-auto bg-white shadow-2xl min-h-screen">
+        <Routes>
         {/* Public */}
-        <Route path="/" element={<Landing />} />
+        <Route path="/" element={<RootRoute />} />
         <Route path="/auth" element={<Auth />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/terms" element={<TermsPage />} />
@@ -115,12 +126,15 @@ function AppRoutes() {
         <Route path="/payment-success" element={<ProtectedRoute><PaymentSuccess /></ProtectedRoute>} />
         <Route path="/my-bookings" element={<ProtectedRoute><MyBookings /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+        </Routes>
+      </div>
     </div>
   );
 }
 
 export default function App() {
+  const [showSplash, setShowSplash] = useState(true);
+
   return (
     <AuthProvider>
       <LanguageProvider>
@@ -128,6 +142,7 @@ export default function App() {
           <AppRoutes />
         </Router>
       </LanguageProvider>
+      {showSplash && <SplashScreen onFinish={() => setShowSplash(false)} />}
     </AuthProvider>
   );
 }
