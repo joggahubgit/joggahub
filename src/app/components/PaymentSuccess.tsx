@@ -48,6 +48,7 @@ export default function PaymentSuccess() {
   // organizer open game
   const totalPrice = Number(params.get('totalPrice') ?? '0');
   const durationMins = Number(params.get('durationMins') ?? '0');
+  const joinerTeam = params.get('team') ?? '';
 
   const [createdGameId, setCreatedGameId] = useState('');
 
@@ -182,6 +183,7 @@ export default function PaymentSuccess() {
               player_id: userId,
               player_name: profile?.name ?? 'Organizador',
               paid: true,
+              ...(courtSport === 'futevolei' ? { team: 'a' } : {}),
             }).then(() => {});
 
             setPrivateGameId(gameRow.id);
@@ -240,6 +242,7 @@ export default function PaymentSuccess() {
             player_id: playerId,
             player_name: playerName,
             paid: true,
+            ...(courtSport === 'futevolei' ? { team: 'a' } : {}),
           });
 
           if (orgInsertErr && orgInsertErr.code !== '23505') {
@@ -318,6 +321,7 @@ export default function PaymentSuccess() {
           player_name: playerName,
           paid: true,
           ...(stripePaymentIntentId ? { stripe_payment_intent_id: stripePaymentIntentId } : {}),
+          ...(joinerTeam ? { team: joinerTeam } : {}),
         });
 
         if (insertErr && insertErr.code !== '23505') {

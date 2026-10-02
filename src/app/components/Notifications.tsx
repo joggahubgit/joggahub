@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Bell, Users, Calendar, CheckCircle, X, Loader2, Crown, UserMinus } from 'lucide-react';
+import { ArrowLeft, Bell, Users, Calendar, CheckCircle, X, Loader2, Crown, UserMinus, Trophy } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
-type NotificationType = 'game_joined' | 'game_removed' | 'game_cancelled' | 'game_left' | 'organizer_transferred';
+type NotificationType =
+  | 'game_joined' | 'game_removed' | 'game_cancelled' | 'game_left' | 'organizer_transferred'
+  | 'pending_results' | 'result_pending_confirmation' | 'rating_updated';
 
 interface Notification {
   id: string;
@@ -29,6 +31,9 @@ function getIcon(type: NotificationType) {
     case 'game_removed': return UserMinus;
     case 'game_cancelled': return X;
     case 'organizer_transferred': return Crown;
+    case 'pending_results': return CheckCircle;
+    case 'result_pending_confirmation': return CheckCircle;
+    case 'rating_updated': return Trophy;
     default: return Calendar;
   }
 }
@@ -39,6 +44,9 @@ function getColor(type: NotificationType) {
     case 'game_removed': return 'bg-red-100 text-red-500';
     case 'game_cancelled': return 'bg-red-100 text-red-500';
     case 'organizer_transferred': return 'bg-yellow-100 text-yellow-600';
+    case 'pending_results': return 'bg-blue-100 text-blue-600';
+    case 'result_pending_confirmation': return 'bg-blue-100 text-blue-600';
+    case 'rating_updated': return 'bg-amber-100 text-amber-600';
     default: return 'bg-violet-100 text-violet-600';
   }
 }

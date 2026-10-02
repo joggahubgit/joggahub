@@ -3,14 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { Check, ChevronRight, Camera, Loader2, Zap, LocateFixed } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { FUTEVOLEI_LEVELS } from '@/app/lib/futevoleiLevels';
 
 const POSITIONS = [
-  { value: 'goalkeeper', label: 'Goleiro', emoji: '🧤' },
-  { value: 'defender', label: 'Zagueiro', emoji: '🛡️' },
-  { value: 'fullback', label: 'Lateral', emoji: '⚡' },
-  { value: 'midfielder', label: 'Volante', emoji: '⚙️' },
-  { value: 'playmaker', label: 'Meia', emoji: '🎯' },
-  { value: 'forward', label: 'Atacante', emoji: '🔥' },
+  { value: 'right', label: 'Lado direito', emoji: '➡️' },
+  { value: 'left', label: 'Lado esquerdo', emoji: '⬅️' },
+  { value: 'both', label: 'Qualquer lado', emoji: '🔄' },
 ];
 
 const DAYS = [
@@ -35,7 +33,7 @@ export default function Onboarding() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState(1);
-  const TOTAL_STEPS = 3;
+  const TOTAL_STEPS = 4;
   const [saving, setSaving] = useState(false);
   const [locating, setLocating] = useState(false);
   const [locateError, setLocateError] = useState('');
@@ -53,6 +51,9 @@ export default function Onboarding() {
   // Step 3
   const [days, setDays] = useState<string[]>([]);
   const [periods, setPeriods] = useState<string[]>([]);
+
+  // Step 4 (optional — futevôlei only, for now)
+  const [futevoleiLevel, setFutevoleiLevel] = useState('');
 
   async function detectLocation() {
     if (!navigator.geolocation) {
@@ -147,6 +148,19 @@ export default function Onboarding() {
       // Increment XP directly in DB to avoid stale-context race condition
       if (isFirstTime) {
         await supabase.rpc('increment_xp', { user_id: user.id, amount: 20 });
+      }
+
+      // Self-declared starting level for futevôlei (only writable while matches_played = 0, enforced by RLS)
+      if (futevoleiLevel) {
+        const level = FUTEVOLEI_LEVELS.find(l => l.key === futevoleiLevel);
+        if (level) {
+          await supabase.from('player_ratings').upsert({
+            player_id: user.id,
+            sport_type: 'futevolei',
+            rating: level.rating,
+            matches_played: 0,
+          }, { onConflict: 'player_id,sport_type' });
+        }
       }
 
       // Mark onboarding as done in localStorage so ProtectedRoute doesn't
@@ -388,6 +402,42 @@ export default function Onboarding() {
               <p className="text-sm text-amber-800">
                 <strong>+20 XP</strong> por completar seu perfil — você começa na frente!
               </p>
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 4: Nível no futevôlei (opcional) ── */}
+        {step === 4 && (
+          <div className="flex flex-col gap-6 flex-1">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Qual seu nível no futevôlei?</h2>
+              <p className="text-gray-500 mt-1">
+                Só pra começar sua pontuação num lugar razoável — ela se ajusta sozinha conforme você for jogando. Pode pular se não joga futevôlei.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              {FUTEVOLEI_LEVELS.map(l => (
+                <button
+                  key={l.key}
+                  onClick={() => setFutevoleiLevel(prev => prev === l.key ? '' : l.key)}
+                  className={`flex items-center justify-between px-4 py-3.5 rounded-xl border-2 text-left transition-all ${
+                    futevoleiLevel === l.key
+                      ? 'border-violet-600 bg-violet-50'
+                      : 'border-gray-200 hover:border-violet-200'
+                  }`}
+                >
+                  <div>
+                    <div className="font-semibold text-gray-900">{l.label}</div>
+                    <div className="text-xs text-gray-400">{l.description}</div>
+                  </div>
+                  {futevoleiLevel === l.key && (
+                    <div className="w-5 h-5 bg-violet-600 rounded-full flex items-center justify-center flex-shrink-0">
+                      <Check className="w-3 h-3 text-white" />
+                    </div>
+                  )}
+                </button>
+              ))}
             </div>
           </div>
         )}

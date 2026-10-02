@@ -28,6 +28,8 @@ interface CheckoutParams {
   successUrl?: string;
   /** Override the auto-built cancel URL (used by organizer flow) */
   cancelUrl?: string;
+  /** Futevôlei only: which team ('a' | 'b') the joiner picked */
+  team?: 'a' | 'b';
 }
 
 export async function redirectToCheckout(params: CheckoutParams) {
@@ -38,8 +40,9 @@ export async function redirectToCheckout(params: CheckoutParams) {
   const payModeParam = params.payMode ? `&payMode=${params.payMode}` : '';
   const sessionParam = params.captureManual ? '&session_id={CHECKOUT_SESSION_ID}' : '';
   const durationParam = params.durationMins ? `&durationMins=${params.durationMins}` : '';
+  const teamParam = params.team ? `&team=${params.team}` : '';
   const successUrl = params.successUrl
-    ?? `${origin}/payment-success?gameId=${params.gameId ?? ''}&playerId=${params.playerId}&playerName=${encodeURIComponent(params.playerName)}&mode=${params.mode}${slotParam}${payModeParam}${sessionParam}${durationParam}`;
+    ?? `${origin}/payment-success?gameId=${params.gameId ?? ''}&playerId=${params.playerId}&playerName=${encodeURIComponent(params.playerName)}&mode=${params.mode}${slotParam}${payModeParam}${sessionParam}${durationParam}${teamParam}`;
   const cancelUrl = params.cancelUrl
     ?? `${origin}/open-game/${params.gameId ?? ''}`;
 

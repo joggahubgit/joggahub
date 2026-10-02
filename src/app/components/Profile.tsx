@@ -2,48 +2,20 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, User, MapPin, Settings, LogOut, Edit2,
-  Users, Home as HomeIcon, Target, Zap, Camera,
-  Clock, Calendar, Loader2, ShieldCheck,
+  Users, Home as HomeIcon, Target, Camera,
+  Clock, Calendar, Loader2,
 } from 'lucide-react';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-
-// ── XP / Level system ─────────────────────────────────────────────────────────
-
-const LEVELS = [
-  { name: 'Recruta',  emoji: '⚽', min: 0,    max: 99   },
-  { name: 'Amador',   emoji: '🥈', min: 100,  max: 299  },
-  { name: 'Veterano', emoji: '🥇', min: 300,  max: 699  },
-  { name: 'Craque',   emoji: '🏆', min: 700,  max: 1499 },
-  { name: 'Lenda',    emoji: '👑', min: 1500, max: Infinity },
-];
-
-function getLevel(xp: number) {
-  return LEVELS.findLast(l => xp >= l.min) ?? LEVELS[0];
-}
-
-function getNextLevel(xp: number) {
-  return LEVELS.find(l => xp < l.min) ?? null;
-}
-
-function xpProgress(xp: number) {
-  const current = getLevel(xp);
-  const next = getNextLevel(xp);
-  if (!next) return 100;
-  const range = next.min - current.min;
-  const earned = xp - current.min;
-  return Math.round((earned / range) * 100);
-}
+import { FUTEVOLEI_LEVELS, type FutevoleiLevelOption } from '@/app/lib/futevoleiLevels';
+import PlayerStatsSection from './PlayerStatsSection';
 
 // ── Position labels ───────────────────────────────────────────────────────────
 
 const POSITION_LABELS: Record<string, string> = {
-  goalkeeper: 'Goleiro',
-  defender: 'Zagueiro',
-  fullback: 'Lateral',
-  midfielder: 'Volante',
-  playmaker: 'Meia',
-  forward: 'Atacante',
+  right: 'Lado direito',
+  left: 'Lado esquerdo',
+  both: 'Qualquer lado',
 };
 
 const FOOT_LABELS: Record<string, string> = {
@@ -72,6 +44,9 @@ export default function Profile() {
   const [gamesAsOrganizer, setGamesAsOrganizer] = useState(0);
   const [gamesAsPlayer, setGamesAsPlayer] = useState(0);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [futevoleiRating, setFutevoleiRating] = useState<{ rating: number; matches_played: number } | null | undefined>(undefined);
+  const [showLevelPicker, setShowLevelPicker] = useState(false);
+  const [savingLevel, setSavingLevel] = useState(false);
 
   // Always load fresh profile data on mount to avoid stale context
   useEffect(() => { refreshProfile(); }, []);
@@ -86,13 +61,28 @@ export default function Profile() {
       setGamesAsOrganizer(org.count ?? 0);
       setGamesAsPlayer(player.count ?? 0);
     });
+    supabase.from('player_ratings').select('rating, matches_played')
+      .eq('player_id', user.id).eq('sport_type', 'futevolei').maybeSingle()
+      .then(({ data }) => setFutevoleiRating(data));
   }, [user?.id]);
 
+  async function handleSetLevel(level: FutevoleiLevelOption) {
+    if (!user) return;
+    setSavingLevel(true);
+    const { error } = await supabase.from('player_ratings').upsert({
+      player_id: user.id,
+      sport_type: 'futevolei',
+      rating: level.rating,
+      matches_played: 0,
+    }, { onConflict: 'player_id,sport_type' });
+    setSavingLevel(false);
+    if (!error) {
+      setFutevoleiRating({ rating: level.rating, matches_played: 0 });
+      setShowLevelPicker(false);
+    }
+  }
+
   const totalGames = gamesAsOrganizer + gamesAsPlayer;
-  const xp = profile?.xp ?? 0;
-  const level = getLevel(xp);
-  const nextLevel = getNextLevel(xp);
-  const progress = xpProgress(xp);
 
   async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -195,56 +185,45 @@ export default function Profile() {
         </div>
       </div>
 
-      {/* XP / Level */}
-      <div className="mx-5 mb-3 bg-white rounded-2xl border border-gray-200 p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Nível atual</p>
-            <div className="flex items-center gap-2">
-              <span className="text-2xl">{level.emoji}</span>
-              <span className="text-xl font-bold text-gray-900">{level.name}</span>
-            </div>
-          </div>
-          <div className="text-right">
-            <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-0.5">XP Total</p>
-            <div className="flex items-center gap-1 justify-end">
-              <Zap className="w-4 h-4 text-amber-500" />
-              <span className="text-xl font-bold text-gray-900">{xp}</span>
-            </div>
+      {/* Pontuação — rating de futevôlei */}
+      {futevoleiRating === undefined ? (
+        <div className="mx-5 mb-3 bg-white rounded-2xl border border-gray-200 p-5">
+          <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-3">Pontuação · Futevôlei</p>
+          <div className="flex items-center gap-1 text-sm text-gray-400">
+            <Loader2 className="w-4 h-4 animate-spin" /> Carregando...
           </div>
         </div>
-
-        {nextLevel ? (
-          <>
-            <div className="w-full bg-gray-100 rounded-full h-2.5 mb-2">
-              <div
-                className="bg-gradient-to-r from-violet-500 to-violet-600 rounded-full h-2.5 transition-all duration-500"
-                style={{ width: `${progress}%` }}
-              />
+      ) : futevoleiRating === null ? (
+        <div className="mx-5 mb-3 bg-white rounded-2xl border border-gray-200 p-5">
+          <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-3">Pontuação · Futevôlei</p>
+          {showLevelPicker ? (
+            <div className="flex flex-col gap-2">
+              {FUTEVOLEI_LEVELS.map(l => (
+                <button
+                  key={l.key}
+                  disabled={savingLevel}
+                  onClick={() => handleSetLevel(l)}
+                  className="flex items-center justify-between px-3 py-2.5 rounded-xl border-2 border-gray-200 text-left hover:border-violet-300 disabled:opacity-50"
+                >
+                  <div>
+                    <div className="font-semibold text-sm text-gray-900">{l.label}</div>
+                    <div className="text-xs text-gray-400">{l.description}</div>
+                  </div>
+                </button>
+              ))}
             </div>
-            <div className="flex items-center justify-between text-xs text-gray-400">
-              <span>{level.name}</span>
-              <span className="text-violet-600 font-semibold">
-                {nextLevel.min - xp} XP para {nextLevel.emoji} {nextLevel.name}
-              </span>
+          ) : (
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-gray-500">Ainda sem partidas de futevôlei registradas.</p>
+              <button onClick={() => setShowLevelPicker(true)} className="text-sm font-semibold text-violet-600 flex-shrink-0 ml-2">
+                Definir nível
+              </button>
             </div>
-          </>
-        ) : (
-          <div className="flex items-center gap-2 bg-amber-50 rounded-xl px-3 py-2">
-            <span className="text-lg">👑</span>
-            <span className="text-sm font-semibold text-amber-700">Nível máximo atingido!</span>
-          </div>
-        )}
-
-        {/* XP breakdown hint */}
-        <div className="mt-4 pt-4 border-t border-gray-100">
-          <p className="text-xs font-semibold text-gray-500 mb-2">Como ganhar XP</p>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-400">
-            <span>⚽ Participar de partida</span><span className="font-semibold text-gray-600">+15 XP</span>
-            <span>⭐ Melhor jogador (voto)</span><span className="font-semibold text-gray-600">+30 XP</span>
-          </div>
+          )}
         </div>
-      </div>
+      ) : user && (
+        <PlayerStatsSection userId={user.id} />
+      )}
 
       {/* Stats */}
       <div className="mx-5 mb-3">
@@ -263,17 +242,6 @@ export default function Profile() {
             <div className="text-xs text-gray-500">Como jogador</div>
           </div>
         </div>
-      </div>
-
-      {/* Competitive stats — coming soon */}
-      <div className="mx-5 mb-3 bg-white rounded-2xl border border-dashed border-gray-200 p-5">
-        <div className="flex items-center gap-2 mb-1">
-          <ShieldCheck className="w-4 h-4 text-gray-300" />
-          <p className="text-sm font-semibold text-gray-400">Estatísticas competitivas</p>
-        </div>
-        <p className="text-xs text-gray-400">
-          Gols, vitórias, assistências e conquistas estarão disponíveis quando as partidas competitivas forem ativadas.
-        </p>
       </div>
 
       {/* Player profile card */}
@@ -346,7 +314,7 @@ export default function Profile() {
           </div>
         </div>
 
-        {!position && !foot && !avail?.days?.length && (
+        {!profile?.onboarding_completed && (
           <button
             onClick={() => navigate('/onboarding')}
             className="mt-4 w-full py-2.5 border border-dashed border-violet-300 text-violet-500 rounded-xl text-xs font-semibold"
