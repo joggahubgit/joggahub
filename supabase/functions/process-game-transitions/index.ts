@@ -831,6 +831,7 @@ serve(async (req) => {
               status: outcome.status,
               confirmed_at: new Date().toISOString(),
             }).eq('id', gr.id).eq('status', 'pending'); // idempotent guard
+            await supabase.from('games').update({ status: 'completed' }).eq('id', gr.game_id);
             results.autoConfirmedResults.push(gr.id);
             continue;
           }
@@ -891,6 +892,7 @@ serve(async (req) => {
             loser_ids: loserIds,
             confirmed_at: new Date().toISOString(),
           }).eq('id', gr.id).eq('status', 'pending'); // idempotent guard
+          await supabase.from('games').update({ status: 'completed' }).eq('id', gr.game_id);
 
           await supabase.from('notifications').insert(
             playerIds.map(pid => ({

@@ -81,7 +81,7 @@ export default function OpenGamePage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [organizerPaid, setOrganizerPaid] = useState(true);
   const [payingReservation, setPayingReservation] = useState(false);
-  const [gamePlayerRoster, setGamePlayerRoster] = useState<{ id: string; name: string }[]>([]);
+  const [gamePlayerRoster, setGamePlayerRoster] = useState<{ id: string; name: string; avatarUrl: string | null }[]>([]);
   const [pendingTeam, setPendingTeam] = useState<'a' | 'b'>('a');
 
 
@@ -150,11 +150,16 @@ export default function OpenGamePage() {
         .filter(p => p.player_id !== game.organizer_id)
         .map(p => ({ name: p.player_name, paid: p.paid, isCurrentUser: user ? p.player_id === user.id : false, team: p.team as 'a' | 'b' | undefined }));
       setPlayers([{ name, isOrganizer: true, paid: orgIsPaid, team: (organizerEntry?.team as 'a' | 'b' | undefined) ?? 'a' }, ...joined]);
+
+      const rosterIds = [game.organizer_id, ...(gamePlayers ?? []).filter(p => p.player_id !== game.organizer_id).map(p => p.player_id)];
+      const { data: rosterProfiles } = await supabase.from('profiles').select('id, avatar_url').in('id', rosterIds);
+      const avatarByPlayerId: Record<string, string | null> = {};
+      (rosterProfiles ?? []).forEach(p => { avatarByPlayerId[p.id] = p.avatar_url ?? null; });
       setGamePlayerRoster([
-        { id: game.organizer_id, name },
+        { id: game.organizer_id, name, avatarUrl: avatarByPlayerId[game.organizer_id] ?? null },
         ...(gamePlayers ?? [])
           .filter(p => p.player_id !== game.organizer_id)
-          .map(p => ({ id: p.player_id, name: p.player_name })),
+          .map(p => ({ id: p.player_id, name: p.player_name, avatarUrl: avatarByPlayerId[p.player_id] ?? null })),
       ]);
 
       // Mark non-organizer player as enrolled only if payment confirmed
@@ -616,8 +621,9 @@ export default function OpenGamePage() {
       )}
 
       {!loading && <div className="overflow-y-auto pb-8">
-        {/* Futevôlei: real result registration + rating update */}
-        {gameStatus === 'pending_results' && courtSport === 'futevolei' && (isOrganizer || isEnrolled) && (
+        {/* Futevôlei: real result registration + rating update — stays visible after
+            the game is marked completed so the confirmed scoreboard doesn't disappear */}
+        {(gameStatus === 'pending_results' || gameStatus === 'completed') && courtSport === 'futevolei' && (isOrganizer || isEnrolled) && (
           <GameResultSubmit gameId={id!} players={gamePlayerRoster} currentUserId={currentUserId} />
         )}
 
@@ -925,8 +931,8 @@ export default function OpenGamePage() {
           </div>
         )}
 
-        {/* Cancel game — organizer only */}
-        {isOrganizer && (
+        {/* Cancel game — organizer only, and only while the game hasn't already finished */}
+        {isOrganizer && gameStatus !== 'completed' && gameStatus !== 'expired' && (
           <div className="mx-5 mt-3">
             {withinCancelCutoff ? (
               <div className="w-full flex items-center gap-3 border-2 border-gray-200 rounded-2xl px-4 py-3.5 bg-gray-50">

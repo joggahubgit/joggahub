@@ -219,6 +219,7 @@ serve(async (req) => {
         confirmed_by: callerId,
         confirmed_at: new Date().toISOString(),
       }).eq('id', existing.id).eq('status', 'pending');
+      await supabase.from('games').update({ status: 'completed' }).eq('id', gameId);
 
       return new Response(JSON.stringify({ status: outcome.status }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -271,6 +272,7 @@ serve(async (req) => {
       confirmed_by: callerId,
       confirmed_at: new Date().toISOString(),
     }).eq('id', existing.id).eq('status', 'pending');
+    await supabase.from('games').update({ status: 'completed' }).eq('id', gameId);
 
     await supabase.from('notifications').insert(
       playerIds.map(id => ({

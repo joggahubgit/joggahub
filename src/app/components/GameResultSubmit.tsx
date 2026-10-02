@@ -3,10 +3,34 @@ import { Trophy, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { isValidSetScore, setTarget, deriveOutcome, type SetScore } from '@/app/lib/futevoleiSetRules';
 
+interface RosterPerson {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+}
+
 interface Props {
   gameId: string;
-  players: { id: string; name: string }[];
+  players: RosterPerson[];
   currentUserId: string | null;
+}
+
+interface RatingHistoryRow {
+  player_id: string;
+  rating: number;
+  matches_played: number;
+  game_id: string | null;
+  created_at: string;
+}
+
+function avatarCircle(person: RosterPerson, size = 'w-11 h-11', textSize = 'text-sm') {
+  return person.avatarUrl ? (
+    <img src={person.avatarUrl} alt={person.name} className={`${size} rounded-full object-cover border-2 border-white shadow-sm`} />
+  ) : (
+    <div className={`${size} rounded-full bg-violet-600 flex items-center justify-center text-white font-bold ${textSize} border-2 border-white shadow-sm`}>
+      {person.name.charAt(0).toUpperCase()}
+    </div>
+  );
 }
 
 interface GameResultRow {
@@ -123,8 +147,43 @@ export default function GameResultSubmit({ gameId, players, currentUserId }: Pro
       });
   }, [gameId]);
 
+  // Once confirmed, pull each player's before→after rating for this specific game from
+  // their full history (not just the freshly-submitted response) so the deltas still
+  // show correctly on a page reload, not only right after confirming.
+  useEffect(() => {
+    if (result?.status !== 'confirmed' || players.length === 0) return;
+    let cancelled = false;
+    supabase
+      .from('player_rating_history')
+      .select('player_id, rating, matches_played, game_id, created_at')
+      .eq('sport_type', 'futevolei')
+      .in('player_id', players.map(p => p.id))
+      .order('created_at', { ascending: true })
+      .then(({ data }) => {
+        if (cancelled || !data) return;
+        const byPlayer: Record<string, RatingHistoryRow[]> = {};
+        (data as RatingHistoryRow[]).forEach(row => {
+          (byPlayer[row.player_id] ??= []).push(row);
+        });
+        const deltas = players.map(p => {
+          const rows = byPlayer[p.id] ?? [];
+          const idx = rows.findIndex(r => r.game_id === gameId);
+          if (idx === -1) return null;
+          const after = rows[idx].rating;
+          const before = idx > 0 ? rows[idx - 1].rating : 3.0; // RATING_DEFAULT
+          return { playerId: p.id, before, after };
+        }).filter((d): d is { playerId: string; before: number; after: number } => d !== null);
+        if (deltas.length > 0) setRatingDeltas(deltas);
+      });
+    return () => { cancelled = true; };
+  }, [result?.status, gameId, players]);
+
+  function personFor(id: string): RosterPerson {
+    return players.find(p => p.id === id) ?? { id, name: 'Jogador', avatarUrl: null };
+  }
+
   function nameFor(id: string) {
-    return players.find(p => p.id === id)?.name ?? 'Jogador';
+    return personFor(id).name;
   }
 
   function teamLabel(ids: string[]) {
@@ -176,24 +235,56 @@ export default function GameResultSubmit({ gameId, players, currentUserId }: Pro
 
   // ── Confirmed ──
   if (result?.status === 'confirmed') {
-    const mine = ratingDeltas?.find(r => r.playerId === currentUserId);
-    const winnerLabel = result.winner_ids
-      ? (teamIds && sameIds(result.winner_ids, teamIds.a) ? `Time A (${teamLabel(teamIds.a)})`
-        : teamIds && sameIds(result.winner_ids, teamIds.b) ? `Time B (${teamLabel(teamIds.b)})`
-        : teamLabel(result.winner_ids))
-      : '';
-    return (
-      <div className="mx-5 mt-4 bg-green-50 border border-green-300 rounded-2xl px-4 py-3 flex items-center gap-3">
-        <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-green-800">Resultado confirmado: {winnerLabel} venceu ({setsLabel(result.sets)})</p>
-          {mine && (
-            <p className="text-xs text-green-700 mt-0.5">
-              Seu rating de futevôlei: {mine.before.toFixed(2)} → {mine.after.toFixed(2)}
-              {mine.after >= mine.before ? ' ↑' : ' ↓'}
-            </p>
-          )}
+    const winnerIds = result.winner_ids ?? [];
+    const teamAIds = teamIds?.a ?? [];
+    const teamBIds = teamIds?.b ?? [];
+    const winningTeam: 'a' | 'b' | null = teamIds
+      ? (sameIds(winnerIds, teamAIds) ? 'a' : sameIds(winnerIds, teamBIds) ? 'b' : null)
+      : null;
+    const deltaFor = (id: string) => ratingDeltas?.find(r => r.playerId === id) ?? null;
+
+    const TeamColumn = ({ ids, isWinner }: { ids: string[]; isWinner: boolean }) => (
+      <div className={`flex-1 rounded-xl p-3 ${isWinner ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-100'}`}>
+        <div className="flex -space-x-2 mb-2">
+          {ids.map(id => <span key={id}>{avatarCircle(personFor(id))}</span>)}
         </div>
+        <div className="space-y-1">
+          {ids.map(id => {
+            const d = deltaFor(id);
+            return (
+              <div key={id} className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-gray-900 truncate">{nameFor(id)}</p>
+                {d && (
+                  <p className={`text-[10px] font-bold flex-shrink-0 ${d.after >= d.before ? 'text-green-600' : 'text-red-500'}`}>
+                    {d.after >= d.before ? '+' : ''}{(d.after - d.before).toFixed(2)}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {isWinner && <p className="text-[10px] font-bold text-green-600 mt-1.5 tracking-wide">VENCEDOR</p>}
+      </div>
+    );
+
+    return (
+      <div className="mx-5 mt-4 bg-white border border-gray-200 rounded-2xl p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
+          <p className="text-xs font-bold text-green-700 uppercase tracking-wide">Resultado confirmado</p>
+        </div>
+        {teamIds ? (
+          <div className="flex items-center gap-3">
+            <TeamColumn ids={teamAIds} isWinner={winningTeam === 'a'} />
+            <span className="text-xs font-bold text-gray-400 flex-shrink-0">vs</span>
+            <TeamColumn ids={teamBIds} isWinner={winningTeam === 'b'} />
+          </div>
+        ) : (
+          <p className="text-sm font-bold text-gray-900">{teamLabel(winnerIds)} venceu</p>
+        )}
+        <p className="text-base font-black text-gray-900 text-center mt-3 tracking-wide">
+          {setsLabel(result.sets)}
+        </p>
       </div>
     );
   }
