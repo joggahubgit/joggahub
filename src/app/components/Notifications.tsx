@@ -25,6 +25,10 @@ function timeAgo(iso: string) {
   return `${Math.floor(diff / 86400)}d atrás`;
 }
 
+function tabOf(type: NotificationType): 'games' | 'messages' {
+  return type === 'chat_message' ? 'messages' : 'games';
+}
+
 function getIcon(type: NotificationType) {
   switch (type) {
     case 'game_joined': return Users;
@@ -53,10 +57,13 @@ function getColor(type: NotificationType) {
   }
 }
 
+type NotificationTab = 'games' | 'messages';
+
 export default function Notifications() {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<NotificationTab>('games');
 
   useEffect(() => {
     let channel: ReturnType<typeof supabase.channel> | null = null;
@@ -97,10 +104,10 @@ export default function Notifications() {
   }
 
   async function markAllAsRead() {
-    const ids = notifications.filter(n => !n.read).map(n => n.id);
+    const ids = notifications.filter(n => !n.read && tabOf(n.type) === activeTab).map(n => n.id);
     if (!ids.length) return;
     await supabase.from('notifications').update({ read: true }).in('id', ids);
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    setNotifications(prev => prev.map(n => ids.includes(n.id) ? { ...n, read: true } : n));
   }
 
   async function deleteNotification(id: string) {
@@ -108,7 +115,12 @@ export default function Notifications() {
     setNotifications(prev => prev.filter(n => n.id !== id));
   }
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const gamesNotifications = notifications.filter(n => tabOf(n.type) === 'games');
+  const messagesNotifications = notifications.filter(n => tabOf(n.type) === 'messages');
+  const visibleNotifications = activeTab === 'games' ? gamesNotifications : messagesNotifications;
+  const gamesUnread = gamesNotifications.filter(n => !n.read).length;
+  const messagesUnread = messagesNotifications.filter(n => !n.read).length;
+  const unreadCount = activeTab === 'games' ? gamesUnread : messagesUnread;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-6">
@@ -130,6 +142,28 @@ export default function Notifications() {
               </button>
             )}
           </div>
+
+          <div className="flex gap-2 mt-4">
+            {([
+              { key: 'games' as const, label: 'Partidas', count: gamesUnread },
+              { key: 'messages' as const, label: 'Mensagens', count: messagesUnread },
+            ]).map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold transition-colors ${
+                  activeTab === tab.key ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-600'
+                }`}
+              >
+                {tab.label}
+                {tab.count > 0 && (
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${activeTab === tab.key ? 'bg-white/25' : 'bg-violet-100 text-violet-700'}`}>
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -140,15 +174,19 @@ export default function Notifications() {
           </div>
         )}
 
-        {!loading && notifications.length === 0 && (
+        {!loading && visibleNotifications.length === 0 && (
           <div className="text-center py-20 space-y-2">
             <Bell className="w-12 h-12 text-gray-200 mx-auto" />
             <p className="font-semibold text-gray-500">Nenhuma notificação</p>
-            <p className="text-sm text-gray-400">Quando houver novidades nas suas partidas, elas aparecerão aqui.</p>
+            <p className="text-sm text-gray-400">
+              {activeTab === 'games'
+                ? 'Quando houver novidades nas suas partidas, elas aparecerão aqui.'
+                : 'Mensagens de chats de partidas aparecerão aqui.'}
+            </p>
           </div>
         )}
 
-        {!loading && notifications.map(n => {
+        {!loading && visibleNotifications.map(n => {
           const Icon = getIcon(n.type);
           return (
             <div
