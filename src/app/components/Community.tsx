@@ -404,47 +404,65 @@ export default function Community() {
               {activeRankings.length >= 3 && (
                 <div className="px-6 mb-6">
                   <div className="flex items-end justify-center gap-2 mb-6">
-                    <div
-                      onClick={() => navigate(`/player/${activeRankings[1].id}`)}
-                      className="flex-1 text-center cursor-pointer transition-all duration-500 ease-out"
-                      style={{ opacity: rankingVisible ? 1 : 0, transform: rankingVisible ? 'translateY(0)' : 'translateY(16px)', transitionDelay: '120ms' }}
-                    >
-                      <div className="bg-gray-300 rounded-t-xl p-4 pt-8">
-                        <div className="w-16 h-16 bg-violet-600 rounded-full flex items-center justify-center text-white text-xl font-bold mx-auto mb-2 overflow-hidden">
-                          {activeRankings[1].avatarUrl ? <img src={activeRankings[1].avatarUrl} alt="" className="w-full h-full object-cover" /> : activeRankings[1].avatar}
+                    <div onClick={() => navigate(`/player/${activeRankings[1].id}`)} className="flex-1 text-center cursor-pointer">
+                      <div
+                        className="rounded-t-xl overflow-hidden"
+                        style={{
+                          transform: rankingVisible ? 'scaleY(1)' : 'scaleY(0)',
+                          transformOrigin: 'bottom',
+                          transition: 'transform 1.1s cubic-bezier(0.22, 1, 0.36, 1)',
+                          transitionDelay: '150ms',
+                        }}
+                      >
+                        <div className="bg-gray-300 p-4 pt-8">
+                          <div className="w-16 h-16 bg-violet-600 rounded-full flex items-center justify-center text-white text-xl font-bold mx-auto mb-2 overflow-hidden">
+                            {activeRankings[1].avatarUrl ? <img src={activeRankings[1].avatarUrl} alt="" className="w-full h-full object-cover" /> : activeRankings[1].avatar}
+                          </div>
+                          <div className="font-semibold text-gray-900 text-sm">{activeRankings[1].name.split(' ')[0]}</div>
+                          <div className="text-xs text-gray-600">{activeRankings[1].rating.toFixed(2)}</div>
+                          <div className="text-2xl font-bold text-gray-600 mt-2">2°</div>
                         </div>
-                        <div className="font-semibold text-gray-900 text-sm">{activeRankings[1].name.split(' ')[0]}</div>
-                        <div className="text-xs text-gray-600">{activeRankings[1].rating.toFixed(2)}</div>
-                        <div className="text-2xl font-bold text-gray-600 mt-2">2°</div>
                       </div>
                     </div>
-                    <div
-                      onClick={() => navigate(`/player/${activeRankings[0].id}`)}
-                      className="flex-1 text-center cursor-pointer transition-all duration-500 ease-out"
-                      style={{ opacity: rankingVisible ? 1 : 0, transform: rankingVisible ? 'translateY(0) scale(1)' : 'translateY(16px) scale(0.9)', transitionDelay: '240ms' }}
-                    >
-                      <div className="bg-yellow-400 rounded-t-xl p-4 pt-4">
-                        <Trophy className="w-6 h-6 text-yellow-700 mx-auto mb-2" />
-                        <div className="w-20 h-20 bg-violet-600 rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-2 overflow-hidden">
-                          {activeRankings[0].avatarUrl ? <img src={activeRankings[0].avatarUrl} alt="" className="w-full h-full object-cover" /> : activeRankings[0].avatar}
+                    <div onClick={() => navigate(`/player/${activeRankings[0].id}`)} className="flex-1 text-center cursor-pointer">
+                      <div
+                        className="rounded-t-xl overflow-hidden"
+                        style={{
+                          transform: rankingVisible ? 'scaleY(1)' : 'scaleY(0)',
+                          transformOrigin: 'bottom',
+                          transition: 'transform 1.1s cubic-bezier(0.22, 1, 0.36, 1)',
+                          transitionDelay: '350ms',
+                        }}
+                      >
+                        <div className="bg-yellow-400 p-4 pt-4">
+                          <Trophy className="w-6 h-6 text-yellow-700 mx-auto mb-2" />
+                          <div className="w-20 h-20 bg-violet-600 rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-2 overflow-hidden">
+                            {activeRankings[0].avatarUrl ? <img src={activeRankings[0].avatarUrl} alt="" className="w-full h-full object-cover" /> : activeRankings[0].avatar}
+                          </div>
+                          <div className="font-bold text-gray-900">{activeRankings[0].name.split(' ')[0]}</div>
+                          <div className="text-xs text-gray-700">{activeRankings[0].rating.toFixed(2)}</div>
+                          <div className="text-3xl font-bold text-yellow-700 mt-2">1°</div>
                         </div>
-                        <div className="font-bold text-gray-900">{activeRankings[0].name.split(' ')[0]}</div>
-                        <div className="text-xs text-gray-700">{activeRankings[0].rating.toFixed(2)}</div>
-                        <div className="text-3xl font-bold text-yellow-700 mt-2">1°</div>
                       </div>
                     </div>
-                    <div
-                      onClick={() => navigate(`/player/${activeRankings[2].id}`)}
-                      className="flex-1 text-center cursor-pointer transition-all duration-500 ease-out"
-                      style={{ opacity: rankingVisible ? 1 : 0, transform: rankingVisible ? 'translateY(0)' : 'translateY(16px)', transitionDelay: '0ms' }}
-                    >
-                      <div className="bg-orange-300 rounded-t-xl p-4 pt-12">
-                        <div className="w-14 h-14 bg-violet-600 rounded-full flex items-center justify-center text-white text-lg font-bold mx-auto mb-2 overflow-hidden">
-                          {activeRankings[2].avatarUrl ? <img src={activeRankings[2].avatarUrl} alt="" className="w-full h-full object-cover" /> : activeRankings[2].avatar}
+                    <div onClick={() => navigate(`/player/${activeRankings[2].id}`)} className="flex-1 text-center cursor-pointer">
+                      <div
+                        className="rounded-t-xl overflow-hidden"
+                        style={{
+                          transform: rankingVisible ? 'scaleY(1)' : 'scaleY(0)',
+                          transformOrigin: 'bottom',
+                          transition: 'transform 1.1s cubic-bezier(0.22, 1, 0.36, 1)',
+                          transitionDelay: '0ms',
+                        }}
+                      >
+                        <div className="bg-orange-300 p-4 pt-12">
+                          <div className="w-14 h-14 bg-violet-600 rounded-full flex items-center justify-center text-white text-lg font-bold mx-auto mb-2 overflow-hidden">
+                            {activeRankings[2].avatarUrl ? <img src={activeRankings[2].avatarUrl} alt="" className="w-full h-full object-cover" /> : activeRankings[2].avatar}
+                          </div>
+                          <div className="font-semibold text-gray-900 text-sm">{activeRankings[2].name.split(' ')[0]}</div>
+                          <div className="text-xs text-gray-600">{activeRankings[2].rating.toFixed(2)}</div>
+                          <div className="text-xl font-bold text-orange-700 mt-2">3°</div>
                         </div>
-                        <div className="font-semibold text-gray-900 text-sm">{activeRankings[2].name.split(' ')[0]}</div>
-                        <div className="text-xs text-gray-600">{activeRankings[2].rating.toFixed(2)}</div>
-                        <div className="text-xl font-bold text-orange-700 mt-2">3°</div>
                       </div>
                     </div>
                   </div>
