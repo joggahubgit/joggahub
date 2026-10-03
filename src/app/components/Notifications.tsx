@@ -81,7 +81,8 @@ export default function Notifications() {
       setNotifications(data ?? []);
       setLoading(false);
 
-      // Realtime: prepend new notifications as they arrive
+      // Realtime: prepend new notifications, and bump+refresh ones that got
+      // updated (e.g. a chat notification reused for a new message) back to top
       channel = supabase
         .channel(`notifications:${user.id}`)
         .on(
@@ -89,6 +90,14 @@ export default function Notifications() {
           { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
           (payload) => {
             setNotifications(prev => [payload.new as Notification, ...prev]);
+          },
+        )
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
+          (payload) => {
+            const updated = payload.new as Notification;
+            setNotifications(prev => [updated, ...prev.filter(n => n.id !== updated.id)]);
           },
         )
         .subscribe();

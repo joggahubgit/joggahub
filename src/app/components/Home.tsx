@@ -87,6 +87,10 @@ export default function Home() {
           filter: `user_id=eq.${userId}` }, () => {
           refreshUnread();
         })
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notifications',
+          filter: `user_id=eq.${userId}` }, () => {
+          refreshUnread();
+        })
         .subscribe();
 
       // Upcoming games — extracted so it can be re-run on realtime changes

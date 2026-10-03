@@ -3,7 +3,6 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Send, Loader2 } from 'lucide-react';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { notifyGamePlayers } from '@/app/lib/notify';
 
 interface ChatMessage {
   id: string;
@@ -27,6 +26,30 @@ function formatGameDateTime(iso: string | null) {
   const date = d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
   const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   return `${date}, ${time}`;
+}
+
+/**
+ * One notification per (game, recipient) for chat — a new message refreshes
+ * the existing row (and flips it back to unread) instead of piling up a
+ * separate notification per message in the same game's chat.
+ */
+async function upsertChatNotifications(gameId: string, recipientIds: string[], title: string, message: string) {
+  if (recipientIds.length === 0) return;
+  const { data: updated } = await supabase
+    .from('notifications')
+    .update({ title, message, read: false, created_at: new Date().toISOString() })
+    .eq('game_id', gameId)
+    .eq('type', 'chat_message')
+    .in('user_id', recipientIds)
+    .select('user_id');
+
+  const updatedIds = new Set((updated ?? []).map(r => r.user_id));
+  const toInsert = recipientIds.filter(uid => !updatedIds.has(uid));
+  if (toInsert.length > 0) {
+    await supabase.from('notifications').insert(
+      toInsert.map(user_id => ({ user_id, type: 'chat_message', title, message, game_id: gameId })),
+    );
+  }
 }
 
 /** Group chat scoped to a single game's roster (organizer + game_players). */
@@ -114,7 +137,9 @@ export default function GameChat() {
       setBody('');
       const senderName = senders[user.id]?.name ?? 'Jogador';
       const preview = text.length > 80 ? `${text.slice(0, 80)}…` : text;
-      await notifyGamePlayers(id, user.id, 'chat_message', 'Nova mensagem no chat', `${senderName}: ${preview}`);
+      const { data: players } = await supabase.from('game_players').select('player_id').eq('game_id', id).neq('player_id', user.id);
+      const recipientIds = [...new Set((players ?? []).map(p => p.player_id))];
+      await upsertChatNotifications(id, recipientIds, gameLabel || 'Partida', `${senderName}: ${preview}`);
     }
     setSending(false);
   }
