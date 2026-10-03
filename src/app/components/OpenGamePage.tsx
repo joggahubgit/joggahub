@@ -913,7 +913,7 @@ export default function OpenGamePage() {
             Calendário
           </button>
           <button
-            onClick={() => navigate('/community')}
+            onClick={() => navigate(`/game-chat/${id}`)}
             className="flex-1 flex items-center justify-center gap-2 bg-violet-600 text-white rounded-2xl py-3.5 font-semibold text-sm hover:bg-violet-700 transition-colors"
           >
             <MessageCircle className="w-5 h-5" />

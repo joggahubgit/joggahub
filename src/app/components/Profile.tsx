@@ -48,6 +48,8 @@ export default function Profile() {
   const [futevoleiRating, setFutevoleiRating] = useState<{ rating: number; matches_played: number } | null | undefined>(undefined);
   const [showLevelPicker, setShowLevelPicker] = useState(false);
   const [savingLevel, setSavingLevel] = useState(false);
+  const [followerCount, setFollowerCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
 
   // Always load fresh profile data on mount to avoid stale context
   useEffect(() => { refreshProfile(); }, []);
@@ -65,6 +67,10 @@ export default function Profile() {
     supabase.from('player_ratings').select('rating, matches_played')
       .eq('player_id', user.id).eq('sport_type', 'futevolei').maybeSingle()
       .then(({ data }) => setFutevoleiRating(data));
+    supabase.from('follows').select('follower_id', { count: 'exact', head: true }).eq('following_id', user.id)
+      .then(({ count }) => setFollowerCount(count ?? 0));
+    supabase.from('follows').select('following_id', { count: 'exact', head: true }).eq('follower_id', user.id)
+      .then(({ count }) => setFollowingCount(count ?? 0));
   }, [user?.id]);
 
   async function handleSetLevel(level: FutevoleiLevelOption) {
@@ -178,6 +184,10 @@ export default function Profile() {
                 <span className="text-sm truncate">{city}</span>
               </div>
             )}
+            <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+              <span><strong className="text-gray-900">{followerCount}</strong> seguidores</span>
+              <span><strong className="text-gray-900">{followingCount}</strong> seguindo</span>
+            </div>
             <button
               onClick={() => navigate('/onboarding')}
               className="mt-2 flex items-center gap-1 text-xs text-violet-600 font-semibold"

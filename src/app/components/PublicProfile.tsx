@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, User, MapPin, Users, Home as HomeIcon, Target,
-  Clock, Calendar, Loader2,
+  Clock, Calendar, Loader2, UserPlus, UserCheck,
 } from 'lucide-react';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -47,6 +47,10 @@ export default function PublicProfile() {
   const [profile, setProfile] = useState<PublicProfileData | null | undefined>(undefined);
   const [gamesAsOrganizer, setGamesAsOrganizer] = useState(0);
   const [gamesAsPlayer, setGamesAsPlayer] = useState(0);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
+  const [followerCount, setFollowerCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
 
   useEffect(() => {
     // Viewing your own row in the ranking should land on the real (editable) profile.
@@ -71,7 +75,29 @@ export default function PublicProfile() {
       setGamesAsOrganizer(org.count ?? 0);
       setGamesAsPlayer(player.count ?? 0);
     });
-  }, [id]);
+
+    supabase.from('follows').select('follower_id', { count: 'exact', head: true }).eq('following_id', id)
+      .then(({ count }) => setFollowerCount(count ?? 0));
+    supabase.from('follows').select('following_id', { count: 'exact', head: true }).eq('follower_id', id)
+      .then(({ count }) => setFollowingCount(count ?? 0));
+    if (viewer) {
+      supabase.from('follows').select('follower_id').eq('follower_id', viewer.id).eq('following_id', id).maybeSingle()
+        .then(({ data }) => setIsFollowing(!!data));
+    }
+  }, [id, viewer?.id]);
+
+  async function toggleFollow() {
+    if (!viewer || !id || followLoading) return;
+    setFollowLoading(true);
+    if (isFollowing) {
+      const { error } = await supabase.from('follows').delete().eq('follower_id', viewer.id).eq('following_id', id);
+      if (!error) { setIsFollowing(false); setFollowerCount(c => Math.max(0, c - 1)); }
+    } else {
+      const { error } = await supabase.from('follows').insert({ follower_id: viewer.id, following_id: id });
+      if (!error) { setIsFollowing(true); setFollowerCount(c => c + 1); }
+    }
+    setFollowLoading(false);
+  }
 
   if (profile === undefined) {
     return (
@@ -123,7 +149,26 @@ export default function PublicProfile() {
                 <span className="text-sm truncate">{city}</span>
               </div>
             )}
+            <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+              <span><strong className="text-gray-900">{followerCount}</strong> seguidores</span>
+              <span><strong className="text-gray-900">{followingCount}</strong> seguindo</span>
+            </div>
           </div>
+          <button
+            onClick={toggleFollow}
+            disabled={followLoading}
+            className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold transition-colors disabled:opacity-60 ${
+              isFollowing ? 'bg-gray-100 text-gray-700 border border-gray-200' : 'bg-violet-600 text-white'
+            }`}
+          >
+            {followLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : isFollowing ? (
+              <><UserCheck className="w-4 h-4" /> Seguindo</>
+            ) : (
+              <><UserPlus className="w-4 h-4" /> Seguir</>
+            )}
+          </button>
         </div>
 
         <div className="flex flex-wrap gap-2">

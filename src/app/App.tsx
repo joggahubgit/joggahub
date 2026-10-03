@@ -19,6 +19,7 @@ import Competitions from './components/Competitions';
 import Coaching from './components/Coaching';
 import Profile from './components/Profile';
 import PublicProfile from './components/PublicProfile';
+import GameChat from './components/GameChat';
 import CreateGame from './components/CreateGame';
 import FixedGroups from './components/FixedGroups';
 import RecurringBookingSetup from './components/RecurringBookingSetup';
@@ -115,6 +116,7 @@ function AppRoutes() {
         <Route path="/coach-details/:id" element={<ProtectedRoute><Coaching /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/player/:id" element={<ProtectedRoute><PublicProfile /></ProtectedRoute>} />
+        <Route path="/game-chat/:id" element={<ProtectedRoute><GameChat /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
         <Route path="/menu" element={<ProtectedRoute><MenuPage /></ProtectedRoute>} />
         <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
