@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, User, MapPin, Users, Home as HomeIcon, Target,
+  ArrowLeft, MapPin, Target,
   Clock, Calendar, Loader2, UserPlus, UserCheck,
 } from 'lucide-react';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import PlayerStatsSection from './PlayerStatsSection';
+import BottomNav from './BottomNav';
 
 const POSITION_LABELS: Record<string, string> = {
   right: 'Lado direito',
@@ -267,20 +268,7 @@ export default function PublicProfile() {
         </div>
       )}
 
-      {/* Bottom nav */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-6 py-3 max-w-md mx-auto">
-        <div className="flex items-center justify-around">
-          <button onClick={() => navigate('/home')} className="flex flex-col items-center gap-1 text-gray-400">
-            <HomeIcon className="w-6 h-6" /><span className="text-xs">Início</span>
-          </button>
-          <button onClick={() => navigate('/community')} className="flex flex-col items-center gap-1 text-violet-600">
-            <Users className="w-6 h-6" /><span className="text-xs">Comunidade</span>
-          </button>
-          <button onClick={() => navigate('/profile')} className="flex flex-col items-center gap-1 text-gray-400">
-            <User className="w-6 h-6" /><span className="text-xs">Perfil</span>
-          </button>
-        </div>
-      </div>
+      <BottomNav />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Search, MapPin, Users, Trophy, GraduationCap, User, Home as HomeIcon, Menu, Bell, Calendar, Zap, X } from 'lucide-react';
+import { Search, MapPin, Users, Trophy, GraduationCap, Menu, Bell, Calendar, Zap, X } from 'lucide-react';
+import BottomNav from './BottomNav';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -43,7 +44,6 @@ interface UpcomingBooking {
 export default function Home() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [activeTab, setActiveTab] = useState('home');
   const [showWelcome, setShowWelcome] = useState(
     (location.state as { firstLogin?: boolean } | null)?.firstLogin === true
   );
@@ -635,20 +635,7 @@ export default function Home() {
         )}
       </div>
 
-      {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-6 py-3 max-w-md mx-auto">
-        <div className="flex items-center justify-around">
-          <button onClick={() => { setActiveTab('home'); navigate('/home'); }} className={`flex flex-col items-center gap-1 ${activeTab === 'home' ? 'text-violet-600' : 'text-gray-400'}`}>
-            <HomeIcon className="w-6 h-6" /><span className="text-xs">Início</span>
-          </button>
-          <button onClick={() => { setActiveTab('community'); navigate('/community'); }} className={`flex flex-col items-center gap-1 ${activeTab === 'community' ? 'text-violet-600' : 'text-gray-400'}`}>
-            <Users className="w-6 h-6" /><span className="text-xs">Comunidade</span>
-          </button>
-          <button onClick={() => { setActiveTab('profile'); navigate('/profile'); }} className={`flex flex-col items-center gap-1 ${activeTab === 'profile' ? 'text-violet-600' : 'text-gray-400'}`}>
-            <User className="w-6 h-6" /><span className="text-xs">Perfil</span>
-          </button>
-        </div>
-      </div>
+      <BottomNav />
     </div>
   );
 }

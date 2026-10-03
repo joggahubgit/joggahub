@@ -6,6 +6,7 @@ import { notify, notifyGamePlayers } from '@/app/lib/notify';
 import { redirectToCheckout, calcFees } from '@/app/lib/checkout';
 import { PLAYER_CANCEL_CUTOFF_HOURS, CAPTURE_CUTOFF_HOURS, getMinPlayersForSport } from '@/app/lib/gameConfig';
 import GameResultSubmit from './GameResultSubmit';
+import BottomNav from './BottomNav';
 
 const SPORT_LABELS: Record<string, string> = {
   football: 'Society', society: 'Society', futsal: 'Futsal',
@@ -626,7 +627,7 @@ export default function OpenGamePage() {
         </div>
       )}
 
-      {!loading && <div className="overflow-y-auto pb-8">
+      {!loading && <div className="overflow-y-auto pb-24">
         {/* Futevôlei: real result registration + rating update — stays visible after
             the game is marked completed so the confirmed scoreboard doesn't disappear */}
         {(gameStatus === 'pending_results' || gameStatus === 'completed') && courtSport === 'futevolei' && (isOrganizer || isEnrolled) && (
@@ -1001,6 +1002,8 @@ export default function OpenGamePage() {
           </div>
         )}
       </div>}
+
+      {!loading && <BottomNav />}
 
       {/* Cancel game confirmation */}
       {showCancelConfirm && (

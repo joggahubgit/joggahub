@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Trophy, Search, Users, User, Home as HomeIcon, Send, MapPin } from 'lucide-react';
+import { Trophy, Search, Send, MapPin } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { PROVISIONAL_MATCHES_THRESHOLD } from '@/app/lib/futevoleiLevels';
 import ComingSoonBanner from './ComingSoonBanner';
+import BottomNav from './BottomNav';
 
 type RankingScope = 'geral' | 'cidade' | 'clube';
 
@@ -61,7 +62,6 @@ export default function Community() {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
   const [activeTab, setActiveTab] = useState('ranking');
-  const [activeBottomTab, setActiveBottomTab] = useState('community');
 
   // ── Ranking: geral (base list every scope derives from) ──
   const [rankingScope, setRankingScope] = useState<RankingScope>('geral');
@@ -548,13 +548,7 @@ export default function Community() {
         </div>
       )}
 
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-6 py-3 max-w-md mx-auto">
-        <div className="flex items-center justify-around">
-          <button onClick={() => { setActiveBottomTab('home'); navigate('/home'); }} className={`flex flex-col items-center gap-1 ${activeBottomTab === 'home' ? 'text-violet-600' : 'text-gray-400'}`}><HomeIcon className="w-6 h-6" /><span className="text-xs">Início</span></button>
-          <button onClick={() => { setActiveBottomTab('community'); navigate('/community'); }} className={`flex flex-col items-center gap-1 ${activeBottomTab === 'community' ? 'text-violet-600' : 'text-gray-400'}`}><Users className="w-6 h-6" /><span className="text-xs">Comunidade</span></button>
-          <button onClick={() => { setActiveBottomTab('profile'); navigate('/profile'); }} className={`flex flex-col items-center gap-1 ${activeBottomTab === 'profile' ? 'text-violet-600' : 'text-gray-400'}`}><User className="w-6 h-6" /><span className="text-xs">Perfil</span></button>
-        </div>
-      </div>
+      <BottomNav />
     </div>
   );
 }
