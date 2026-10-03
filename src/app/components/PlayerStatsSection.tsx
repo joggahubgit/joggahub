@@ -85,6 +85,14 @@ function PlayerCell({ person }: { person: PersonRef | null | undefined }) {
 
 /** Small inline SVG line chart — no charting library needed for a handful of points. */
 function RatingChart({ points }: { points: HistoryPoint[] }) {
+  const [drawn, setDrawn] = useState(false);
+
+  useEffect(() => {
+    setDrawn(false);
+    const t = requestAnimationFrame(() => requestAnimationFrame(() => setDrawn(true)));
+    return () => cancelAnimationFrame(t);
+  }, [points.length]);
+
   if (points.length < 2) {
     return <p className="text-xs text-gray-400 text-center py-8">Jogue mais partidas pra ver sua evolução aqui.</p>;
   }
@@ -107,9 +115,37 @@ function RatingChart({ points }: { points: HistoryPoint[] }) {
   return (
     <div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-24">
-        <path d={areaPath} fill="url(#ratingGradient)" opacity={0.15} />
-        <path d={path} fill="none" stroke="#7c3aed" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx={last[0]} cy={last[1]} r={4} fill="#7c3aed" stroke="white" strokeWidth={2} />
+        <path
+          d={areaPath}
+          fill="url(#ratingGradient)"
+          opacity={drawn ? 0.15 : 0}
+          style={{ transition: 'opacity 0.6s ease-out 0.6s' }}
+        />
+        <path
+          d={path}
+          fill="none"
+          stroke="#7c3aed"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          pathLength={1}
+          strokeDasharray={1}
+          strokeDashoffset={drawn ? 0 : 1}
+          style={{ transition: 'stroke-dashoffset 0.9s ease-out' }}
+        />
+        <circle
+          cx={last[0]}
+          cy={last[1]}
+          r={4}
+          fill="#7c3aed"
+          stroke="white"
+          strokeWidth={2}
+          style={{
+            transformOrigin: `${last[0]}px ${last[1]}px`,
+            transform: drawn ? 'scale(1)' : 'scale(0)',
+            transition: 'transform 0.3s ease-out 0.9s',
+          }}
+        />
         <defs>
           <linearGradient id="ratingGradient" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#7c3aed" />
@@ -122,6 +158,30 @@ function RatingChart({ points }: { points: HistoryPoint[] }) {
         <span className="font-semibold text-violet-600">{values[values.length - 1].toFixed(2)}</span>
         <span>{max.toFixed(2)}</span>
       </div>
+    </div>
+  );
+}
+
+function EfficacyRing({ efficacy }: { efficacy: number }) {
+  const [animated, setAnimated] = useState(false);
+  useEffect(() => {
+    setAnimated(false);
+    const t = requestAnimationFrame(() => requestAnimationFrame(() => setAnimated(true)));
+    return () => cancelAnimationFrame(t);
+  }, [efficacy]);
+
+  return (
+    <div className="relative w-14 h-14 flex-shrink-0">
+      <svg viewBox="0 0 36 36" className="w-14 h-14 -rotate-90">
+        <circle cx="18" cy="18" r="15.5" fill="none" stroke="#e5e7eb" strokeWidth="3" />
+        <circle
+          cx="18" cy="18" r="15.5" fill="none" stroke="#7c3aed" strokeWidth="3"
+          strokeDasharray={`${animated ? (efficacy / 100) * 97.4 : 0} 97.4`}
+          strokeLinecap="round"
+          style={{ transition: 'stroke-dasharray 0.9s ease-out' }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-gray-900">{efficacy}%</div>
     </div>
   );
 }
@@ -357,16 +417,7 @@ export default function PlayerStatsSection({ userId }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
-            <div className="relative w-14 h-14 flex-shrink-0">
-              <svg viewBox="0 0 36 36" className="w-14 h-14 -rotate-90">
-                <circle cx="18" cy="18" r="15.5" fill="none" stroke="#e5e7eb" strokeWidth="3" />
-                <circle
-                  cx="18" cy="18" r="15.5" fill="none" stroke="#7c3aed" strokeWidth="3"
-                  strokeDasharray={`${(efficacy / 100) * 97.4} 97.4`} strokeLinecap="round"
-                />
-              </svg>
-              <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-gray-900">{efficacy}%</div>
-            </div>
+            <EfficacyRing efficacy={efficacy} />
             <p className="text-xs text-gray-500">Eficácia nas últimas {last10.length} partidas</p>
           </div>
         </div>
