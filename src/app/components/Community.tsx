@@ -60,7 +60,7 @@ function formatFeedDate(iso: string | null) {
 export default function Community() {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
-  const [activeTab, setActiveTab] = useState('feed');
+  const [activeTab, setActiveTab] = useState('ranking');
   const [activeBottomTab, setActiveBottomTab] = useState('community');
 
   // ── Ranking: geral (base list every scope derives from) ──
