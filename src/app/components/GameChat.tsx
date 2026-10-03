@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Send, Loader2 } from 'lucide-react';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { notifyGamePlayers } from '@/app/lib/notify';
 
 interface ChatMessage {
   id: string;
@@ -18,6 +19,14 @@ interface SenderInfo {
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatGameDateTime(iso: string | null) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const date = d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+  const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return `${date}, ${time}`;
 }
 
 /** Group chat scoped to a single game's roster (organizer + game_players). */
@@ -42,12 +51,14 @@ export default function GameChat() {
     async function load() {
       const { data: game } = await supabase
         .from('games')
-        .select('sport_type, organizer_id, courts(name)')
+        .select('sport_type, organizer_id, scheduled_at, courts(name)')
         .eq('id', id)
         .maybeSingle();
       if (!cancelled && game) {
         const sport = game.sport_type === 'futevolei' ? 'Futevôlei' : game.sport_type;
-        setGameLabel(`${sport}${(game as any).courts?.name ? ' · ' + (game as any).courts.name : ''}`);
+        const courtPart = (game as any).courts?.name ? ` · ${(game as any).courts.name}` : '';
+        const whenPart = game.scheduled_at ? ` · ${formatGameDateTime(game.scheduled_at)}` : '';
+        setGameLabel(`${sport}${courtPart}${whenPart}`);
       }
 
       const { data: rows } = await supabase
@@ -101,6 +112,9 @@ export default function GameChat() {
       setError('Não foi possível enviar. Tente novamente.');
     } else {
       setBody('');
+      const senderName = senders[user.id]?.name ?? 'Jogador';
+      const preview = text.length > 80 ? `${text.slice(0, 80)}…` : text;
+      await notifyGamePlayers(id, user.id, 'chat_message', 'Nova mensagem no chat', `${senderName}: ${preview}`);
     }
     setSending(false);
   }

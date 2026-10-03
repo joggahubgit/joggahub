@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Bell, Users, Calendar, CheckCircle, X, Loader2, Crown, UserMinus, Trophy } from 'lucide-react';
+import { ArrowLeft, Bell, Users, Calendar, CheckCircle, X, Loader2, Crown, UserMinus, Trophy, MessageCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 type NotificationType =
   | 'game_joined' | 'game_removed' | 'game_cancelled' | 'game_left' | 'organizer_transferred'
-  | 'pending_results' | 'result_pending_confirmation' | 'rating_updated';
+  | 'pending_results' | 'result_pending_confirmation' | 'rating_updated' | 'chat_message';
 
 interface Notification {
   id: string;
@@ -34,6 +34,7 @@ function getIcon(type: NotificationType) {
     case 'pending_results': return CheckCircle;
     case 'result_pending_confirmation': return CheckCircle;
     case 'rating_updated': return Trophy;
+    case 'chat_message': return MessageCircle;
     default: return Calendar;
   }
 }
@@ -47,6 +48,7 @@ function getColor(type: NotificationType) {
     case 'pending_results': return 'bg-blue-100 text-blue-600';
     case 'result_pending_confirmation': return 'bg-blue-100 text-blue-600';
     case 'rating_updated': return 'bg-amber-100 text-amber-600';
+    case 'chat_message': return 'bg-violet-100 text-violet-600';
     default: return 'bg-violet-100 text-violet-600';
   }
 }
@@ -151,7 +153,11 @@ export default function Notifications() {
           return (
             <div
               key={n.id}
-              onClick={() => { markAsRead(n.id); if (n.game_id) navigate(`/open-game/${n.game_id}`); }}
+              onClick={() => {
+                markAsRead(n.id);
+                if (!n.game_id) return;
+                navigate(n.type === 'chat_message' ? `/game-chat/${n.game_id}` : `/open-game/${n.game_id}`);
+              }}
               className={`bg-white rounded-2xl p-4 cursor-pointer transition-all ${!n.read ? 'border-2 border-violet-200' : 'border border-gray-200'}`}
             >
               <div className="flex gap-3">
