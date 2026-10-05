@@ -9,6 +9,7 @@ import { useAuth } from '@/app/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { FUTEVOLEI_LEVELS, type FutevoleiLevelOption } from '@/app/lib/futevoleiLevels';
 import PlayerStatsSection from './PlayerStatsSection';
+import { AdjustLevelCard } from './AdjustLevelCard';
 import BottomNav from './BottomNav';
 import { ProfileCompletenessCard } from './ProfileCompletenessCard';
 import { POSITION_LABELS, FOOT_LABELS, DAY_LABELS, PERIOD_LABELS, profileCompleteness } from '@/app/lib/profileFields';
@@ -27,6 +28,8 @@ export default function Profile() {
   const [futevoleiRating, setFutevoleiRating] = useState<{ rating: number; matches_played: number } | null | undefined>(undefined);
   const [showLevelPicker, setShowLevelPicker] = useState(false);
   const [savingLevel, setSavingLevel] = useState(false);
+  const [levelError, setLevelError] = useState('');
+  const [statsVersion, setStatsVersion] = useState(0); // remounts PlayerStatsSection after a level change
   const [followerCount, setFollowerCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
 
@@ -55,22 +58,13 @@ export default function Profile() {
   async function handleSetLevel(level: FutevoleiLevelOption) {
     if (!user) return;
     setSavingLevel(true);
-    const { error } = await supabase.from('player_ratings').upsert({
-      player_id: user.id,
-      sport_type: 'futevolei',
-      rating: level.rating,
-      matches_played: 0,
-    }, { onConflict: 'player_id,sport_type' });
-    if (!error) {
-      // Baseline history row (game_id null) so the first confirmed match's "before"
-      // rating is the declared level, not the 3.0 default.
-      await supabase.from('player_rating_history').insert({
-        player_id: user.id,
-        sport_type: 'futevolei',
-        game_id: null,
-        rating: level.rating,
-        matches_played: 0,
-      });
+    setLevelError('');
+    // One-time self-declared level; the function also writes the baseline
+    // history point and enforces the rules server-side
+    const { error } = await supabase.rpc('declare_initial_rating', { p_sport: 'futevolei', p_rating: level.rating });
+    if (error) {
+      setLevelError(error.message || 'Não foi possível definir seu nível.');
+    } else {
       setFutevoleiRating({ rating: level.rating, matches_played: 0 });
       setShowLevelPicker(false);
     }
@@ -232,6 +226,7 @@ export default function Profile() {
                   </div>
                 </button>
               ))}
+              {levelError && <p className="text-sm text-red-600">{levelError}</p>}
             </div>
           ) : (
             <div className="flex items-center justify-between">
@@ -243,7 +238,16 @@ export default function Profile() {
           )}
         </div>
       ) : user && (
-        <PlayerStatsSection userId={user.id} />
+        <>
+          <PlayerStatsSection key={statsVersion} userId={user.id} />
+          <AdjustLevelCard
+            currentRating={futevoleiRating.rating}
+            onLowered={rating => {
+              setFutevoleiRating(r => (r ? { ...r, rating } : r));
+              setStatsVersion(v => v + 1);
+            }}
+          />
+        </>
       )}
 
       {/* Stats */}

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Check, ChevronRight, Camera, Loader2, Zap, LocateFixed } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -14,7 +14,17 @@ export default function Onboarding() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState(1);
-  const TOTAL_STEPS = 4;
+  // The futevôlei level step only exists for players without a rating yet —
+  // once set, it can only go down (Profile → Ajustar nível) or move with matches
+  const [hasRating, setHasRating] = useState(false);
+  const TOTAL_STEPS = hasRating ? 3 : 4;
+
+  useEffect(() => {
+    if (!user) return;
+    supabase.from('player_ratings').select('player_id')
+      .eq('player_id', user.id).eq('sport_type', 'futevolei').maybeSingle()
+      .then(({ data }) => setHasRating(!!data));
+  }, [user?.id]);
   const [saving, setSaving] = useState(false);
   const [locating, setLocating] = useState(false);
   const [locateError, setLocateError] = useState('');
@@ -116,26 +126,18 @@ export default function Onboarding() {
         await supabase.rpc('increment_xp', { user_id: user.id, amount: 20 });
       }
 
-      // Self-declared starting level for futevôlei (only writable while matches_played = 0, enforced by RLS)
-      if (futevoleiLevel) {
+      // Self-declared starting level for futevôlei — only when the player has
+      // none yet (the step is hidden otherwise). declare_initial_rating also
+      // writes the baseline history point and enforces the 5.5 cap server-side.
+      if (futevoleiLevel && !hasRating) {
         const level = FUTEVOLEI_LEVELS.find(l => l.key === futevoleiLevel);
         if (level) {
-          await supabase.from('player_ratings').upsert({
-            player_id: user.id,
-            sport_type: 'futevolei',
-            rating: level.rating,
-            matches_played: 0,
-          }, { onConflict: 'player_id,sport_type' });
-          // Baseline history row (game_id null) so the first confirmed match's
-          // "before" rating is the declared level, not the 3.0 default — otherwise
-          // the rating-evolution chart and per-match deltas understate their first game.
-          await supabase.from('player_rating_history').insert({
-            player_id: user.id,
-            sport_type: 'futevolei',
-            game_id: null,
-            rating: level.rating,
-            matches_played: 0,
+          const { error: ratingErr } = await supabase.rpc('declare_initial_rating', {
+            p_sport: 'futevolei',
+            p_rating: level.rating,
           });
+          // Profile is already saved — a failed level isn't worth blocking on
+          if (ratingErr) console.error('[Onboarding] initial rating error:', ratingErr);
         }
       }
 
