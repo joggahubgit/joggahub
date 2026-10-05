@@ -660,8 +660,10 @@ serve(async (req) => {
         .eq('id', game.slot_id)
         .single();
 
-      if (!slot?.end_time) continue;
-      if (new Date() < new Date(slot.end_time)) continue; // slot hasn't ended yet
+      // Real end of the session (a 1h30 game's own slot ends after 30 min)
+      const gameEnd = game.scheduled_end_at ?? slot?.end_time;
+      if (!gameEnd) continue;
+      if (new Date() < new Date(gameEnd)) continue; // game hasn't ended yet
 
       const minPlayers = resolveMinPlayers(game.sport_type ?? null);
 
@@ -692,7 +694,7 @@ serve(async (req) => {
   // ─────────────────────────────────────────────────────────────────────
   const { data: pendingGames, error: pendingErr } = await supabase
     .from('games')
-    .select('id, slot_id, sport_type')
+    .select('id, slot_id, sport_type, scheduled_end_at')
     .eq('status', 'confirmed_booking')
     .not('slot_id', 'is', null);
 
@@ -711,7 +713,8 @@ serve(async (req) => {
         continue;
       }
 
-      const endTime = new Date(slot.end_time);
+      // Real end of the session, not the end of its first 30-min slot
+      const endTime = new Date(game.scheduled_end_at ?? slot.end_time);
       const threshold = new Date(endTime.getTime() + PENDING_RESULTS_DELAY_MINUTES * 60 * 1000);
 
       if (new Date() < threshold) continue; // not yet
@@ -756,7 +759,7 @@ serve(async (req) => {
   // ─────────────────────────────────────────────────────────────────────
   const { data: expiredGames, error: expiredErr } = await supabase
     .from('games')
-    .select('id, slot_id')
+    .select('id, slot_id, scheduled_end_at')
     .eq('status', 'pending_results')
     .eq('xp_distributed', false)
     .not('slot_id', 'is', null);
@@ -776,7 +779,7 @@ serve(async (req) => {
         continue;
       }
 
-      const endTime = new Date(slot.end_time);
+      const endTime = new Date(game.scheduled_end_at ?? slot.end_time);
       const windowExpiry = new Date(endTime.getTime() + RESULT_WINDOW_HOURS * 60 * 60 * 1000);
 
       if (new Date() < windowExpiry) continue; // window still open
