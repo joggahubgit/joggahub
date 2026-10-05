@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2, Coins } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { PROVISIONAL_MATCHES_THRESHOLD } from '@/app/lib/futevoleiLevels';
+import { wallDate, wallTime } from '@/app/lib/wallClock';
 
 interface Props {
   userId: string;
@@ -54,12 +55,10 @@ function initialsCircle(person: PersonRef | null | undefined, size = 'w-9 h-9', 
   );
 }
 
+// Game time is stored as wall-clock — format it raw, not in the viewer's timezone
 function formatDateTime(iso: string | null) {
   if (!iso) return '';
-  const d = new Date(iso);
-  const date = d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
-  const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  return `${date} · ${time}`;
+  return `${wallDate(iso, { day: '2-digit', month: 'short' })} · ${wallTime(iso)}`;
 }
 
 function PlayerCell({ person }: { person: PersonRef | null | undefined }) {

@@ -4,6 +4,7 @@ import BottomNav from './BottomNav';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { wallDate, wallTime } from '@/app/lib/wallClock';
 
 interface VenueCard {
   id: string;
@@ -413,12 +414,9 @@ export default function Home() {
 
             {/* Slot booking cards */}
             {upcomingBookings.map(booking => {
-              const dt = new Date(booking.startTime);
-              const dateLabel = dt.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
-              const timeLabel = dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-              const endLabel = booking.endTime
-                ? new Date(booking.endTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-                : null;
+              const dateLabel = wallDate(booking.startTime);
+              const timeLabel = wallTime(booking.startTime);
+              const endLabel = booking.endTime ? wallTime(booking.endTime) : null;
               const isPaid = booking.paymentStatus === 'paid';
 
               return (
@@ -449,9 +447,8 @@ export default function Home() {
 
             {/* Open game cards */}
             {upcomingGames.map(game => {
-              const dt = new Date(game.scheduledAt);
-              const dateLabel = dt.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
-              const timeLabel = dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+              const dateLabel = wallDate(game.scheduledAt);
+              const timeLabel = wallTime(game.scheduledAt);
               const isFull = game.currentPlayers >= game.maxPlayers;
               const isPendingPayment = !game.isOpen && game.isOrganizer && !game.organizerPaid;
               const isConfirmed = (isFull || game.status === 'confirmed_booking') && !isPendingPayment;
@@ -575,7 +572,7 @@ export default function Home() {
                     {game.scheduled_at && (
                       <div className="flex items-center gap-1 text-sm text-gray-600 mt-1">
                         <MapPin className="w-4 h-4" />
-                        <span>{new Date(game.scheduled_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                        <span>{wallDate(game.scheduled_at, { day: '2-digit', month: '2-digit', year: '2-digit' })} {wallTime(game.scheduled_at)}</span>
                       </div>
                     )}
                   </div>

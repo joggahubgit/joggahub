@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronLeft, ChevronRight, ChevronDown, Ban, Filter, CheckCircle, AlertCircle, Plus, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, Filter, Plus, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
 import { CreateSchedule } from './CreateSchedule';
 import { RemoveSlots } from './RemoveSlots';
@@ -7,6 +7,8 @@ import { SlotModal } from './SlotModal';
 import { OpenGameModal } from './OpenGameModal';
 import { DynamicSlotModal } from './DynamicSlotModal';
 import { GestorBookingDetail } from './GestorBookingDetail';
+import { ArenaDayView, AgendaLegend } from './ArenaDayView';
+import { ScheduleGrid, freeMinutesFrom, type GridColumn } from './ScheduleGrid';
 
 interface Props {
   venueId: string;
@@ -27,6 +29,7 @@ interface Slot {
     total_price: number;
     court_price: number | null;
     status: string;
+    scheduled_end_at?: string | null;
     profiles: { name: string; phone: string } | null;
   } | null;
   game?: {
@@ -34,13 +37,9 @@ interface Slot {
     is_open: boolean;
     current_players: number;
     max_players: number;
+    scheduled_end_at?: string | null;
   } | null;
 }
-
-const HOURS = Array.from({ length: 33 }, (_, i) => {
-  const totalMins = 420 + i * 30; // 07:00 → 23:00
-  return `${String(Math.floor(totalMins / 60)).padStart(2, '0')}:${String(totalMins % 60).padStart(2, '0')}`;
-});
 
 function addDays(date: Date, days: number) {
   const d = new Date(date);
@@ -68,8 +67,13 @@ function formatLongDate(date: Date) {
   return date.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
+/** Local calendar date (YYYY-MM-DD). Not toISOString(): that's UTC, which in
+ *  Brazil flips to the next day from 21:00 on and showed tomorrow's agenda. */
 function isoDate(date: Date) {
-  return date.toISOString().split('T')[0];
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 function sameDay(a: Date, b: Date) {
@@ -86,7 +90,7 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
   const [slots, setSlots] = useState<Slot[]>([]);
   const [courtSchedules, setCourtSchedules] = useState<CourtScheduleMap>({});
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<ViewMode>('week');
+  const [viewMode, setViewMode] = useState<ViewMode>('day');
   const [focusedDate, setFocusedDate] = useState(() => new Date());
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
@@ -100,6 +104,7 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
     courtId: string; courtName: string; date: Date; hour: string; pricePerHour: number;
     slotTotalPrice?: number;
     existingSlotId?: string; existingEndHour?: string;
+    maxMinutes?: number;
   } | null>(null);
   const [collapsedCourts, setCollapsedCourts] = useState<Set<string>>(new Set());
 
@@ -182,13 +187,16 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
 
       const bookingIds = (bookingRows ?? []).map(b => b.id);
       const courtPriceByBooking: Record<string, number | null> = {};
+      const endByBooking: Record<string, string | null> = {};
       if (bookingIds.length) {
         const { data: linkedGames } = await supabase
           .from('games')
-          .select('booking_id, court_price')
+          .select('booking_id, court_price, scheduled_end_at')
           .in('booking_id', bookingIds);
         (linkedGames ?? []).forEach(g => {
-          if (g.booking_id) courtPriceByBooking[g.booking_id] = g.court_price ?? null;
+          if (!g.booking_id) return;
+          courtPriceByBooking[g.booking_id] = g.court_price ?? null;
+          endByBooking[g.booking_id] = g.scheduled_end_at ?? null;
         });
       }
 
@@ -197,12 +205,13 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
           ...b,
           profiles: profileMap[b.created_by] ?? null,
           court_price: courtPriceByBooking[b.id] ?? null,
+          scheduled_end_at: endByBooking[b.id] ?? null,
         };
       });
 
       const { data: gameRows } = await supabase
         .from('games')
-        .select('id, slot_id, is_open, current_players, max_players')
+        .select('id, slot_id, is_open, current_players, max_players, scheduled_end_at')
         .in('slot_id', allSlotIds);
       (gameRows ?? []).filter(g => g.is_open === true).forEach(g => { gameBySlot[g.slot_id] = g; });
 
@@ -280,16 +289,6 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
     return cap(formatLongDate(focusedDate));
   }
 
-  function isWithinSchedule(courtId: string, date: Date, hour: string): boolean {
-    const dow = date.getDay();
-    const sched = courtSchedules[courtId]?.[dow];
-    if (!sched) return false;
-    // Normalize to "HH:MM" — Postgres time columns come back as "HH:MM:SS"
-    const open = sched.open_time.substring(0, 5);
-    const close = sched.close_time.substring(0, 5);
-    return hour >= open && hour < close;
-  }
-
   function getSlot(courtId: string, date: Date, hour: string): Slot | undefined {
     const dateStr = isoDate(date);
     return slots.find(s =>
@@ -297,19 +296,6 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
       s.start_time?.startsWith(dateStr) &&
       s.start_time?.substring(11, 16) === hour
     );
-  }
-
-  function getSlotStatus(slot: Slot | undefined): 'available' | 'booked' | 'blocked' | 'open_game' | 'empty' {
-    if (!slot) return 'empty';
-    if (slot.booking) return 'booked';
-    if (slot.game) return 'open_game';
-    if (!slot.is_available) return 'blocked';
-    return 'available';
-  }
-
-  function shouldShow(slot: Slot | undefined) {
-    if (filterStatus === 'all') return true;
-    return getSlotStatus(slot) === filterStatus;
   }
 
   // ── Stats for visible period ──
@@ -322,6 +308,49 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
     .filter(s => s.booking?.payment_status === 'paid')
     .reduce((sum, s) => sum + netCourtPrice(s.booking?.court_price, s.booking?.total_price), 0);
   const hasSchedule = Object.keys(courtSchedules).length > 0 || slots.length > 0;
+
+  /** Free cell clicked (inside opening hours or an available slot): open the booking/block modal. */
+  function openEmptyCell(court: Court, day: Date, hour: string) {
+    const slot = getSlot(court.id, day, hour);
+    const sched = courtSchedules[court.id]?.[day.getDay()];
+    const slotEndHour = slot?.end_time?.substring(11, 16);
+    const slotDurationMin = slot && slotEndHour
+      ? (() => {
+          const [eh, em] = slotEndHour.split(':').map(Number);
+          const [sh, sm] = hour.split(':').map(Number);
+          return (eh * 60 + em) - (sh * 60 + sm);
+        })()
+      : 0;
+    // CreateAvailability slots (duration > 30 min): price_override is the per-session total
+    // CreateSchedule slots (duration = 30 min): price_override is per-hour; don't lock duration
+    const isSessionSlot = slotDurationMin > 30;
+    const dateStr = isoDate(day);
+    const courtDaySlots = slots.filter(s => s.court_id === court.id && s.start_time?.startsWith(dateStr));
+    const [h, m] = hour.split(':').map(Number);
+    setSelectedDynamic({
+      courtId: court.id,
+      courtName: court.name,
+      date: day,
+      hour,
+      maxMinutes: freeMinutesFrom(courtDaySlots, sched, h * 60 + m),
+      pricePerHour: isSessionSlot ? 0 : (slot?.price_override ?? sched?.price ?? 0),
+      slotTotalPrice: isSessionSlot && slot?.price_override != null ? slot.price_override : undefined,
+      // Only lock to existing slot when it has a fixed session duration (> 30 min)
+      ...(isSessionSlot && slot ? { existingSlotId: slot.id, existingEndHour: slotEndHour } : {}),
+    });
+  }
+
+  function handleEmptyCellClick(courtId: string, day: Date, hour: string) {
+    const court = courts.find(c => c.id === courtId);
+    if (court) openEmptyCell(court, day, hour);
+  }
+
+  /** Booked / open game / blocked slot clicked: open its detail modal. */
+  function openSlot(slot: Slot) {
+    if (slot.game) setSelectedGameSlot(slot);
+    else if (slot.booking) setSelectedBookingId(slot.booking.id);
+    else setSelectedSlot(slot);
+  }
 
   const isShowingToday = viewMode === 'day' && sameDay(focusedDate, today);
   const statsLabel = isShowingToday ? 'Hoje' : viewMode === 'day' ? formatShortDate(focusedDate) : 'Semana';
@@ -435,8 +464,8 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
           </div>
         </div>
 
-        {/* Row 2: filtros de status */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 bg-gray-50">
+        {/* Row 2: filtros de status (week view only — the arena view has its own legend) */}
+        {viewMode === 'week' && <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 bg-gray-50">
           <div className="flex items-center gap-1.5">
             <Filter className="w-3.5 h-3.5 text-gray-400" />
             <span className="text-xs text-gray-400 font-medium">Mostrar:</span>
@@ -462,15 +491,8 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
             ))}
           </div>
 
-          {/* Color legend */}
-          <div className="ml-auto flex items-center gap-3 text-[11px] text-gray-400 hidden sm:flex">
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-green-100 border-l-2 border-green-300 inline-block" />Disponível</span>
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-purple-600 inline-block" />Pago</span>
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-orange-500 inline-block" />Pendente</span>
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-blue-100 border-l-2 border-blue-400 inline-block" />Aberto</span>
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-gray-200 inline-block" />Bloqueado</span>
-          </div>
-        </div>
+          <AgendaLegend />
+        </div>}
       </div>
 
       {/* ── Calendar grid ── */}
@@ -494,22 +516,54 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
             Configurar horários
           </button>
         </div>
+      ) : viewMode === 'day' ? (
+        <ArenaDayView
+          courts={displayCourts}
+          slots={slots}
+          schedules={courtSchedules}
+          date={focusedDate}
+          dateStr={isoDate(focusedDate)}
+          isToday={isShowingToday}
+          netCourtPrice={netCourtPrice}
+          onEmptyCellClick={handleEmptyCellClick}
+          onSlotClick={slot => openSlot(slot as Slot)}
+        />
       ) : (
         <div className="bg-white rounded-2xl border-2 border-gray-200 overflow-hidden shadow-sm">
           {displayCourts.map(court => {
             const isCollapsed = selectedCourtId === 'all' && collapsedCourts.has(court.id);
+            const courtBooked = slots.filter(s => s.court_id === court.id && s.booking).length;
+            const columns: GridColumn[] = displayDays.map(day => {
+              const dateStr = isoDate(day);
+              const isToday = sameDay(day, today);
+              return {
+                key: dateStr,
+                courtId: court.id,
+                date: day,
+                dateStr,
+                slots: slots.filter(s => s.court_id === court.id && s.start_time?.startsWith(dateStr)),
+                schedule: courtSchedules[court.id]?.[day.getDay()],
+                isToday,
+                header: (
+                  <div className={`h-full flex flex-col items-center justify-center ${isToday ? 'bg-purple-50' : 'bg-gray-50'}`}>
+                    <div className="text-[11px] text-gray-500 font-medium uppercase tracking-wide">{formatDayName(day)}</div>
+                    {isToday
+                      ? <div className="w-7 h-7 bg-purple-600 rounded-full flex items-center justify-center mt-0.5">
+                          <span className="text-sm font-bold text-white">{day.getDate()}</span>
+                        </div>
+                      : <div className="text-sm font-bold text-gray-900">{formatShortDate(day)}</div>}
+                  </div>
+                ),
+              };
+            });
             return (
             <div key={court.id} className="border-b-2 border-gray-200 last:border-0">
               <div className="bg-gray-50 px-5 py-3 border-b border-gray-200 flex items-center justify-between">
                 <h3 className="font-bold text-base text-gray-900">{court.name}</h3>
                 <div className="flex items-center gap-3">
-                  {/* per-court booked count for this period */}
-                  {(() => {
-                    const courtBooked = slots.filter(s => s.court_id === court.id && s.booking).length;
-                    return courtBooked > 0 ? (
-                      <span className="text-xs text-gray-400">{courtBooked} reserva{courtBooked !== 1 ? 's' : ''}</span>
-                    ) : null;
-                  })()}
+                  {courtBooked > 0 && (
+                    <span className="text-xs text-gray-400">{courtBooked} reserva{courtBooked !== 1 ? 's' : ''}</span>
+                  )}
                   {selectedCourtId === 'all' && (
                     <button
                       onClick={() => toggleCourt(court.id)}
@@ -522,151 +576,19 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
                 </div>
               </div>
 
-              {!isCollapsed && <div className="flex">
-                {/* TIME COLUMN */}
-                <div className="w-14 flex-shrink-0 bg-white border-r border-gray-200 z-10">
-                  <div className="h-12 border-b-2 border-gray-200" />
-                  {HOURS.map((hour, i) => (
-                    <div key={hour} className="relative h-10 border-b border-gray-100">
-                      <span className={`absolute right-2 text-[10px] font-medium text-gray-400 tabular-nums leading-none ${i === 0 ? 'top-1' : '-top-[0.5em]'}`}>
-                        {hour}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* DAY COLUMNS */}
-                <div className="flex-1 overflow-x-auto">
-                  <div className="inline-flex min-w-full">
-                    {displayDays.map((day, dayIdx) => (
-                      <div key={dayIdx} className={`flex-1 min-w-[140px] border-r border-gray-200 last:border-0 ${sameDay(day, today) ? 'bg-blue-50/30' : ''}`}>
-                        <div className={`h-12 border-b-2 border-gray-200 flex items-center justify-center ${sameDay(day, today) ? 'bg-blue-50' : 'bg-gray-50'}`}>
-                          <div className="text-center">
-                            <div className="text-xs text-gray-500 font-medium uppercase tracking-wide">{formatDayName(day)}</div>
-                            {sameDay(day, today)
-                              ? <div className="w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center mx-auto mt-0.5">
-                                  <span className="text-sm font-bold text-white">{day.getDate()}</span>
-                                </div>
-                              : <div className="text-sm font-bold text-gray-900">{formatShortDate(day)}</div>
-                            }
-                          </div>
-                        </div>
-
-                        {HOURS.map((hour) => {
-                          const slot = getSlot(court.id, day, hour);
-                          const status = getSlotStatus(slot);
-                          // available slots (e.g. after booking cancellation) are always interactive;
-                          // empty cells within schedule hours are also interactive
-                          const scheduled = status === 'available' || (status === 'empty' && isWithinSchedule(court.id, day, hour));
-                          const borderClass = 'border-b border-gray-100';
-
-                          if (!scheduled && !shouldShow(slot)) return (
-                            <div key={hour} className={`h-10 ${borderClass} bg-transparent`} />
-                          );
-
-                          if (scheduled) {
-                            const sched = courtSchedules[court.id]?.[day.getDay()];
-                            return (
-                              <button
-                                key={hour}
-                                onClick={() => {
-                                  const slotEndHour = slot?.end_time?.substring(11, 16);
-                                  const slotDurationMin = slot && slotEndHour
-                                    ? (() => {
-                                        const [eh, em] = slotEndHour.split(':').map(Number);
-                                        const [sh, sm] = hour.split(':').map(Number);
-                                        return (eh * 60 + em) - (sh * 60 + sm);
-                                      })()
-                                    : 0;
-                                  // CreateAvailability slots (duration > 30 min): price_override is the per-session total
-                                  // CreateSchedule slots (duration = 30 min): price_override is per-hour; don't lock duration
-                                  const isSessionSlot = slotDurationMin > 30;
-                                  setSelectedDynamic({
-                                    courtId: court.id,
-                                    courtName: court.name,
-                                    date: day,
-                                    hour,
-                                    pricePerHour: isSessionSlot ? 0 : (slot?.price_override ?? sched?.price ?? 0),
-                                    slotTotalPrice: isSessionSlot && slot?.price_override != null ? slot.price_override : undefined,
-                                    // Only lock to existing slot when it has a fixed session duration (> 30 min)
-                                    ...(isSessionSlot && slot ? { existingSlotId: slot.id, existingEndHour: slotEndHour } : {}),
-                                  });
-                                }}
-                                className={`w-full h-10 ${borderClass} bg-green-50/60 border-l-[2px] border-l-green-200 flex items-center hover:bg-green-100/70 transition-colors group`}
-                              >
-                                <span className="text-[9px] text-green-400 ml-2 tabular-nums leading-none group-hover:text-green-600">{hour}</span>
-                              </button>
-                            );
-                          }
-
-                          return (
-                            <button
-                              key={hour}
-                              onClick={() => {
-                                if (!slot) return;
-                                if (slot.game) setSelectedGameSlot(slot);
-                                else if (slot.booking) setSelectedBookingId(slot.booking.id);
-                                else setSelectedSlot(slot);
-                              }}
-                              disabled={!slot}
-                              className={`w-full h-10 ${borderClass} text-xs transition-all ${
-                                status === 'open_game'
-                                  ? 'bg-blue-50 hover:bg-blue-100 border-l-[3px] border-l-blue-500'
-                                  : status === 'booked'
-                                  ? slot?.booking?.payment_status === 'paid'
-                                    ? 'bg-purple-600 hover:bg-purple-700 text-white border-l-[3px] border-l-purple-800'
-                                    : 'bg-orange-500 hover:bg-orange-600 text-white border-l-[3px] border-l-orange-700'
-                                  : status === 'blocked'
-                                  ? 'bg-gray-100 hover:bg-gray-200 border-l-[3px] border-l-gray-300'
-                                  : 'bg-white cursor-default'
-                              }`}
-                            >
-                              {status === 'booked' && slot?.booking && (
-                                <div className="px-2 pt-1.5 h-full flex flex-col justify-start items-start overflow-hidden gap-0.5">
-                                  <div className="text-[9px] opacity-75 leading-none tabular-nums">
-                                    {slot.start_time.substring(11,16)} – {slot.end_time.substring(11,16)}
-                                  </div>
-                                  <div className="font-bold truncate w-full text-left text-[11px] leading-tight">
-                                    {slot.booking.profiles?.name?.split(' ')[0] ?? 'Jogador'}
-                                  </div>
-                                  <div className="opacity-90 flex items-center gap-0.5 text-[10px]">
-                                    {slot.booking.payment_status === 'paid'
-                                      ? <CheckCircle className="w-2.5 h-2.5 flex-shrink-0" />
-                                      : <AlertCircle className="w-2.5 h-2.5 flex-shrink-0" />}
-                                    R$ {netCourtPrice(slot.booking.court_price, slot.booking.total_price).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                  </div>
-                                </div>
-                              )}
-                              {status === 'open_game' && slot?.game && (
-                                <div className="px-2 pt-1.5 h-full flex flex-col justify-start overflow-hidden gap-0.5">
-                                  <div className="text-[9px] text-blue-400 leading-none tabular-nums">
-                                    {slot.start_time.substring(11,16)} – {slot.end_time.substring(11,16)}
-                                  </div>
-                                  <div className="font-bold text-blue-700 text-[11px] leading-tight truncate">Partida Aberta</div>
-                                  <div className="text-[10px] text-blue-500">
-                                    {slot.game.current_players}/{slot.game.max_players} jogadores
-                                  </div>
-                                </div>
-                              )}
-                              {status === 'blocked' && (
-                                <div className="px-2 pt-1.5 h-full flex flex-col justify-start overflow-hidden gap-0.5">
-                                  <div className="text-[9px] text-gray-400 leading-none tabular-nums">
-                                    {slot!.start_time.substring(11,16)} – {slot!.end_time.substring(11,16)}
-                                  </div>
-                                  <div className="flex items-center gap-1 mt-1">
-                                    <Ban className="w-3 h-3 text-gray-400" />
-                                    <span className="text-[10px] text-gray-400">Bloqueado</span>
-                                  </div>
-                                </div>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>}
+              {!isCollapsed && (
+                <ScheduleGrid
+                  columns={columns}
+                  columnWidth={150}
+                  headerHeight={56}
+                  filter={filterStatus}
+                  maxHeight="70vh"
+                  scrollKey={`${isoDate(weekStart)}|${court.id}`}
+                  netCourtPrice={netCourtPrice}
+                  onEmptyCellClick={handleEmptyCellClick}
+                  onSlotClick={slot => openSlot(slot as Slot)}
+                />
+              )}
             </div>
           );
           })}
@@ -726,6 +648,7 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
           slotTotalPrice={selectedDynamic.slotTotalPrice}
           existingSlotId={selectedDynamic.existingSlotId}
           existingEndHour={selectedDynamic.existingEndHour}
+          maxMinutes={selectedDynamic.maxMinutes}
           onClose={() => setSelectedDynamic(null)}
           onRefresh={() => { fetchAll(); setSelectedDynamic(null); }}
         />

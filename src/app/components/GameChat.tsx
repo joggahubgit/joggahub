@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Send, Loader2 } from 'lucide-react';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { wallDate, wallTime } from '@/app/lib/wallClock';
 
 interface ChatMessage {
   id: string;
@@ -20,12 +21,10 @@ function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
+// Game time is stored as wall-clock — format it raw, not in the viewer's timezone
 function formatGameDateTime(iso: string | null) {
   if (!iso) return '';
-  const d = new Date(iso);
-  const date = d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
-  const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  return `${date}, ${time}`;
+  return `${wallDate(iso, { day: '2-digit', month: 'short' })}, ${wallTime(iso)}`;
 }
 
 /**
