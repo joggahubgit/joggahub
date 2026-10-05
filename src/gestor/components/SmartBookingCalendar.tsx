@@ -7,6 +7,7 @@ import { SlotModal } from './SlotModal';
 import { OpenGameModal } from './OpenGameModal';
 import { DynamicSlotModal } from './DynamicSlotModal';
 import { GestorBookingDetail } from './GestorBookingDetail';
+import { ArenaDayView } from './ArenaDayView';
 
 interface Props {
   venueId: string;
@@ -27,6 +28,7 @@ interface Slot {
     total_price: number;
     court_price: number | null;
     status: string;
+    scheduled_end_at?: string | null;
     profiles: { name: string; phone: string } | null;
   } | null;
   game?: {
@@ -34,6 +36,7 @@ interface Slot {
     is_open: boolean;
     current_players: number;
     max_players: number;
+    scheduled_end_at?: string | null;
   } | null;
 }
 
@@ -68,8 +71,13 @@ function formatLongDate(date: Date) {
   return date.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
+/** Local calendar date (YYYY-MM-DD). Not toISOString(): that's UTC, which in
+ *  Brazil flips to the next day from 21:00 on and showed tomorrow's agenda. */
 function isoDate(date: Date) {
-  return date.toISOString().split('T')[0];
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 function sameDay(a: Date, b: Date) {
@@ -86,7 +94,7 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
   const [slots, setSlots] = useState<Slot[]>([]);
   const [courtSchedules, setCourtSchedules] = useState<CourtScheduleMap>({});
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<ViewMode>('week');
+  const [viewMode, setViewMode] = useState<ViewMode>('day');
   const [focusedDate, setFocusedDate] = useState(() => new Date());
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
@@ -182,13 +190,16 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
 
       const bookingIds = (bookingRows ?? []).map(b => b.id);
       const courtPriceByBooking: Record<string, number | null> = {};
+      const endByBooking: Record<string, string | null> = {};
       if (bookingIds.length) {
         const { data: linkedGames } = await supabase
           .from('games')
-          .select('booking_id, court_price')
+          .select('booking_id, court_price, scheduled_end_at')
           .in('booking_id', bookingIds);
         (linkedGames ?? []).forEach(g => {
-          if (g.booking_id) courtPriceByBooking[g.booking_id] = g.court_price ?? null;
+          if (!g.booking_id) return;
+          courtPriceByBooking[g.booking_id] = g.court_price ?? null;
+          endByBooking[g.booking_id] = g.scheduled_end_at ?? null;
         });
       }
 
@@ -197,12 +208,13 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
           ...b,
           profiles: profileMap[b.created_by] ?? null,
           court_price: courtPriceByBooking[b.id] ?? null,
+          scheduled_end_at: endByBooking[b.id] ?? null,
         };
       });
 
       const { data: gameRows } = await supabase
         .from('games')
-        .select('id, slot_id, is_open, current_players, max_players')
+        .select('id, slot_id, is_open, current_players, max_players, scheduled_end_at')
         .in('slot_id', allSlotIds);
       (gameRows ?? []).filter(g => g.is_open === true).forEach(g => { gameBySlot[g.slot_id] = g; });
 
@@ -323,6 +335,40 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
     .reduce((sum, s) => sum + netCourtPrice(s.booking?.court_price, s.booking?.total_price), 0);
   const hasSchedule = Object.keys(courtSchedules).length > 0 || slots.length > 0;
 
+  /** Free cell clicked (inside opening hours or an available slot): open the booking/block modal. */
+  function openEmptyCell(court: Court, day: Date, hour: string) {
+    const slot = getSlot(court.id, day, hour);
+    const sched = courtSchedules[court.id]?.[day.getDay()];
+    const slotEndHour = slot?.end_time?.substring(11, 16);
+    const slotDurationMin = slot && slotEndHour
+      ? (() => {
+          const [eh, em] = slotEndHour.split(':').map(Number);
+          const [sh, sm] = hour.split(':').map(Number);
+          return (eh * 60 + em) - (sh * 60 + sm);
+        })()
+      : 0;
+    // CreateAvailability slots (duration > 30 min): price_override is the per-session total
+    // CreateSchedule slots (duration = 30 min): price_override is per-hour; don't lock duration
+    const isSessionSlot = slotDurationMin > 30;
+    setSelectedDynamic({
+      courtId: court.id,
+      courtName: court.name,
+      date: day,
+      hour,
+      pricePerHour: isSessionSlot ? 0 : (slot?.price_override ?? sched?.price ?? 0),
+      slotTotalPrice: isSessionSlot && slot?.price_override != null ? slot.price_override : undefined,
+      // Only lock to existing slot when it has a fixed session duration (> 30 min)
+      ...(isSessionSlot && slot ? { existingSlotId: slot.id, existingEndHour: slotEndHour } : {}),
+    });
+  }
+
+  /** Booked / open game / blocked slot clicked: open its detail modal. */
+  function openSlot(slot: Slot) {
+    if (slot.game) setSelectedGameSlot(slot);
+    else if (slot.booking) setSelectedBookingId(slot.booking.id);
+    else setSelectedSlot(slot);
+  }
+
   const isShowingToday = viewMode === 'day' && sameDay(focusedDate, today);
   const statsLabel = isShowingToday ? 'Hoje' : viewMode === 'day' ? formatShortDate(focusedDate) : 'Semana';
 
@@ -435,8 +481,8 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
           </div>
         </div>
 
-        {/* Row 2: filtros de status */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 bg-gray-50">
+        {/* Row 2: filtros de status (week view only — the arena view has its own legend) */}
+        {viewMode === 'week' && <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 bg-gray-50">
           <div className="flex items-center gap-1.5">
             <Filter className="w-3.5 h-3.5 text-gray-400" />
             <span className="text-xs text-gray-400 font-medium">Mostrar:</span>
@@ -470,7 +516,7 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
             <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-blue-100 border-l-2 border-blue-400 inline-block" />Aberto</span>
             <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-gray-200 inline-block" />Bloqueado</span>
           </div>
-        </div>
+        </div>}
       </div>
 
       {/* ── Calendar grid ── */}
@@ -494,6 +540,21 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
             Configurar horários
           </button>
         </div>
+      ) : viewMode === 'day' ? (
+        <ArenaDayView
+          courts={displayCourts}
+          slots={slots}
+          schedules={courtSchedules}
+          date={focusedDate}
+          dateStr={isoDate(focusedDate)}
+          isToday={isShowingToday}
+          netCourtPrice={netCourtPrice}
+          onEmptyCellClick={(courtId, hour) => {
+            const court = courts.find(c => c.id === courtId);
+            if (court) openEmptyCell(court, focusedDate, hour);
+          }}
+          onSlotClick={slot => openSlot(slot as Slot)}
+        />
       ) : (
         <div className="bg-white rounded-2xl border-2 border-gray-200 overflow-hidden shadow-sm">
           {displayCourts.map(court => {
@@ -565,33 +626,10 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
                           );
 
                           if (scheduled) {
-                            const sched = courtSchedules[court.id]?.[day.getDay()];
                             return (
                               <button
                                 key={hour}
-                                onClick={() => {
-                                  const slotEndHour = slot?.end_time?.substring(11, 16);
-                                  const slotDurationMin = slot && slotEndHour
-                                    ? (() => {
-                                        const [eh, em] = slotEndHour.split(':').map(Number);
-                                        const [sh, sm] = hour.split(':').map(Number);
-                                        return (eh * 60 + em) - (sh * 60 + sm);
-                                      })()
-                                    : 0;
-                                  // CreateAvailability slots (duration > 30 min): price_override is the per-session total
-                                  // CreateSchedule slots (duration = 30 min): price_override is per-hour; don't lock duration
-                                  const isSessionSlot = slotDurationMin > 30;
-                                  setSelectedDynamic({
-                                    courtId: court.id,
-                                    courtName: court.name,
-                                    date: day,
-                                    hour,
-                                    pricePerHour: isSessionSlot ? 0 : (slot?.price_override ?? sched?.price ?? 0),
-                                    slotTotalPrice: isSessionSlot && slot?.price_override != null ? slot.price_override : undefined,
-                                    // Only lock to existing slot when it has a fixed session duration (> 30 min)
-                                    ...(isSessionSlot && slot ? { existingSlotId: slot.id, existingEndHour: slotEndHour } : {}),
-                                  });
-                                }}
+                                onClick={() => openEmptyCell(court, day, hour)}
                                 className={`w-full h-10 ${borderClass} bg-green-50/60 border-l-[2px] border-l-green-200 flex items-center hover:bg-green-100/70 transition-colors group`}
                               >
                                 <span className="text-[9px] text-green-400 ml-2 tabular-nums leading-none group-hover:text-green-600">{hour}</span>

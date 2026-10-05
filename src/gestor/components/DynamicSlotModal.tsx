@@ -22,8 +22,10 @@ interface Props {
 
 type View = 'choose' | 'reserve' | 'success';
 
+/** Local calendar date — toISOString() is UTC and would shift bookings made
+ *  after 21:00 (Brazil) to the next day. */
 function isoDate(d: Date) {
-  return d.toISOString().split('T')[0];
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function addMinutesToHour(hour: string, minutes: number): string {
