@@ -1,31 +1,12 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Check, ChevronRight, Camera, Loader2, Zap, LocateFixed } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { FUTEVOLEI_LEVELS } from '@/app/lib/futevoleiLevels';
-
-const POSITIONS = [
-  { value: 'right', label: 'Lado direito', emoji: '➡️' },
-  { value: 'left', label: 'Lado esquerdo', emoji: '⬅️' },
-  { value: 'both', label: 'Qualquer lado', emoji: '🔄' },
-];
-
-const DAYS = [
-  { value: 'mon', label: 'Seg' },
-  { value: 'tue', label: 'Ter' },
-  { value: 'wed', label: 'Qua' },
-  { value: 'thu', label: 'Qui' },
-  { value: 'fri', label: 'Sex' },
-  { value: 'sat', label: 'Sáb' },
-  { value: 'sun', label: 'Dom' },
-];
-
-const PERIODS = [
-  { value: 'morning', label: 'Manhã', sub: '06h–12h' },
-  { value: 'afternoon', label: 'Tarde', sub: '12h–18h' },
-  { value: 'evening', label: 'Noite', sub: '18h–23h' },
-];
+import {
+  POSITION_OPTIONS as POSITIONS, FOOT_OPTIONS, DAY_OPTIONS as DAYS, PERIOD_OPTIONS as PERIODS, detectCity,
+} from '@/app/lib/profileFields';
 
 export default function Onboarding() {
   const navigate = useNavigate();
@@ -33,10 +14,21 @@ export default function Onboarding() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState(1);
-  const TOTAL_STEPS = 4;
+  // The futevôlei level step only exists for players without a rating yet —
+  // once set, it can only go down (Profile → Ajustar nível) or move with matches
+  const [hasRating, setHasRating] = useState(false);
+  const TOTAL_STEPS = hasRating ? 3 : 4;
+
+  useEffect(() => {
+    if (!user) return;
+    supabase.from('player_ratings').select('player_id')
+      .eq('player_id', user.id).eq('sport_type', 'futevolei').maybeSingle()
+      .then(({ data }) => setHasRating(!!data));
+  }, [user?.id]);
   const [saving, setSaving] = useState(false);
   const [locating, setLocating] = useState(false);
   const [locateError, setLocateError] = useState('');
+  const [saveError, setSaveError] = useState('');
 
   // Step 1
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -45,51 +37,26 @@ export default function Onboarding() {
   const [city, setCity] = useState(profile?.location ?? '');
 
   // Step 2
-  const [position, setPosition] = useState('');
-  const [foot, setFoot] = useState('');
+  const [position, setPosition] = useState(profile?.preferred_position ?? '');
+  const [foot, setFoot] = useState<string>(profile?.dominant_foot ?? '');
 
   // Step 3
-  const [days, setDays] = useState<string[]>([]);
-  const [periods, setPeriods] = useState<string[]>([]);
+  const [days, setDays] = useState<string[]>(profile?.availability?.days ?? []);
+  const [periods, setPeriods] = useState<string[]>(profile?.availability?.periods ?? []);
 
   // Step 4 (optional — futevôlei only, for now)
   const [futevoleiLevel, setFutevoleiLevel] = useState('');
 
   async function detectLocation() {
-    if (!navigator.geolocation) {
-      setLocateError('Geolocalização não suportada pelo seu navegador.');
-      return;
-    }
     setLocating(true);
     setLocateError('');
-    navigator.geolocation.getCurrentPosition(
-      async ({ coords }) => {
-        try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${coords.latitude}&lon=${coords.longitude}&format=json&accept-language=pt-BR`,
-            { headers: { 'User-Agent': 'JoggaHub/1.0' } }
-          );
-          const data = await res.json();
-          const city =
-            data.address?.city ||
-            data.address?.town ||
-            data.address?.village ||
-            data.address?.municipality ||
-            '';
-          const state = data.address?.state_code || data.address?.state || '';
-          setCity(city && state ? `${city}, ${state}` : city || state);
-        } catch {
-          setLocateError('Não foi possível identificar sua cidade.');
-        } finally {
-          setLocating(false);
-        }
-      },
-      () => {
-        setLocateError('Permissão de localização negada.');
-        setLocating(false);
-      },
-      { timeout: 8000 }
-    );
+    try {
+      setCity(await detectCity());
+    } catch (e: any) {
+      setLocateError(e?.message ?? 'Não foi possível identificar sua cidade.');
+    } finally {
+      setLocating(false);
+    }
   }
 
   function toggleDay(d: string) {
@@ -115,6 +82,7 @@ export default function Onboarding() {
   async function handleFinish() {
     if (!user) return;
     setSaving(true);
+    setSaveError('');
     try {
       let avatar_url = profile?.avatar_url ?? null;
 
@@ -133,9 +101,11 @@ export default function Onboarding() {
 
       const isFirstTime = !profile?.preferred_position;
 
-      // Save profile fields (without XP — handled separately below)
-      await supabase.from('profiles').upsert({
-        id: user.id,
+      // Save profile fields (without XP — handled separately below).
+      // update, not upsert: the row always exists (created on signup by the
+      // on_auth_user_created trigger) and profiles has no INSERT policy, so an
+      // upsert was rejected by RLS for every user — and the error was ignored.
+      const { data: savedRows, error: profileErr } = await supabase.from('profiles').update({
         name: name.trim(),
         location: city.trim(),
         avatar_url,
@@ -143,33 +113,31 @@ export default function Onboarding() {
         dominant_foot: foot || null,
         availability: (days.length > 0 || periods.length > 0) ? { days, periods } : null,
         onboarding_completed: true,
-      }, { onConflict: 'id' });
+      }).eq('id', user.id).select('id');
+      // No error but no row: the profile doesn't exist — nothing was saved
+      if (profileErr || !savedRows?.length) {
+        console.error('[Onboarding] profile save error:', profileErr ?? 'no profile row updated');
+        setSaveError('Não foi possível salvar seu perfil. Tente novamente.');
+        return;
+      }
 
       // Increment XP directly in DB to avoid stale-context race condition
       if (isFirstTime) {
         await supabase.rpc('increment_xp', { user_id: user.id, amount: 20 });
       }
 
-      // Self-declared starting level for futevôlei (only writable while matches_played = 0, enforced by RLS)
-      if (futevoleiLevel) {
+      // Self-declared starting level for futevôlei — only when the player has
+      // none yet (the step is hidden otherwise). declare_initial_rating also
+      // writes the baseline history point and enforces the 5.5 cap server-side.
+      if (futevoleiLevel && !hasRating) {
         const level = FUTEVOLEI_LEVELS.find(l => l.key === futevoleiLevel);
         if (level) {
-          await supabase.from('player_ratings').upsert({
-            player_id: user.id,
-            sport_type: 'futevolei',
-            rating: level.rating,
-            matches_played: 0,
-          }, { onConflict: 'player_id,sport_type' });
-          // Baseline history row (game_id null) so the first confirmed match's
-          // "before" rating is the declared level, not the 3.0 default — otherwise
-          // the rating-evolution chart and per-match deltas understate their first game.
-          await supabase.from('player_rating_history').insert({
-            player_id: user.id,
-            sport_type: 'futevolei',
-            game_id: null,
-            rating: level.rating,
-            matches_played: 0,
+          const { error: ratingErr } = await supabase.rpc('declare_initial_rating', {
+            p_sport: 'futevolei',
+            p_rating: level.rating,
           });
+          // Profile is already saved — a failed level isn't worth blocking on
+          if (ratingErr) console.error('[Onboarding] initial rating error:', ratingErr);
         }
       }
 
@@ -181,7 +149,7 @@ export default function Onboarding() {
       navigate('/home', { state: { firstLogin: isFirstTime } });
     } catch (err) {
       console.error(err);
-      navigate('/home');
+      setSaveError('Não foi possível salvar seu perfil. Tente novamente.');
     } finally {
       setSaving(false);
     }
@@ -327,11 +295,7 @@ export default function Onboarding() {
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-3">Pé dominante</label>
               <div className="flex gap-2">
-                {[
-                  { value: 'right', label: 'Destro', emoji: '🦶' },
-                  { value: 'left', label: 'Canhoto', emoji: '🦶' },
-                  { value: 'both', label: 'Ambidestro', emoji: '⚡' },
-                ].map(f => (
+                {FOOT_OPTIONS.map(f => (
                   <button
                     key={f.value}
                     onClick={() => setFoot(f.value)}
@@ -450,6 +414,10 @@ export default function Onboarding() {
               ))}
             </div>
           </div>
+        )}
+
+        {saveError && (
+          <p className="mt-8 -mb-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">{saveError}</p>
         )}
 
         {/* CTA */}
