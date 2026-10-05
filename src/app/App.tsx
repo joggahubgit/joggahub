@@ -47,6 +47,7 @@ import OpenGamePage from './components/OpenGamePage';
 import JoinGameReview from './components/JoinGameReview';
 import PaymentSuccess from './components/PaymentSuccess';
 import MyBookings from './components/MyBookings';
+import EditProfile from './components/EditProfile';
 
 /** Root route: already-logged-in visitors skip the marketing Landing and go straight to /home */
 function RootRoute() {
@@ -115,6 +116,7 @@ function AppRoutes() {
         <Route path="/coaching" element={<ProtectedRoute><Coaching /></ProtectedRoute>} />
         <Route path="/coach-details/:id" element={<ProtectedRoute><Coaching /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+        <Route path="/profile/edit" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />
         <Route path="/player/:id" element={<ProtectedRoute><PublicProfile /></ProtectedRoute>} />
         <Route path="/game-chat/:id" element={<ProtectedRoute><GameChat /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />

@@ -3,36 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, MapPin, Settings, LogOut, Edit2,
   Target, Camera,
-  Clock, Calendar, Loader2,
+  Clock, Calendar, Loader2, BadgeCheck,
 } from 'lucide-react';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { FUTEVOLEI_LEVELS, type FutevoleiLevelOption } from '@/app/lib/futevoleiLevels';
 import PlayerStatsSection from './PlayerStatsSection';
 import BottomNav from './BottomNav';
-
-// ── Position labels ───────────────────────────────────────────────────────────
-
-const POSITION_LABELS: Record<string, string> = {
-  right: 'Lado direito',
-  left: 'Lado esquerdo',
-  both: 'Qualquer lado',
-};
-
-const FOOT_LABELS: Record<string, string> = {
-  right: 'Destro',
-  left: 'Canhoto',
-  both: 'Ambidestro',
-};
-
-const DAY_LABELS: Record<string, string> = {
-  mon: 'Seg', tue: 'Ter', wed: 'Qua', thu: 'Qui',
-  fri: 'Sex', sat: 'Sáb', sun: 'Dom',
-};
-
-const PERIOD_LABELS: Record<string, string> = {
-  morning: 'Manhã', afternoon: 'Tarde', evening: 'Noite',
-};
+import { ProfileCompletenessCard } from './ProfileCompletenessCard';
+import { POSITION_LABELS, FOOT_LABELS, DAY_LABELS, PERIOD_LABELS, profileCompleteness } from '@/app/lib/profileFields';
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -138,6 +117,7 @@ export default function Profile() {
   const position = profile?.preferred_position ? POSITION_LABELS[profile.preferred_position] ?? profile.preferred_position : null;
   const foot     = profile?.dominant_foot ? FOOT_LABELS[profile.dominant_foot] : null;
   const avail    = profile?.availability;
+  const completeness = profileCompleteness(profile);
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -177,7 +157,10 @@ export default function Profile() {
 
           {/* Name + city */}
           <div className="flex-1 min-w-0">
-            <h2 className="text-xl font-bold text-gray-900 truncate">{name}</h2>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <h2 className="text-xl font-bold text-gray-900 truncate">{name}</h2>
+              {completeness.complete && <BadgeCheck className="w-5 h-5 text-green-600 flex-shrink-0" aria-label="Perfil completo" />}
+            </div>
             {city && (
               <div className="flex items-center gap-1 text-gray-500 mt-0.5">
                 <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
@@ -189,7 +172,7 @@ export default function Profile() {
               <span><strong className="text-gray-900">{followingCount}</strong> seguindo</span>
             </div>
             <button
-              onClick={() => navigate('/onboarding')}
+              onClick={() => navigate('/profile/edit')}
               className="mt-2 flex items-center gap-1 text-xs text-violet-600 font-semibold"
             >
               <Edit2 className="w-3 h-3" /> Editar perfil
@@ -198,6 +181,8 @@ export default function Profile() {
         </div>
 
         {avatarError && <p className="text-xs text-red-600 mb-3">{avatarError}</p>}
+
+        {profile?.bio && <p className="text-sm text-gray-600 mb-4 whitespace-pre-line">{profile.bio}</p>}
 
         {/* Tags: position + foot */}
         <div className="flex flex-wrap gap-2">
@@ -213,6 +198,13 @@ export default function Profile() {
           )}
         </div>
       </div>
+
+      {/* Perfil completo / o que falta */}
+      {!completeness.complete && (
+        <div className="mx-5 mb-3">
+          <ProfileCompletenessCard completeness={completeness} onPick={s => navigate(`/profile/edit?section=${s}`)} />
+        </div>
+      )}
 
       {/* Pontuação — rating de futevôlei */}
       {futevoleiRating === undefined ? (
@@ -278,7 +270,7 @@ export default function Profile() {
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm font-bold text-gray-500 uppercase tracking-wide">Meu Jogo</p>
           <button
-            onClick={() => navigate('/onboarding')}
+            onClick={() => navigate('/profile/edit?section=jogo')}
             className="flex items-center gap-1 text-xs text-violet-600 font-semibold"
           >
             <Edit2 className="w-3 h-3" /> Editar
@@ -343,14 +335,6 @@ export default function Profile() {
           </div>
         </div>
 
-        {!profile?.onboarding_completed && (
-          <button
-            onClick={() => navigate('/onboarding')}
-            className="mt-4 w-full py-2.5 border border-dashed border-violet-300 text-violet-500 rounded-xl text-xs font-semibold"
-          >
-            + Completar informações de jogador
-          </button>
-        )}
       </div>
 
       {/* Actions */}

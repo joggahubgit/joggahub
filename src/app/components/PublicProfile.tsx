@@ -2,33 +2,13 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, MapPin, Target,
-  Clock, Calendar, Loader2, UserPlus, UserCheck,
+  Clock, Calendar, Loader2, UserPlus, UserCheck, BadgeCheck,
 } from 'lucide-react';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import PlayerStatsSection from './PlayerStatsSection';
 import BottomNav from './BottomNav';
-
-const POSITION_LABELS: Record<string, string> = {
-  right: 'Lado direito',
-  left: 'Lado esquerdo',
-  both: 'Qualquer lado',
-};
-
-const FOOT_LABELS: Record<string, string> = {
-  right: 'Destro',
-  left: 'Canhoto',
-  both: 'Ambidestro',
-};
-
-const DAY_LABELS: Record<string, string> = {
-  mon: 'Seg', tue: 'Ter', wed: 'Qua', thu: 'Qui',
-  fri: 'Sex', sat: 'Sáb', sun: 'Dom',
-};
-
-const PERIOD_LABELS: Record<string, string> = {
-  morning: 'Manhã', afternoon: 'Tarde', evening: 'Noite',
-};
+import { POSITION_LABELS, FOOT_LABELS, DAY_LABELS, PERIOD_LABELS, profileCompleteness } from '@/app/lib/profileFields';
 
 interface PublicProfileData {
   name: string;
@@ -36,7 +16,8 @@ interface PublicProfileData {
   location: string | null;
   preferred_position: string | null;
   dominant_foot: string | null;
-  availability: { days?: string[]; periods?: string[] } | null;
+  availability: { days: string[]; periods: string[] } | null;
+  bio: string | null;
 }
 
 /** Read-only view of another player's profile — reached by tapping their name/avatar in the ranking. */
@@ -64,7 +45,7 @@ export default function PublicProfile() {
     if (!id) return;
     supabase
       .from('profiles')
-      .select('name, avatar_url, location, preferred_position, dominant_foot, availability')
+      .select('name, avatar_url, location, preferred_position, dominant_foot, availability, bio')
       .eq('id', id)
       .maybeSingle()
       .then(({ data }) => setProfile(data as PublicProfileData | null));
@@ -123,6 +104,7 @@ export default function PublicProfile() {
   const foot     = profile.dominant_foot ? FOOT_LABELS[profile.dominant_foot] : null;
   const avail    = profile.availability;
   const totalGames = gamesAsOrganizer + gamesAsPlayer;
+  const isComplete = profileCompleteness(profile).complete;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -143,7 +125,10 @@ export default function PublicProfile() {
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-xl font-bold text-gray-900 truncate">{name}</h2>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <h2 className="text-xl font-bold text-gray-900 truncate">{name}</h2>
+              {isComplete && <BadgeCheck className="w-5 h-5 text-green-600 flex-shrink-0" aria-label="Perfil completo" />}
+            </div>
             {city && (
               <div className="flex items-center gap-1 text-gray-500 mt-0.5">
                 <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
@@ -171,6 +156,8 @@ export default function PublicProfile() {
             )}
           </button>
         </div>
+
+        {profile.bio && <p className="text-sm text-gray-600 mb-4 whitespace-pre-line">{profile.bio}</p>}
 
         <div className="flex flex-wrap gap-2">
           {position && (
