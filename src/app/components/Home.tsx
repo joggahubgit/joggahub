@@ -320,10 +320,13 @@ export default function Home() {
 
       if (!venueRows?.length) return;
 
+      // Only active courts — same filter as FindCourts. Otherwise a club card
+      // could open (and count) a court the club deactivated.
       const { data: courtRows } = await supabase
         .from('courts')
         .select('id, venue_id, images')
-        .in('venue_id', venueRows.map(v => v.id));
+        .in('venue_id', venueRows.map(v => v.id))
+        .neq('is_active', false);
 
       const courtsByVenue: Record<string, any[]> = {};
       (courtRows ?? []).forEach(c => {
@@ -331,7 +334,8 @@ export default function Home() {
         courtsByVenue[c.venue_id].push(c);
       });
 
-      const cards: VenueCard[] = venueRows.map(v => {
+      // Clubs with no active court have nothing to book — leave them out
+      const cards: VenueCard[] = venueRows.filter(v => courtsByVenue[v.id]?.length).map(v => {
         const courts = courtsByVenue[v.id] ?? [];
         const firstImage = courts.find(c => c.images?.length > 0)?.images?.[0]
           ?? 'https://images.unsplash.com/photo-1624880357913-a8539238245b?w=400&q=80';
