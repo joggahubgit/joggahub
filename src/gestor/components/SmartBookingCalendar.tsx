@@ -8,7 +8,7 @@ import { OpenGameModal } from './OpenGameModal';
 import { DynamicSlotModal } from './DynamicSlotModal';
 import { GestorBookingDetail } from './GestorBookingDetail';
 import { ArenaDayView, AgendaLegend } from './ArenaDayView';
-import { ScheduleGrid, type GridColumn } from './ScheduleGrid';
+import { ScheduleGrid, freeMinutesFrom, type GridColumn } from './ScheduleGrid';
 
 interface Props {
   venueId: string;
@@ -104,6 +104,7 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
     courtId: string; courtName: string; date: Date; hour: string; pricePerHour: number;
     slotTotalPrice?: number;
     existingSlotId?: string; existingEndHour?: string;
+    maxMinutes?: number;
   } | null>(null);
   const [collapsedCourts, setCollapsedCourts] = useState<Set<string>>(new Set());
 
@@ -323,11 +324,15 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
     // CreateAvailability slots (duration > 30 min): price_override is the per-session total
     // CreateSchedule slots (duration = 30 min): price_override is per-hour; don't lock duration
     const isSessionSlot = slotDurationMin > 30;
+    const dateStr = isoDate(day);
+    const courtDaySlots = slots.filter(s => s.court_id === court.id && s.start_time?.startsWith(dateStr));
+    const [h, m] = hour.split(':').map(Number);
     setSelectedDynamic({
       courtId: court.id,
       courtName: court.name,
       date: day,
       hour,
+      maxMinutes: freeMinutesFrom(courtDaySlots, sched, h * 60 + m),
       pricePerHour: isSessionSlot ? 0 : (slot?.price_override ?? sched?.price ?? 0),
       slotTotalPrice: isSessionSlot && slot?.price_override != null ? slot.price_override : undefined,
       // Only lock to existing slot when it has a fixed session duration (> 30 min)
@@ -643,6 +648,7 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
           slotTotalPrice={selectedDynamic.slotTotalPrice}
           existingSlotId={selectedDynamic.existingSlotId}
           existingEndHour={selectedDynamic.existingEndHour}
+          maxMinutes={selectedDynamic.maxMinutes}
           onClose={() => setSelectedDynamic(null)}
           onRefresh={() => { fetchAll(); setSelectedDynamic(null); }}
         />

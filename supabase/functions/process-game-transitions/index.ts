@@ -146,7 +146,7 @@ serve(async (req) => {
     // Private games linked to a booking, still active, created > 2h ago
     const { data: unpaidGames, error: unpaidErr } = await supabase
       .from('games')
-      .select('id, slot_id, booking_id, organizer_id')
+      .select('id, slot_id, booking_id, organizer_id, scheduled_end_at')
       .eq('is_open', false)
       .in('status', ['confirmed_booking', 'scheduled'])
       .not('booking_id', 'is', null)
@@ -186,10 +186,8 @@ serve(async (req) => {
             .eq('id', game.booking_id);
         }
 
-        // Free slot
-        if (game.slot_id) {
-          await supabase.from('slots').update({ is_available: true }).eq('id', game.slot_id);
-        }
+        // Free slot (and the consecutive slots locked for the session)
+        await releaseGameSlots(supabase, game);
 
         // Notify player
         if (game.organizer_id) {
@@ -217,7 +215,7 @@ serve(async (req) => {
   {
     const { data: openScheduled, error: openErr } = await supabase
       .from('games')
-      .select('id, slot_id, court_id, current_players, organizer_id, stripe_session_id, sport_type')
+      .select('id, slot_id, court_id, current_players, organizer_id, stripe_session_id, sport_type, scheduled_end_at')
       .eq('status', 'scheduled')
       .eq('is_open', true)
       .not('slot_id', 'is', null);
@@ -262,11 +260,8 @@ serve(async (req) => {
           continue;
         }
 
-        // Free up the slot so others can book it
-        await supabase
-          .from('slots')
-          .update({ is_available: true })
-          .eq('id', game.slot_id);
+        // Free up the slot (and any consecutive slots locked for it) so others can book it
+        await releaseGameSlots(supabase, game);
 
         // Release Stripe holds for all players who authorized one
         const stripeKeyCancelAuto = Deno.env.get('STRIPE_SECRET_KEY') ?? '';
@@ -651,7 +646,7 @@ serve(async (req) => {
   // ─────────────────────────────────────────────────────────────────────
   const { data: scheduledGames, error: scheduledErr } = await supabase
     .from('games')
-    .select('id, slot_id, court_id, current_players, sport_type')
+    .select('id, slot_id, court_id, current_players, sport_type, scheduled_end_at')
     .eq('status', 'scheduled')
     .not('slot_id', 'is', null);
 
@@ -684,8 +679,8 @@ serve(async (req) => {
       } else if (newStatus === 'confirmed_booking') {
         results.retroactivelyConfirmed.push(game.id);
       } else {
-        // Free the slot so it can be re-booked
-        await supabase.from('slots').update({ is_available: true }).eq('id', game.slot_id);
+        // Free the slot (and any consecutive slots locked for it) so it can be re-booked
+        await releaseGameSlots(supabase, game);
         results.retroactivelyExpired.push(game.id);
       }
     }
@@ -916,6 +911,50 @@ serve(async (req) => {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
 });
+
+/**
+ * Frees a cancelled/expired game's slot plus the consecutive slots locked for
+ * the session (up to scheduled_end_at). A 1h30 booking holds three 30-min
+ * slots; freeing only slot_id left the other two locked forever.
+ */
+async function releaseGameSlots(
+  supabase: any,
+  game: { id?: string; slot_id: string | null; scheduled_end_at?: string | null },
+) {
+  if (!game.slot_id) return;
+  const { data: slotRow } = await supabase
+    .from('slots').select('court_id, start_time').eq('id', game.slot_id).single();
+  if (!slotRow || !game.scheduled_end_at) {
+    await supabase.from('slots').update({ is_available: true }).eq('id', game.slot_id);
+    return;
+  }
+
+  const start = slotRow.start_time.substring(0, 19);
+  const end = game.scheduled_end_at.substring(0, 19);
+  const { data: rangeSlots } = await supabase
+    .from('slots').select('id, start_time')
+    .eq('court_id', slotRow.court_id).gte('start_time', start).lt('start_time', end);
+
+  // Never free slots that belong to another live game in the same range
+  // (e.g. an open game that never locked its whole range and was booked over)
+  const { data: others } = await supabase
+    .from('games').select('id, scheduled_at, scheduled_end_at')
+    .eq('court_id', slotRow.court_id)
+    .not('status', 'in', '("cancelled","expired","completed")')
+    .lt('scheduled_at', end)
+    .gte('scheduled_at', new Date(new Date(`${start}Z`).getTime() - 6 * 3600_000).toISOString().substring(0, 19));
+  const taken = (others ?? [])
+    .filter((o: any) => o.id !== game.id)
+    .map((o: any) => [o.scheduled_at.substring(0, 19), (o.scheduled_end_at ?? o.scheduled_at).substring(0, 19)]);
+
+  const ids = (rangeSlots ?? [])
+    .filter((s: any) => {
+      const t = s.start_time.substring(0, 19);
+      return s.id === game.slot_id || !taken.some(([a, b]: string[]) => t >= a && (t < b || t === a));
+    })
+    .map((s: any) => s.id);
+  if (ids.length) await supabase.from('slots').update({ is_available: true }).in('id', ids);
+}
 
 /**
  * distribute-game-xp (helper — called from MVP submission UI, not cron)

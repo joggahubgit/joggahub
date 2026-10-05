@@ -125,6 +125,22 @@ export function buildBlocks(slots: GridSlot[]): Block[] {
 }
 
 /**
+ * Free minutes from `startMin` until the next booking/block or closing time
+ * (opening hours, else the last created slot) — caps the durations the gestor
+ * can pick when booking/blocking from a free cell. 0 if already occupied.
+ */
+export function freeMinutesFrom(slots: GridSlot[], schedule: GridSchedule | undefined, startMin: number, cap = 360) {
+  const blocks = buildBlocks(slots);
+  if (blocks.some(b => startMin >= b.start && startMin < b.end)) return 0;
+  const nextBusy = blocks.filter(b => b.start > startMin).reduce((m, b) => Math.min(m, b.start), Infinity);
+  const win = scheduleWindow(schedule);
+  const lastSlotEnd = slots.reduce((m, s) => Math.max(m, slotEnd(s)), -Infinity);
+  const closing = Math.max(win ? win[1] : -Infinity, lastSlotEnd);
+  const limit = Math.min(nextBusy, Number.isFinite(closing) ? closing : startMin + cap);
+  return Math.max(0, Math.min(limit - startMin, cap));
+}
+
+/**
  * Occupancy of one court on one day. Capacity is the opening hours when
  * configured, otherwise the time covered by the slots the club created.
  */

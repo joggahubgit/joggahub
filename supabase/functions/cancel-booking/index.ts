@@ -144,12 +144,32 @@ serve(async (req) => {
       .update({ status: 'cancelled', payment_status: isPaid ? 'refunded' : 'failed' })
       .eq('id', bookingId);
 
-    // Free up the slot
+    // Free up the slot — and the consecutive slots locked for the session, up
+    // to the game's real end (a 1h30 booking holds three 30-min slots)
     if (booking.slot_id) {
-      await supabase
-        .from('slots')
-        .update({ is_available: true })
-        .eq('id', booking.slot_id);
+      const { data: slotRow } = await supabase
+        .from('slots').select('court_id, start_time').eq('id', booking.slot_id).single();
+      const { data: linkedGame } = await supabase
+        .from('games')
+        .select('scheduled_end_at')
+        .eq('booking_id', bookingId)
+        .not('scheduled_end_at', 'is', null)
+        .limit(1)
+        .maybeSingle();
+
+      if (slotRow && linkedGame?.scheduled_end_at) {
+        await supabase
+          .from('slots')
+          .update({ is_available: true })
+          .eq('court_id', slotRow.court_id)
+          .gte('start_time', slotRow.start_time.substring(0, 19))
+          .lt('start_time', linkedGame.scheduled_end_at.substring(0, 19));
+      } else {
+        await supabase
+          .from('slots')
+          .update({ is_available: true })
+          .eq('id', booking.slot_id);
+      }
 
       // Cancel any game linked to this slot that wasn't already finished
       await supabase

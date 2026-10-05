@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildBlocks, columnStats, type GridSlot } from '../gestor/components/ScheduleGrid';
+import { buildBlocks, columnStats, freeMinutesFrom, type GridSlot } from '../gestor/components/ScheduleGrid';
 
 const DAY = '2026-10-07';
 
@@ -37,6 +37,23 @@ describe('buildBlocks', () => {
       slot('16:00', '16:30'),
     ]);
     expect(blocks).toEqual([expect.objectContaining({ kind: 'blocked', start: 15 * 60, end: 16 * 60 })]);
+  });
+});
+
+describe('freeMinutesFrom', () => {
+  it('stops at the next booking', () => {
+    expect(freeMinutesFrom(dayWithBooking(), undefined, 10 * 60)).toBe(120); // 10:00 → 12:00 booking
+    expect(freeMinutesFrom(dayWithBooking(), undefined, 11 * 60 + 30)).toBe(30);
+  });
+  it('stops at closing (last slot end) and caps at 6h', () => {
+    expect(freeMinutesFrom(dayWithBooking(), undefined, 21 * 60)).toBe(60);  // slots end 22:00
+    expect(freeMinutesFrom(dayWithBooking(), undefined, 13 * 60)).toBe(360); // 13:00 → 22:00, capped
+  });
+  it('is zero inside a booking', () => {
+    expect(freeMinutesFrom(dayWithBooking(), undefined, 12 * 60 + 30)).toBe(0);
+  });
+  it('uses opening hours when the day has no slots', () => {
+    expect(freeMinutesFrom([], { open_time: '08:00:00', close_time: '22:00:00' }, 20 * 60)).toBe(120);
   });
 });
 

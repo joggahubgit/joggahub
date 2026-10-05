@@ -16,11 +16,23 @@ interface Props {
   slotTotalPrice?: number; // fixed total price for the slot (CreateAvailability); overrides per-hour calc
   existingSlotId?: string; // set when slot record already exists (e.g. after cancelled booking)
   existingEndHour?: string; // end time of the existing slot, e.g. "23:30"
+  maxMinutes?: number;      // free time from `hour` until the next booking/block or closing
   onClose: () => void;
   onRefresh: () => void;
 }
 
-type View = 'choose' | 'reserve' | 'success';
+type View = 'choose' | 'reserve' | 'block' | 'success';
+
+const RESERVE_DURATIONS = [60, 90, 120, 150, 180];
+const BLOCK_DURATIONS = [30, 60, 90, 120, 180, 240];
+
+function durationLabel(min: number) {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return h === 0 ? `${m}min` : m === 0 ? `${h}h` : `${h}h${m}`;
+}
+
+const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 /** Local calendar date — toISOString() is UTC and would shift bookings made
  *  after 21:00 (Brazil) to the next day. */
@@ -38,14 +50,17 @@ function buildISO(date: Date, time: string): string {
   return `${isoDate(date)}T${time}:00`;
 }
 
-export function DynamicSlotModal({ courtId, courtName, date, hour, pricePerHour, slotTotalPrice, existingSlotId, existingEndHour, onClose, onRefresh }: Props) {
+export function DynamicSlotModal({ courtId, courtName, date, hour, pricePerHour, slotTotalPrice, existingSlotId, existingEndHour, maxMinutes = 360, onClose, onRefresh }: Props) {
   const [view, setView] = useState<View>('choose');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [successType, setSuccessType] = useState<'reserve' | 'block'>('reserve');
 
   // Reserve form
-  const [duration, setDuration] = useState<90 | 120>(90);
+  const fits = (d: number) => d <= maxMinutes;
+  const [duration, setDuration] = useState<number>(() =>
+    fits(90) ? 90 : [...RESERVE_DURATIONS].reverse().find(fits) ?? 60);
+  const [blockDuration, setBlockDuration] = useState<number>(30);
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState<Profile[]>([]);
   const [searching, setSearching] = useState(false);
@@ -58,8 +73,9 @@ export function DynamicSlotModal({ courtId, courtName, date, hour, pricePerHour,
     ? (() => { const [h, m] = existingEndHour.split(':').map(Number); const [sh, sm] = hour.split(':').map(Number); return (h * 60 + m) - (sh * 60 + sm); })()
     : duration;
   const autoPrice = slotTotalPrice !== undefined
-    ? slotTotalPrice.toFixed(0)
-    : (pricePerHour * (durationMinutes / 60)).toFixed(0);
+    ? Math.round(slotTotalPrice * 100) / 100
+    : Math.round(pricePerHour * (durationMinutes / 60) * 100) / 100;
+  const blockEndHour = existingSlotId && existingEndHour ? existingEndHour : addMinutesToHour(hour, blockDuration);
 
   useEffect(() => {
     if (search.length < 2) { setSearchResults([]); return; }
@@ -85,7 +101,7 @@ export function DynamicSlotModal({ courtId, courtName, date, hour, pricePerHour,
 
     const body = existingSlotId
       ? { type: 'block', slotId: existingSlotId }
-      : { type: 'block', courtId, startTime: buildISO(date, hour), endTime: buildISO(date, addMinutesToHour(hour, 30)) };
+      : { type: 'block', courtId, startTime: buildISO(date, hour), endTime: buildISO(date, blockEndHour) };
 
     const { error: fnErr } = await supabase.functions.invoke('create-manual-booking', { body });
 
@@ -109,8 +125,8 @@ export function DynamicSlotModal({ courtId, courtName, date, hour, pricePerHour,
     const endTime = buildISO(date, endHour);
 
     const body = existingSlotId
-      ? { type: 'private', slotId: existingSlotId, userId: selectedUser.id, price: parseFloat(autoPrice) || 0 }
-      : { type: 'private', courtId, startTime, endTime, userId: selectedUser.id, price: parseFloat(autoPrice) || 0 };
+      ? { type: 'private', slotId: existingSlotId, userId: selectedUser.id, price: autoPrice }
+      : { type: 'private', courtId, startTime, endTime, userId: selectedUser.id, price: autoPrice };
 
     const { error: fnErr } = await supabase.functions.invoke('create-manual-booking', { body });
     setBusy(false);
@@ -132,14 +148,14 @@ export function DynamicSlotModal({ courtId, courtName, date, hour, pricePerHour,
         <div className="bg-green-600 text-white px-6 pt-6 pb-5 rounded-t-3xl sm:rounded-t-2xl">
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-center gap-2">
-              {view === 'reserve' && (
+              {(view === 'reserve' || view === 'block') && (
                 <button onClick={() => { setView('choose'); setError(''); }}
                   className="p-1.5 hover:bg-white/20 rounded-lg transition-colors mr-1">
                   <ChevronLeft className="w-5 h-5" />
                 </button>
               )}
               <span className="text-xs font-bold uppercase tracking-widest opacity-75">
-                {view === 'reserve' ? 'Fazer Reserva' : view === 'success' ? (successType === 'block' ? 'Bloqueado' : 'Reserva criada') : 'Horário disponível'}
+                {view === 'reserve' ? 'Fazer Reserva' : view === 'block' ? 'Bloquear horário' : view === 'success' ? (successType === 'block' ? 'Bloqueado' : 'Reserva criada') : 'Horário disponível'}
               </span>
             </div>
             <button onClick={onClose} className="p-1.5 hover:bg-white/20 rounded-lg transition-colors">
@@ -150,7 +166,7 @@ export function DynamicSlotModal({ courtId, courtName, date, hour, pricePerHour,
           <p className="text-sm opacity-80 mt-0.5 capitalize">{capFirst(dateLabel)}</p>
           <div className="flex items-center gap-2 mt-2">
             <span className="bg-white/20 rounded-lg px-3 py-1 text-sm font-semibold">
-              {hour}{view === 'reserve' ? ` – ${endHour}` : ''}
+              {hour}{view === 'reserve' ? ` – ${endHour}` : view === 'block' ? ` – ${blockEndHour}` : ''}
             </span>
             {pricePerHour > 0 && (
               <span className="bg-white/20 rounded-lg px-3 py-1 text-sm font-semibold opacity-80">
@@ -179,16 +195,15 @@ export function DynamicSlotModal({ courtId, courtName, date, hour, pricePerHour,
               </button>
 
               <button
-                onClick={handleBlock}
-                disabled={busy}
-                className="w-full flex items-center gap-4 p-4 rounded-2xl bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors text-left disabled:opacity-60"
+                onClick={() => { setView('block'); setError(''); }}
+                className="w-full flex items-center gap-4 p-4 rounded-2xl bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors text-left"
               >
                 <div className="w-10 h-10 bg-gray-200 rounded-xl flex items-center justify-center flex-shrink-0">
-                  {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Ban className="w-5 h-5" />}
+                  <Ban className="w-5 h-5" />
                 </div>
                 <div>
                   <p className="font-bold">Bloquear horário</p>
-                  <p className="text-sm text-gray-500">Impede reservas neste slot de 30 min</p>
+                  <p className="text-sm text-gray-500">Impede reservas no período escolhido</p>
                 </div>
               </button>
 
@@ -202,25 +217,8 @@ export function DynamicSlotModal({ courtId, courtName, date, hour, pricePerHour,
 
               {/* Duration — hidden when reusing an existing slot (end time is fixed) */}
               {!existingSlotId && (
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">Duração</label>
-                  <div className="flex gap-2">
-                    {([90, 120] as const).map(d => (
-                      <button
-                        key={d}
-                        onClick={() => setDuration(d)}
-                        className={`flex-1 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all ${
-                          duration === d
-                            ? 'bg-purple-600 text-white border-purple-600'
-                            : 'border-gray-200 text-gray-600 hover:border-purple-300'
-                        }`}
-                      >
-                        {d === 90 ? '1h 30min' : '2h 00min'}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-xs text-gray-400 mt-1.5">{hour} – {endHour}</p>
-                </div>
+                <DurationPicker options={RESERVE_DURATIONS} value={duration} onChange={setDuration}
+                  fits={fits} range={`${hour} – ${endHour}`} />
               )}
               {existingSlotId && (
                 <p className="text-xs text-gray-500 bg-gray-50 rounded-xl px-3 py-2">
@@ -280,22 +278,51 @@ export function DynamicSlotModal({ courtId, courtName, date, hour, pricePerHour,
                 </div>
               )}
 
-              {autoPrice !== '0' && (
+              {autoPrice > 0 && (
                 <div className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
                   <span className="text-sm text-gray-500">Valor da reserva</span>
-                  <span className="font-bold text-gray-900">R$ {autoPrice}</span>
+                  <span className="font-bold text-gray-900">{brl(autoPrice)}</span>
                 </div>
               )}
+
+              <p className="text-xs text-gray-500 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+                O jogador recebe a reserva com pagamento pendente e paga pelo app. Se não pagar em até 2 horas, a reserva é cancelada automaticamente e o horário é liberado.
+              </p>
 
               {error && <p className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2 border border-red-100">{error}</p>}
 
               <button
                 onClick={handleReserve}
-                disabled={busy || !selectedUser}
+                disabled={busy || !selectedUser || (!existingSlotId && !fits(duration))}
                 className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-white font-semibold transition-colors disabled:opacity-50 bg-purple-600 hover:bg-purple-700"
               >
                 {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarCheck className="w-5 h-5" />}
                 Confirmar reserva
+              </button>
+            </div>
+          )}
+
+          {/* ── BLOCK ── */}
+          {view === 'block' && (
+            <div className="space-y-4">
+              {!existingSlotId ? (
+                <DurationPicker options={BLOCK_DURATIONS} value={blockDuration} onChange={setBlockDuration}
+                  fits={fits} range={`${hour} – ${blockEndHour}`} />
+              ) : (
+                <p className="text-xs text-gray-500 bg-gray-50 rounded-xl px-3 py-2">
+                  Horário fixo: {hour} – {blockEndHour}
+                </p>
+              )}
+
+              {error && <p className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2 border border-red-100">{error}</p>}
+
+              <button
+                onClick={handleBlock}
+                disabled={busy || (!existingSlotId && !fits(blockDuration))}
+                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-white font-semibold transition-colors disabled:opacity-50 bg-gray-800 hover:bg-gray-900"
+              >
+                {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ban className="w-5 h-5" />}
+                Bloquear {hour} – {blockEndHour}
               </button>
             </div>
           )}
@@ -312,7 +339,7 @@ export function DynamicSlotModal({ courtId, courtName, date, hour, pricePerHour,
                 </p>
                 <p className="text-sm text-green-700 mt-1">
                   {successType === 'block'
-                    ? `${hour} de ${capFirst(dateLabel)} bloqueado com sucesso.`
+                    ? `${hour} – ${blockEndHour} de ${capFirst(dateLabel)} bloqueado com sucesso.`
                     : `${hour} – ${endHour} de ${capFirst(dateLabel)} reservado.`}
                 </p>
               </div>
@@ -325,6 +352,41 @@ export function DynamicSlotModal({ courtId, courtName, date, hour, pricePerHour,
 
         </div>
       </div>
+    </div>
+  );
+}
+
+function DurationPicker({ options, value, onChange, fits, range }: {
+  options: number[];
+  value: number;
+  onChange: (d: number) => void;
+  fits: (d: number) => boolean;
+  range: string;
+}) {
+  const blockedAny = options.some(d => !fits(d));
+  return (
+    <div>
+      <label className="block text-sm font-bold text-gray-700 mb-2">Duração</label>
+      <div className="grid grid-cols-3 gap-2">
+        {options.map(d => (
+          <button
+            key={d}
+            onClick={() => onChange(d)}
+            disabled={!fits(d)}
+            className={`py-2.5 rounded-xl border-2 text-sm font-semibold transition-all disabled:opacity-35 disabled:cursor-not-allowed disabled:line-through ${
+              value === d
+                ? 'bg-purple-600 text-white border-purple-600'
+                : 'border-gray-200 text-gray-600 hover:border-purple-300'
+            }`}
+          >
+            {durationLabel(d)}
+          </button>
+        ))}
+      </div>
+      <p className="text-xs text-gray-400 mt-1.5">
+        {range}
+        {blockedAny && ' · durações riscadas esbarram em outra reserva, bloqueio ou no fechamento da quadra'}
+      </p>
     </div>
   );
 }
