@@ -1,7 +1,7 @@
 /**
  * Self-declared starting level for futevôlei, shown once (onboarding or
  * profile) before a player has any confirmed matches. Maps a friendly band
- * to a starting point on the same 1.0–7.0 rating scale used by
+ * to a starting point on the same 0.5–7.0 rating scale used by
  * player_ratings — the ELO-style adjustment in submit-game-result then
  * recalibrates it match by match, fast at first (low confidence) and
  * slower once matches_played grows (same idea as Playtomic's level).

@@ -3,7 +3,7 @@ import { ChevronDown, Loader2, TrendingDown } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { FUTEVOLEI_LEVELS } from '@/app/lib/futevoleiLevels';
 
-const MIN_RATING = 1.0;
+const MIN_RATING = 0.5;
 
 /**
  * Lets a player lower their own futevôlei rating (e.g. they overestimated

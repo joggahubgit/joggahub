@@ -2,7 +2,10 @@
 --
 --   declare_initial_rating(sport, rating) — once, before any rating exists:
 --     at most the highest self-declared level (5.5), starts at 0 matches.
---   lower_my_rating(sport, rating) — any time, only DOWN (never below 1.0).
+--   lower_my_rating(sport, rating) — any time, only DOWN (never below 0.5).
+--
+-- Rating scale is 0.5–7.0 (was 1.0–7.0; the match-result edge functions
+-- clamp to the same range).
 --
 -- Raising a rating only happens through match results (submit-game-result /
 -- process-game-transitions, service role — not affected by any of this).
@@ -19,6 +22,23 @@
 
 -- ═════════════════════════════ PART 1 ═════════════════════════════
 
+-- Scale floor 1.0 → 0.5. The range check exists twice (inline column check
+-- from create table + player_ratings_rating_range), drop every rating check.
+do $$
+declare r record;
+begin
+  for r in
+    select conname from pg_constraint
+    where conrelid = 'public.player_ratings'::regclass and contype = 'c'
+      and pg_get_constraintdef(oid) ilike '%rating%'
+      and pg_get_constraintdef(oid) not ilike '%matches_played%'
+  loop
+    execute format('alter table public.player_ratings drop constraint %I', r.conname);
+  end loop;
+end $$;
+alter table public.player_ratings
+  add constraint player_ratings_rating_range check (rating >= 0.5 and rating <= 7.0);
+
 create or replace function public.declare_initial_rating(p_sport text, p_rating numeric)
 returns void
 language plpgsql
@@ -29,8 +49,8 @@ declare
   v_uid uuid := auth.uid();
 begin
   if v_uid is null then raise exception 'Não autenticado'; end if;
-  if p_rating is null or p_rating < 1.0 or p_rating > 5.5 then
-    raise exception 'Nível inicial inválido (entre 1.0 e 5.5)';
+  if p_rating is null or p_rating < 0.5 or p_rating > 5.5 then
+    raise exception 'Nível inicial inválido (entre 0.5 e 5.5)';
   end if;
   if exists (select 1 from player_ratings where player_id = v_uid and sport_type = p_sport) then
     raise exception 'Seu nível inicial já foi definido';
@@ -62,8 +82,8 @@ begin
   for update;
   if not found then raise exception 'Você ainda não tem nível definido'; end if;
 
-  if p_rating is null or p_rating < 1.0 then
-    raise exception 'O nível mínimo é 1.0';
+  if p_rating is null or p_rating < 0.5 then
+    raise exception 'O nível mínimo é 0.5';
   end if;
   if p_rating >= v_current.rating then
     raise exception 'O nível só pode ser reduzido manualmente — para subir, jogue partidas.';

@@ -35,7 +35,7 @@ const corsHeaders = {
 };
 
 const RATING_SCALE = 1.2; // divisor — a 1.2-point gap ≈ 91% expected win chance for the favorite
-const RATING_MIN = 1.0;
+const RATING_MIN = 0.5;
 const RATING_MAX = 7.0;
 const RATING_DEFAULT = 1.5; // starting point for players who never self-declared a level
 const SPORT = 'futevolei';

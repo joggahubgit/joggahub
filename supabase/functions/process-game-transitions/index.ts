@@ -59,7 +59,7 @@ const SPORT_MIN_PLAYERS: Record<string, number> = {
 // Mirrors the ELO constants in submit-game-result/index.ts — keep both in sync.
 const RESULT_CONFIRM_TIMEOUT_HOURS = 6;
 const RATING_SCALE = 1.2;
-const RATING_MIN = 1.0;
+const RATING_MIN = 0.5;
 const RATING_MAX = 7.0;
 const RATING_DEFAULT = 1.5; // starting point for players who never self-declared a level — mirrors submit-game-result/index.ts
 function kFactorFor(matchesPlayed: number): number {
