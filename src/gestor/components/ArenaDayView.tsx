@@ -89,7 +89,7 @@ export function ArenaDayView({ courts, slots, schedules, date, dateStr, isToday,
       <ScheduleGrid
         columns={columns}
         columnWidth={220}
-        headerHeight={68}
+        headerHeight={78}
         maxHeight="calc(100vh - 260px)"
         scrollKey={dateStr}
         netCourtPrice={netCourtPrice}

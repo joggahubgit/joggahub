@@ -179,7 +179,7 @@ export function useNowMinutes() {
 
 interface Props {
   columns: GridColumn[];
-  columnWidth: number;
+  columnWidth: number;     // minimum width; columns stretch to fill the available space
   headerHeight: number;
   filter?: GridFilter;
   maxHeight?: string;
@@ -239,7 +239,9 @@ export function ScheduleGrid({ columns, columnWidth, headerHeight, filter = 'all
 
   return (
     <div ref={scrollRef} className="overflow-auto" style={maxHeight ? { maxHeight } : undefined}>
-      <div className="flex min-w-max">
+      {/* w-max + min-w-full: columns grow to fill the card, and scroll sideways
+          only when they'd go below columnWidth */}
+      <div className="flex w-max min-w-full">
         {/* Hour ruler */}
         <div className="w-14 flex-shrink-0 sticky left-0 z-30 bg-white border-r border-gray-200">
           <div className="sticky top-0 z-10 bg-white border-b-2 border-gray-200" style={{ height: headerHeight }} />
@@ -266,7 +268,7 @@ export function ScheduleGrid({ columns, columnWidth, headerHeight, filter = 'all
           const occupied = (m: number) => colBlocks.some(b => m >= b.start && m < b.end);
 
           return (
-            <div key={col.key} className={`flex-shrink-0 border-r border-gray-100 last:border-r-0 ${col.isToday ? 'bg-purple-50/20' : ''}`} style={{ width: columnWidth }}>
+            <div key={col.key} className={`border-r border-gray-100 last:border-r-0 ${col.isToday ? 'bg-purple-50/20' : ''}`} style={{ flex: '1 0 0%', minWidth: columnWidth }}>
               <div className="sticky top-0 z-20 bg-white border-b-2 border-gray-200 overflow-hidden" style={{ height: headerHeight }}>
                 {col.header}
               </div>
