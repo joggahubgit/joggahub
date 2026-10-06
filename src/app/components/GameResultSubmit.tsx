@@ -42,6 +42,69 @@ interface GameResultRow {
   status: 'pending' | 'confirmed' | 'disputed' | 'invalid' | 'draw';
 }
 
+/**
+ * Scoreboard for a registered result: the two teams side by side, each set's
+ * points under its team (set winner highlighted), total sets at the bottom.
+ */
+function ScoreBoard({ sets, teamIds, personFor, myId }: {
+  sets: SetScore[];
+  teamIds: { a: string[]; b: string[] };
+  personFor: (id: string) => RosterPerson;
+  myId: string | null;
+}) {
+  const outcome = deriveOutcome(sets);
+  const winner = outcome.status === 'confirmed' ? outcome.winningTeam : null;
+  const setsA = sets.filter(s => s.a > s.b).length;
+  const setsB = sets.filter(s => s.b > s.a).length;
+  const myTeam = myId ? (teamIds.a.includes(myId) ? 'a' : teamIds.b.includes(myId) ? 'b' : null) : null;
+
+  const teamHeader = (team: 'a' | 'b') => {
+    const ids = teamIds[team];
+    return (
+      <div className={`flex flex-col items-center gap-1.5 rounded-xl px-2 py-3 ${winner === team ? 'bg-amber-50' : ''}`}>
+        <div className="flex -space-x-2">
+          {ids.map(id => <div key={id}>{avatarCircle(personFor(id), 'w-10 h-10', 'text-xs')}</div>)}
+        </div>
+        <p className="text-xs font-semibold text-gray-800 text-center leading-tight">
+          {ids.map(id => personFor(id).name.split(' ')[0]).join(' & ')}
+        </p>
+        <div className="flex flex-col items-center gap-0.5 min-h-[30px]">
+          {winner === team && (
+            <span className="flex items-center gap-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+              <Trophy className="w-3 h-3" /> Vencedor
+            </span>
+          )}
+          {myTeam === team && (
+            <span className="text-[10px] font-bold uppercase tracking-wide text-violet-600">Seu time</span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+      <div className="grid grid-cols-[56px_1fr_1fr] items-center">
+        <div />
+        {teamHeader('a')}
+        {teamHeader('b')}
+
+        {sets.map((s, i) => (
+          <div key={i} className="contents">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase pl-3 py-2 border-t border-gray-100">Set {i + 1}</p>
+            <p className={`text-center text-xl tabular-nums py-2 border-t border-gray-100 ${s.a > s.b ? 'font-black text-gray-900' : 'font-medium text-gray-400'}`}>{s.a}</p>
+            <p className={`text-center text-xl tabular-nums py-2 border-t border-gray-100 ${s.b > s.a ? 'font-black text-gray-900' : 'font-medium text-gray-400'}`}>{s.b}</p>
+          </div>
+        ))}
+
+        <p className="text-[11px] font-bold text-gray-500 uppercase pl-3 py-2.5 bg-gray-50 border-t border-gray-200">Sets</p>
+        <p className={`text-center text-2xl font-black tabular-nums py-2.5 bg-gray-50 border-t border-gray-200 ${winner === 'a' ? 'text-amber-600' : 'text-gray-400'}`}>{setsA}</p>
+        <p className={`text-center text-2xl font-black tabular-nums py-2.5 bg-gray-50 border-t border-gray-200 ${winner === 'b' ? 'text-amber-600' : 'text-gray-400'}`}>{setsB}</p>
+      </div>
+    </div>
+  );
+}
+
 function emptySet(): SetScore {
   return { a: NaN, b: NaN };
 }
@@ -330,9 +393,14 @@ export default function GameResultSubmit({ gameId, players, currentUserId }: Pro
 
     if (isSubmitter || isSameSide) {
       return (
-        <div className="mx-5 mt-4 bg-blue-50 border border-blue-200 rounded-2xl px-4 py-3">
-          <p className="text-sm font-bold text-blue-800">Resultado registrado: {setsLabel(result.sets)}</p>
-          <p className="text-xs text-blue-600 mt-0.5">Aguardando confirmação do time adversário.</p>
+        <div className="mx-5 mt-4 bg-blue-50 border border-blue-200 rounded-2xl px-4 py-4 space-y-3">
+          <div>
+            <p className="text-sm font-bold text-blue-800">Resultado registrado</p>
+            <p className="text-xs text-blue-600 mt-0.5">Aguardando confirmação do time adversário.</p>
+          </div>
+          {teamIds
+            ? <ScoreBoard sets={result.sets} teamIds={teamIds} personFor={personFor} myId={currentUserId} />
+            : <p className="text-sm font-semibold text-blue-800">{setsLabel(result.sets)}</p>}
         </div>
       );
     }
@@ -353,9 +421,12 @@ export default function GameResultSubmit({ gameId, players, currentUserId }: Pro
         <div>
           <p className="text-sm font-bold text-blue-800">Confirme o resultado</p>
           <p className="text-xs text-blue-600 mt-0.5">
-            {nameFor(result.submitted_by)} registrou o placar <strong>{setsLabel(result.sets)}</strong>. Está certo?
+            {teamIds
+              ? <>{nameFor(result.submitted_by)} registrou este placar. Está certo?</>
+              : <>{nameFor(result.submitted_by)} registrou o placar <strong>{setsLabel(result.sets)}</strong>. Está certo?</>}
           </p>
         </div>
+        {teamIds && <ScoreBoard sets={result.sets} teamIds={teamIds} personFor={personFor} myId={currentUserId} />}
         {error && <p className="text-xs text-red-600">{error}</p>}
         <div className="flex gap-2">
           <button
