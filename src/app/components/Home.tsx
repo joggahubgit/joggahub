@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { wallDate, wallTime } from '@/app/lib/wallClock';
+import { PendingResultBanner } from './PendingResultBanner';
 
 interface VenueCard {
   id: string;
@@ -393,6 +394,9 @@ export default function Home() {
           <span className="flex-1 text-gray-400">Buscar quadras, jogos...</span>
         </div>
       </div>
+
+      {/* Result waiting for this player's confirmation */}
+      {user && <PendingResultBanner userId={user.id} />}
 
       {/* Welcome banner — shown only after first onboarding */}
       {showWelcome && (
