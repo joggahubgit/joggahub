@@ -232,3 +232,51 @@ joggahub/
    só com dados de teste via SQL (padrão atual).
 3. Bundle ID / package name definitivo.
 4. Conta de organização (CNPJ) ou pessoa física nas lojas.
+
+---
+
+## 11. Status do port (atualizado 2026-10-29)
+
+Decisões do usuário: **pagamento por último** e **visual igual ao web**. As telas usam as
+mesmas classes Tailwind do web via NativeWind 4, com a paleta exata do Tailwind v4 do web
+(`mobile/scripts/gen-palette.mjs`).
+
+### Telas portadas 1:1 do web
+
+Boas-vindas (Landing), Login/Cadastro, Termos, Privacidade, Início (com faixa "Confirme o
+resultado" e banner de boas-vindas), Menu, Notificações, Configurações (alterar senha),
+Ajuda, Encontrar Jogos, Encontrar Quadras, Página da quadra, Página da partida (com envio/
+confirmação de resultado de futevôlei), Perfil, Editar perfil, Perfil público (seguir),
+Comunidade (feed + ranking), Chat da partida, Minhas Reservas, Pagamentos (histórico),
+Onboarding (com o mesmo redirecionamento de perfil incompleto). Aulas/Competições → tela
+"Em breve", como o banner do web.
+
+### Ficam para a fase de pagamento (abrem o site por enquanto)
+
+Reservar quadra / criar partida privada ou aberta, entrar pagando, pagar reserva do gestor,
+sair da partida, remover jogador, adicionar jogador, cancelar partida, cancelar reserva.
+A UI e os textos dessas janelas já estão portados; só o botão final abre o site.
+
+### Desvios intencionais em relação ao web
+
+| Onde | Web | App | Por quê |
+|---|---|---|---|
+| Login | Botões Google e Apple (Apple sem ação) | Só email | Provedores não configurados para o app; Sign in with Apple é obrigatório na App Store junto com Google |
+| Boas-vindas | Seletor de idioma | Sem seletor | App só pt-BR |
+| Encontrar Jogos | Busca não filtra | Busca filtra | Campo inerte no web |
+| Página da quadra | Compartilhar e Favoritar sem ação | Compartilhar funciona; sem Favoritar | Favoritos não existem |
+| Comunidade › Mensagens | 3 conversas inventadas + contador falso | Só o aviso "Em breve" | Conteúdo falso |
+| Comunidade | Lupa sem ação | Sem lupa | Inerte |
+| Horários (pagamentos, datas) | Alguns convertem pelo fuso do navegador | Sempre horário "de parede" | Bug de fuso conhecido |
+| Cidade (perfil/onboarding) | Geolocalização do navegador + OpenStreetMap | Localização do aparelho | API nativa |
+| Telas | Escrevem "status retroativo" no banco ao abrir | Só leitura | Mudança de status é papel do servidor |
+
+### Textos do web a corrigir (web e app) antes de enviar às lojas
+
+1. Termos e Privacidade: telefone **(11) 4002-8922** (número fictício de propaganda).
+2. Privacidade: diz que coleta **CPF e data de nascimento** e usa **"criptografia de ponta a ponta"** — não é verdade hoje.
+3. Boas-vindas: **"Mais de 500 quadras"** e **"Competições"** (inexistente).
+4. Entrar na partida: **"Taxa de serviço (15%)"** — a real é 8% + R$ 2,50.
+5. Painel de divisão (quadra): **"12 horas antes do jogo"** — a regra atual é 2h.
+6. Onboarding/Início: **"+20 XP"** — XP não aparece mais em lugar nenhum.
+7. Página da partida (futebol): banners de **MVP/XP** de um fluxo que não existe mais.

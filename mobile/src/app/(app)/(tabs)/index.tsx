@@ -1,11 +1,12 @@
 // Port of src/app/components/Home.tsx (web).
-// Not yet ported: the one-off welcome banner after onboarding (onboarding batch).
+import { useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
-import { Bell, Calendar, GraduationCap, MapPin, Menu, Search, Trophy, Users } from 'lucide-react-native';
+import { Bell, Calendar, GraduationCap, MapPin, Menu, Search, Trophy, Users, X, Zap } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { fetchOpenGames, fetchUpcomingGames, type UpcomingGame } from '@/features/games/api';
@@ -148,6 +149,9 @@ export default function Home() {
   const { profile, session } = useAuth();
   const userId = session!.user.id; // guaranteed by the (app) guard
   const firstName = profile?.name?.split(' ')[0] ?? 'Jogador';
+  // Shown once right after the first onboarding, like the web's location.state.firstLogin.
+  const { firstLogin } = useLocalSearchParams<{ firstLogin?: string }>();
+  const [showWelcome, setShowWelcome] = useState(firstLogin === '1');
 
   const upcoming = useQuery({ queryKey: ['upcomingGames', userId], queryFn: () => fetchUpcomingGames(userId) });
   const bookings = useQuery({ queryKey: ['upcomingBookings', userId], queryFn: () => fetchUpcomingBookings(userId) });
@@ -216,6 +220,27 @@ export default function Home() {
 
         {/* Result waiting for this player's confirmation */}
         <PendingResultBanner userId={userId} />
+
+        {/* Welcome banner — only after the first onboarding */}
+        {showWelcome && (
+          <LinearGradient
+            colors={[palette.amber['400'], palette.orange['400']]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={{ marginHorizontal: 24, marginTop: 20, borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12 }}
+          >
+            <View className="bg-white/20 rounded-full p-2">
+              <Zap size={20} color="#ffffff" />
+            </View>
+            <View className="flex-1">
+              <Text className="font-bold text-white text-sm">Bem-vindo, {firstName}! +20 XP</Text>
+              <Text className="text-xs text-white/80">Perfil criado com sucesso. Bora jogar!</Text>
+            </View>
+            <Pressable onPress={() => setShowWelcome(false)} accessibilityLabel="Fechar" hitSlop={10}>
+              <X size={16} color="rgba(255,255,255,0.7)" />
+            </Pressable>
+          </LinearGradient>
+        )}
 
         {/* Próximas partidas + reservas */}
         {(upcomingGames.length > 0 || upcomingBookings.length > 0) && (
