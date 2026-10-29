@@ -116,6 +116,9 @@ export default function PrivateGameReview() {
           time,
           endTime,
           durationMins,
+          maxPlayers: players,
+          // Court without pre-created slots: the server creates the slot after payment
+          ...(!slotId && isDynamic && startTime ? { startTime } : {}),
           // For split: authorize full court price (hold); for full: charge organizer's amount directly
           price: payMode === 'split' ? holdTotal : total,
           payMode: payMode ?? 'full',

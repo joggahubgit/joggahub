@@ -30,6 +30,10 @@ interface CheckoutParams {
   cancelUrl?: string;
   /** Futevôlei only: which team ('a' | 'b') the joiner picked */
   team?: 'a' | 'b';
+  /** Organizer flow: roster size the organizer picked (validated by the server) */
+  maxPlayers?: number;
+  /** join_other: the player being paid for (the payer always comes from the session) */
+  targetPlayerId?: string;
 }
 
 export async function redirectToCheckout(params: CheckoutParams) {

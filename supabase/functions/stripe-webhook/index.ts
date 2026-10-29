@@ -1,6 +1,8 @@
 import Stripe from 'https://esm.sh/stripe@14.21.0';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { METADATA_VERSION } from '../_shared/checkout.ts';
+import { fulfillSession } from '../_shared/fulfill.ts';
 
 serve(async (req) => {
   const signature = req.headers.get('stripe-signature');
@@ -43,6 +45,24 @@ serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
   );
 
+  // ── Sessions created by the new checkout functions: the server creates everything ──
+  if (metadata.v === METADATA_VERSION) {
+    try {
+      const result = await fulfillSession(stripe, supabase, session);
+      console.log('[stripe-webhook] fulfilled', session.id, result.status);
+      return new Response(JSON.stringify({ received: true, status: result.status }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (err) {
+      // Unexpected failure (DB/network): 500 makes Stripe retry later. The claim was
+      // released, and the success screen (finalize-checkout) can also complete it.
+      console.error('[stripe-webhook] fulfill error', session.id, err);
+      return new Response('Fulfillment error', { status: 500 });
+    }
+  }
+
+  // ── Legacy sessions (created before the server-side flow) — unchanged below ──
   try {
     // Determine payment intent ID and whether this is a hold (manual capture)
     const piId = typeof session.payment_intent === 'string'

@@ -99,6 +99,7 @@ export default function OpenGameReview() {
         mode: 'organizer',
         slotId: state.slotId,
         durationMins,
+        maxPlayers: Number(state.maxPlayers),
         captureManual: true,
         successUrl: `${origin}/payment-success?${successParams}&session_id={CHECKOUT_SESSION_ID}`,
         cancelUrl: `${origin}/court-details/${state.courtId}`,

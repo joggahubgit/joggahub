@@ -59,6 +59,69 @@ export default function PaymentSuccess() {
     if (calledRef.current) return;
     calledRef.current = true;
 
+    /**
+     * New flow: the server (finalize-checkout / stripe-webhook) creates the game,
+     * booking or enrollment from the Stripe session — this screen only shows it.
+     * Returns 'legacy' for sessions created before the server-side flow.
+     */
+    async function finalizeOnServer(): Promise<'legacy' | 'handled'> {
+      const deadline = Date.now() + 30_000;
+      for (;;) {
+        const { data } = await supabase.functions.invoke('finalize-checkout', { body: { sessionId } });
+        const status = data?.status as string | undefined;
+
+        if (status === 'legacy') return 'legacy';
+        if (status === 'failed') {
+          setError(`${data.error ?? 'Não foi possível concluir.'} O valor foi liberado no seu cartão.`);
+          return 'handled';
+        }
+        if (status === 'done') {
+          const id: string = data.gameId ?? '';
+          if (data.kind === 'private_game') setPrivateGameId(id);
+          else setCreatedGameId(id);
+          if (data.created) {
+            const body =
+              data.kind === 'private_game'
+                ? payMode === 'split'
+                  ? 'Sua partida privada foi criada. Compartilhe o link com os outros jogadores para eles confirmarem a parte deles.'
+                  : 'Sua partida privada está confirmada. Compartilhe com seus amigos!'
+                : data.kind === 'organizer'
+                ? 'Sua partida foi criada e está aberta para outros jogadores!'
+                : data.kind === 'pay_reservation'
+                ? 'Seu pagamento foi confirmado. Sua vaga na partida está garantida.'
+                : mode === 'join_other'
+                ? `${playerName} foi adicionado à partida com sucesso.`
+                : 'Você está inscrito na partida. Boa sorte!';
+            sendBookingConfirmedEmail(body, { courtName, venueName, date, time, endTime, price });
+          }
+          setDone(true);
+          return 'handled';
+        }
+        // 'processing' / 'unpaid' (Stripe still settling) / network error: keep polling
+        if (Date.now() > deadline) {
+          setError('Seu pagamento foi recebido e ainda está sendo processado. Em alguns instantes ele aparece em Minhas Reservas.');
+          return 'handled';
+        }
+        await new Promise(r => setTimeout(r, 1500));
+      }
+    }
+
+    async function run() {
+      if (sessionId && (await finalizeOnServer()) === 'handled') return;
+      start();
+    }
+
+    // Legacy flow (sessions created before the server-side fulfillment). Remove
+    // once no pre-deploy Checkout session can still be completed (they expire in 24h).
+    function start() {
+      if (mode === 'slot') confirm();
+      else if (mode === 'private_game') confirm();
+      else if (mode === 'organizer' && playerId) confirm();
+      else if (mode === 'pay_reservation' && playerId && gameId) confirm();
+      else if (playerId && gameId) confirm();
+      else setError('Parâmetros inválidos.');
+    }
+
     async function confirm() {
       try {
         // ── SLOT BOOKING MODE ──
@@ -383,12 +446,7 @@ export default function PaymentSuccess() {
       }
     }
 
-    if (mode === 'slot') confirm();
-    else if (mode === 'private_game') confirm();
-    else if (mode === 'organizer' && playerId) confirm();
-    else if (mode === 'pay_reservation' && playerId && gameId) confirm();
-    else if (playerId && gameId) confirm();
-    else setError('Parâmetros inválidos.');
+    run();
   }, []);
 
   if (error) {

@@ -1,103 +1,134 @@
+// Checkout for spots in a game:
+//   organizer       — creates an open game, pays (holds) their own spot
+//   join_self/other — joins an existing game (self, or paying for another player)
+//   pay_reservation — pays a booking the venue created manually
+//
+// Every value that matters (price, players, slot, sport) is read from the DB here
+// and written to the Stripe metadata. The game/enrollment is created afterwards by
+// the server (_shared/fulfill.ts via stripe-webhook / finalize-checkout), never by
+// the browser.
 import Stripe from 'https://esm.sh/stripe@14.21.0';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-// Mirrors SPORT_PLAYER_RULES in src/app/lib/gameConfig.ts — keep both in sync.
-const SPORT_MIN_PLAYERS: Record<string, number> = {
-  football: 10, society: 10, futsal: 10, futevolei: 4,
-};
-function minPlayersForSport(sport: string): number {
-  return SPORT_MIN_PLAYERS[sport] ?? 4;
-}
+import {
+  CAPTURE_CUTOFF_HOURS, METADATA_VERSION, SPORT_LABELS, UserError, assertReturnUrl, checkoutExpiresAt,
+  corsHeaders, durationOrNull, json, playerRule, round2, serviceFeeFor, wallLabel, withSessionId,
+} from '../_shared/checkout.ts';
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    // ── JWT verification ──
+    // ── JWT verification: the payer always comes from the token ──
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
-    }
+    if (!authHeader) return json({ error: 'Unauthorized' }, 401);
     const supabaseUser = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
       { global: { headers: { Authorization: authHeader } } },
     );
     const { data: { user }, error: authError } = await supabaseUser.auth.getUser();
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
-    }
-    // playerId always comes from the verified JWT
-    const playerId = user.id;
+    if (authError || !user) return json({ error: 'Unauthorized' }, 401);
+    const userId = user.id;
 
-    const {
-      gameId,
-      playerName,
-      courtName,
-      venueName,
-      sport,
-      date,
-      time,
-      slotId,
-      courtId,
-      durationMins: reqDuration,
-      successUrl,
-      cancelUrl,
-      mode,           // 'organizer' | 'join_self' | 'join_other' | 'pay_reservation'
-      captureManual,  // when true: authorize hold, do not capture immediately
-    } = await req.json();
+    const body = await req.json();
+    const mode = body.mode as string;
+    const successUrl = withSessionId(assertReturnUrl(body.successUrl, 'URL de retorno'));
+    const cancelUrl = assertReturnUrl(body.cancelUrl, 'URL de cancelamento');
 
-    const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', {
-      apiVersion: '2023-10-16',
-    });
+    const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', { apiVersion: '2023-10-16' });
+    const db = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
 
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-    );
-
-    // ── Fetch price from DB — never trust body for financial values ──
     let vagaPrice: number;
+    let captureManual: boolean;
+    let label: { sport: string; court: string; venue: string; date: string; time: string };
+    let metadata: Record<string, string>;
 
-    if (mode === 'organizer' && !gameId) {
-      // Game doesn't exist yet — price comes from slot/court
-      const durationMins = [90, 120].includes(Number(reqDuration)) ? Number(reqDuration) : null;
-      if (!durationMins) throw new Error('Duração inválida');
+    if (mode === 'organizer') {
+      // ── New open game: price comes from slot/court ──
+      const durationMins = durationOrNull(body.durationMins);
+      if (!durationMins) throw new UserError('Duração inválida');
+      const { data: slot } = await db.from('slots')
+        .select('id, court_id, start_time, is_available, price_override')
+        .eq('id', body.slotId).maybeSingle();
+      if (!slot) throw new UserError('Horário não encontrado.');
+      if (!slot.is_available) throw new UserError('Este horário já foi reservado.');
+      if (new Date(slot.start_time).getTime() <= Date.now()) throw new UserError('Este horário já passou.');
+      const { data: activeGame } = await db.from('games').select('id').eq('slot_id', slot.id)
+        .not('status', 'in', '("expired","cancelled")').maybeSingle();
+      if (activeGame) throw new UserError('Este horário já tem uma partida.');
 
-      const { data: slot } = await supabase
-        .from('slots')
-        .select('court_id, price_override')
-        .eq('id', slotId)
-        .single();
-      const eid = slot?.court_id ?? courtId;
-      const { data: court } = await supabase.from('courts').select('price_per_hour').eq('id', eid).single();
-      const pricePerHour = (slot?.price_override as number) ?? (court?.price_per_hour as number) ?? null;
-      if (!pricePerHour) throw new Error('Preço da quadra não encontrado');
-      const courtPrice = Math.round(pricePerHour * (durationMins / 60) * 100) / 100;
-      vagaPrice = Math.round(courtPrice / minPlayersForSport(sport) * 100) / 100;
+      const court = await loadCourt(db, slot.court_id);
+      const pricePerHour = Number(slot.price_override ?? court.price_per_hour) || 0;
+      if (!pricePerHour) throw new UserError('Preço da quadra não encontrado');
+      const courtPrice = round2(pricePerHour * (durationMins / 60));
+      const rule = playerRule(court.sport_type);
+      vagaPrice = round2(courtPrice / rule.min);
+      const requested = Number(body.maxPlayers);
+      const maxPlayers = requested >= rule.min && requested <= rule.max ? requested : rule.max;
+
+      captureManual = true;
+      label = { sport: court.sport_type, court: court.name, venue: court.venueName, ...wallLabel(slot.start_time) };
+      metadata = {
+        kind: 'organizer', slotId: slot.id, courtId: slot.court_id, durationMins: String(durationMins),
+        maxPlayers: String(maxPlayers), sport: court.sport_type, vagaPrice: String(vagaPrice), courtPrice: String(courtPrice),
+      };
+    } else if (mode === 'join_self' || mode === 'join_other' || mode === 'pay_reservation') {
+      const { data: game } = await db.from('games')
+        .select('id, status, max_players, price_per_player, sport_type, court_id, slot_id, scheduled_at, organizer_id')
+        .eq('id', body.gameId).maybeSingle();
+      if (!game) throw new UserError('Jogo não encontrado');
+      if (game.status === 'expired' || game.status === 'cancelled') throw new UserError('Esta partida foi encerrada ou cancelada.');
+
+      const court = await loadCourt(db, game.court_id);
+      const startTime = await gameStart(db, game);
+      label = { sport: game.sport_type ?? court.sport_type, court: court.name, venue: court.venueName, ...wallLabel(startTime) };
+      vagaPrice = Number(game.price_per_player) || 0;
+      if (vagaPrice <= 0) throw new UserError('Preço da vaga não encontrado');
+
+      if (mode === 'pay_reservation') {
+        const { data: me } = await db.from('game_players').select('paid')
+          .eq('game_id', game.id).eq('player_id', userId).maybeSingle();
+        if (!me) throw new UserError('Você não faz parte desta reserva.');
+        if (me.paid) throw new UserError('Esta reserva já está paga.');
+        captureManual = false;
+        metadata = { kind: 'pay_reservation', gameId: game.id };
+      } else {
+        const playerId = mode === 'join_other' ? String(body.targetPlayerId ?? '') : userId;
+        if (!playerId) throw new UserError('Jogador não informado.');
+        if (mode === 'join_other') {
+          const { data: target } = await db.from('profiles').select('id').eq('id', playerId).maybeSingle();
+          if (!target) throw new UserError('Jogador não encontrado.');
+        }
+        const cutoff = new Date(startTime).getTime() - CAPTURE_CUTOFF_HOURS * 3600_000;
+        if (Date.now() >= cutoff) throw new UserError('As inscrições para esta partida já fecharam.');
+
+        const { data: roster } = await db.from('game_players').select('player_id, team').eq('game_id', game.id);
+        if ((roster ?? []).some((p: { player_id: string }) => p.player_id === playerId)) {
+          throw new UserError('Este jogador já está na partida.');
+        }
+        if ((roster?.length ?? 0) >= game.max_players) throw new UserError('A partida já está completa.');
+
+        let team = '';
+        if (game.sport_type === 'futevolei') {
+          team = body.team === 'b' ? 'b' : 'a';
+          const perTeam = Math.floor(game.max_players / 2);
+          const inTeam = (roster ?? []).filter((p: { team: string | null }) => (p.team ?? 'a') === team).length;
+          if (inTeam >= perTeam) throw new UserError(`O time ${team.toUpperCase()} já está completo.`);
+        }
+        captureManual = body.captureManual !== false;
+        metadata = { kind: 'join', gameId: game.id, playerId, ...(team ? { team } : {}) };
+      }
     } else {
-      const { data: game, error: gameErr } = await supabase
-        .from('games')
-        .select('price_per_player')
-        .eq('id', gameId)
-        .single();
-      if (gameErr || !game) throw new Error('Jogo não encontrado');
-      vagaPrice = game.price_per_player as number;
+      throw new UserError('Modo de pagamento inválido');
     }
-    // Service fee: 8% + R$2,50 per transaction
-    const serviceFee = Math.round((vagaPrice * 0.08 + 2.50) * 100) / 100;
 
+    const serviceFee = serviceFeeFor(vagaPrice);
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       mode: 'payment',
+      expires_at: checkoutExpiresAt(),
+      client_reference_id: userId,
       ...(captureManual ? { payment_intent_data: { capture_method: 'manual' } } : {}),
       line_items: [
         {
@@ -105,8 +136,8 @@ serve(async (req) => {
             currency: 'brl',
             unit_amount: Math.round(vagaPrice * 100),
             product_data: {
-              name: `Vaga — ${sport} em ${courtName}`,
-              description: `${venueName} · ${date} às ${time}`,
+              name: `Vaga — ${SPORT_LABELS[label.sport] ?? label.sport} em ${label.court}`,
+              description: `${label.venue} · ${label.date} às ${label.time}`,
             },
           },
           quantity: 1,
@@ -115,32 +146,39 @@ serve(async (req) => {
           price_data: {
             currency: 'brl',
             unit_amount: Math.round(serviceFee * 100),
-            product_data: {
-              name: 'Taxa de serviço JoggaHub',
-              description: '8% + R$2,50 por transação',
-            },
+            product_data: { name: 'Taxa de serviço JoggaHub', description: '8% + R$2,50 por transação' },
           },
           quantity: 1,
         },
       ],
-      metadata: {
-        gameId: gameId ?? '',
-        playerId,
-        playerName: playerName ?? '',
-        mode: mode ?? 'join_self',
-      },
+      metadata: { v: METADATA_VERSION, userId, ...metadata },
       success_url: successUrl,
       cancel_url: cancelUrl,
     });
 
-    return new Response(
-      JSON.stringify({ url: session.url, sessionId: session.id }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return json({ url: session.url, sessionId: session.id });
   } catch (error) {
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    if (!(error instanceof UserError)) console.error('[create-checkout-session]', error);
+    return json({ error: error instanceof Error ? error.message : 'Unknown error' }, 400);
   }
 });
+
+// deno-lint-ignore no-explicit-any
+async function loadCourt(db: any, courtId: string) {
+  const { data: court } = await db.from('courts')
+    .select('id, name, sport_type, price_per_hour, venues(name)')
+    .eq('id', courtId).maybeSingle();
+  if (!court) throw new UserError('Quadra não encontrada');
+  return { ...court, venueName: court.venues?.name ?? '' };
+}
+
+/** Game start as stored wall-clock text: the slot's start, else scheduled_at. */
+// deno-lint-ignore no-explicit-any
+async function gameStart(db: any, game: { slot_id: string | null; scheduled_at: string | null }) {
+  if (game.slot_id) {
+    const { data: slot } = await db.from('slots').select('start_time').eq('id', game.slot_id).maybeSingle();
+    if (slot?.start_time) return slot.start_time as string;
+  }
+  if (game.scheduled_at) return game.scheduled_at;
+  throw new UserError('Horário da partida não encontrado');
+}

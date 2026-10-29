@@ -133,6 +133,7 @@ export default function JoinGameReview() {
         time: state.time,
         vagaPrice: state.pricePerPlayer,
         mode: isSelf ? 'join_self' : 'join_other',
+        ...(isSelf ? {} : { targetPlayerId: state.playerId }),
         captureManual: true,
         payMode: 'split',
         ...(state.team ? { team: state.team } : {}),
