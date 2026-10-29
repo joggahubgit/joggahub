@@ -43,6 +43,10 @@ export default function Login() {
   const [form, setForm] = useState({ name: '', email: '', password: '' });
   const [pendingConfirmation, setPendingConfirmation] = useState(false);
   const [resent, setResent] = useState(false);
+  // Password recovery (same as the web): the email link opens the site's
+  // /reset-password page, then the user signs in here with the new password.
+  const [forgot, setForgot] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
   const emailRef = useRef<TextInputInstance>(null);
   const passwordRef = useRef<TextInputInstance>(null);
 
@@ -79,6 +83,26 @@ export default function Login() {
     });
     setResent(true);
   }
+
+  async function sendReset() {
+    if (loading) return;
+    if (!form.email.trim()) return setError('Digite seu email.');
+    setError('');
+    setLoading(true);
+    const { error: resetErr } = await supabase.auth.resetPasswordForEmail(form.email.trim(), {
+      redirectTo: `${getEnv().webUrl}/reset-password`,
+    });
+    setLoading(false);
+    // Same message whether or not the email has an account.
+    if (resetErr && resetErr.status === 429) return setError('Muitas tentativas. Aguarde alguns minutos e tente de novo.');
+    setResetSent(true);
+  }
+
+  const leaveForgot = () => {
+    setForgot(false);
+    setResetSent(false);
+    setError('');
+  };
 
   if (pendingConfirmation) {
     return (
@@ -123,7 +147,7 @@ export default function Login() {
       <SafeAreaView edges={['top']} className="bg-violet-600">
         <View className="bg-violet-600 px-6 py-4">
           <Pressable
-            onPress={() => (router.canGoBack() ? router.back() : router.replace('/welcome'))}
+            onPress={() => (forgot ? leaveForgot() : router.canGoBack() ? router.back() : router.replace('/welcome'))}
             className="flex-row items-center gap-2 self-start"
             accessibilityRole="button"
             hitSlop={10}
@@ -136,6 +160,59 @@ export default function Login() {
 
       <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="px-6 py-8">
+          {forgot ? (
+            resetSent ? (
+              <View className="items-center">
+                <View className="w-20 h-20 bg-violet-100 rounded-full items-center justify-center mb-6">
+                  <Mail size={40} color={palette.violet['600']} />
+                </View>
+                <Text className="text-2xl font-bold text-gray-900 text-center mb-2">Verifique seu email</Text>
+                <Text className="text-base text-gray-500 text-center mb-1">Se existir uma conta com</Text>
+                <Text className="text-base font-semibold text-gray-900 text-center mb-4">{form.email}</Text>
+                <Text className="text-gray-500 text-sm text-center mb-8">
+                  você vai receber um link para criar uma nova senha. Depois volte aqui e entre com a nova senha. Se não encontrar,
+                  verifique a pasta de spam.
+                </Text>
+                <Pressable onPress={leaveForgot} hitSlop={10}>
+                  <Text className="text-violet-600 font-semibold text-sm">Voltar para o login</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View className="gap-4">
+                <View className="mb-4">
+                  <Text className="text-2xl font-bold text-gray-900">Esqueceu a senha?</Text>
+                  <Text className="text-base text-gray-600 mt-2">Digite seu email e enviaremos um link para criar uma nova senha.</Text>
+                </View>
+                <Field
+                  label="Email"
+                  value={form.email}
+                  onChangeText={email => setForm(f => ({ ...f, email }))}
+                  placeholder="seu@email.com"
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  keyboardType="email-address"
+                  textContentType="emailAddress"
+                  returnKeyType="send"
+                  onSubmitEditing={sendReset}
+                />
+                {!!error && (
+                  <View className="bg-red-50 border border-red-200 rounded-xl px-4 py-3" accessibilityLiveRegion="assertive">
+                    <Text className="text-sm text-red-700">{error}</Text>
+                  </View>
+                )}
+                <Pressable
+                  onPress={sendReset}
+                  disabled={loading}
+                  accessibilityRole="button"
+                  className={`w-full bg-violet-600 py-4 rounded-xl flex-row items-center justify-center gap-2 active:bg-violet-700 ${loading ? 'opacity-60' : ''}`}
+                >
+                  {loading && <ActivityIndicator color="#ffffff" />}
+                  <Text className="text-white font-semibold text-base">Enviar link</Text>
+                </Pressable>
+              </View>
+            )
+          ) : (
+            <>
           <View className="items-center mb-8">
             <View className="bg-violet-100 rounded-full p-4 mb-4">
               <Image source={require('../../../assets/logo.png')} style={{ width: 40, height: 40 }} contentFit="contain" />
@@ -202,6 +279,19 @@ export default function Login() {
               returnKeyType="go"
               onSubmitEditing={submit}
             />
+            {!isSignUp && (
+              <Pressable
+                onPress={() => {
+                  setForgot(true);
+                  setError('');
+                }}
+                accessibilityRole="button"
+                hitSlop={8}
+                className="self-start -mt-2"
+              >
+                <Text className="text-sm text-violet-600 font-semibold">Esqueci minha senha</Text>
+              </Pressable>
+            )}
 
             {!!error && (
               <View className="bg-red-50 border border-red-200 rounded-xl px-4 py-3" accessibilityLiveRegion="assertive">
@@ -233,6 +323,8 @@ export default function Login() {
               </Text>
             </View>
           </View>
+            </>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
