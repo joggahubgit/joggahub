@@ -12,7 +12,9 @@ import {
   Inter_800ExtraBold,
 } from '@expo-google-fonts/inter';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { envResult } from '@/lib/env';
+import { queryClient } from '@/lib/queryClient';
 import { AuthProvider, useAuth } from '@/features/auth/AuthProvider';
 import { colors, spacing } from '@/theme/tokens';
 
@@ -32,7 +34,8 @@ function RootNavigator() {
     <Stack screenOptions={{ headerShown: false }}>
       {/* Guards: screens are unreachable — even by deep link — unless the condition holds. */}
       <Stack.Protected guard={signedIn}>
-        <Stack.Screen name="(tabs)" />
+        {/* Every signed-in screen lives under (app) so new routes are protected by default. */}
+        <Stack.Screen name="(app)" />
       </Stack.Protected>
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="(auth)" />
@@ -69,9 +72,11 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
-      <AuthProvider>
-        <RootNavigator />
-      </AuthProvider>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <RootNavigator />
+        </AuthProvider>
+      </QueryClientProvider>
     </SafeAreaProvider>
   );
 }
