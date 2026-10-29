@@ -2,6 +2,8 @@ import Stripe from 'https://esm.sh/stripe@14.21.0';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+const CANCEL_CUTOFF_HOURS = 24;
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -31,7 +33,8 @@ function cancelledEmailHtml(title: string, message: string): string {
 </body></html>`;
 }
 
-async function sendCancelledEmail(supabase: ReturnType<typeof createClient>, userId: string, title: string, message: string) {
+// deno-lint-ignore no-explicit-any
+async function sendCancelledEmail(supabase: any, userId: string, title: string, message: string) {
   try {
     const { data } = await supabase.auth.admin.getUserById(userId);
     const email = data?.user?.email;
@@ -112,28 +115,59 @@ serve(async (req) => {
       }
     }
 
+    const byOwner = booking.created_by === callerId;
+
+    // A booking with a game (private games) is cancelled through cancel-game, which
+    // releases the organizer's hold AND every player's hold, frees the slots and
+    // notifies everyone. Same caller token: it re-checks organizer / venue admin
+    // and the organizer's 24h cutoff.
+    const { data: linkedActiveGame } = await supabase
+      .from('games').select('id')
+      .eq('booking_id', bookingId)
+      .not('status', 'in', '("completed","expired","cancelled","pending_results")')
+      .maybeSingle();
+    if (linkedActiveGame) {
+      const res = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/cancel-game`, {
+        method: 'POST',
+        headers: { Authorization: authHeader, apikey: Deno.env.get('SUPABASE_ANON_KEY') ?? '', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gameId: linkedActiveGame.id }),
+      });
+      const out = await res.json().catch(() => ({}));
+      return new Response(JSON.stringify(out), {
+        status: res.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ── Booking without a game (legacy slot booking) ──
+    if (byOwner && booking.slot_id) {
+      const { data: s0 } = await supabase.from('slots').select('start_time').eq('id', booking.slot_id).maybeSingle();
+      if (s0?.start_time && (new Date(s0.start_time).getTime() - Date.now()) / 3600_000 < CANCEL_CUTOFF_HOURS) {
+        throw new Error(`Cancelamento não permitido dentro das ${CANCEL_CUTOFF_HOURS}h anteriores ao horário. Entre em contato com o clube.`);
+      }
+    }
+
     const isPaid = booking.payment_status === 'paid';
     let stripeRefunded = false;
 
-    // Attempt Stripe refund for paid bookings
+    // Refund/release: only the booking OWNER's own completed session for this slot
+    // (a slot can be booked again later, so slotId alone could match someone else).
     if (isPaid && booking.slot_id) {
       const sessions = await stripe.checkout.sessions.list({ limit: 100 });
-      const matching = sessions.data.find(
-        s => s.metadata?.slotId === booking.slot_id && s.payment_status === 'paid'
-      );
-
-      if (matching) {
-        const paymentIntentId = typeof matching.payment_intent === 'string'
-          ? matching.payment_intent
-          : matching.payment_intent?.id;
-
-        if (paymentIntentId) {
-          try {
-            await stripe.refunds.create({ payment_intent: paymentIntentId });
-            stripeRefunded = true;
-          } catch (_) {
-            // Refund failed — will fall back to manual notice in UI
-          }
+      const matching = sessions.data.find((s: Stripe.Checkout.Session) =>
+        s.metadata?.slotId === booking.slot_id &&
+        s.metadata?.userId === booking.created_by &&
+        s.status === 'complete');
+      const paymentIntentId = matching
+        ? (typeof matching.payment_intent === 'string' ? matching.payment_intent : matching.payment_intent?.id)
+        : null;
+      if (paymentIntentId) {
+        try {
+          const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+          if (pi.status === 'succeeded') await stripe.refunds.create({ payment_intent: paymentIntentId });
+          else if (pi.status !== 'canceled') await stripe.paymentIntents.cancel(paymentIntentId);
+          stripeRefunded = true;
+        } catch (e) {
+          console.error('[cancel-booking] RELEASE FAILED — refund manually', paymentIntentId, e);
         }
       }
     }
@@ -141,7 +175,7 @@ serve(async (req) => {
     // Cancel the booking (payment_status constraint: pending|paid|failed|refunded)
     await supabase
       .from('bookings')
-      .update({ status: 'cancelled', payment_status: isPaid ? 'refunded' : 'failed' })
+      .update({ status: 'cancelled', payment_status: isPaid ? (stripeRefunded ? 'refunded' : 'paid') : 'failed' })
       .eq('id', bookingId);
 
     // Free up the slot — and the consecutive slots locked for the session, up
@@ -181,11 +215,12 @@ serve(async (req) => {
 
     // Notify the player
     if (booking.created_by) {
+      const who = byOwner ? 'Sua reserva foi cancelada.' : 'Sua reserva foi cancelada pelo clube.';
       const message = isPaid && stripeRefunded
-        ? 'Sua reserva foi cancelada pelo clube. O reembolso foi processado e será creditado em breve.'
+        ? `${who} O reembolso foi processado e será creditado em breve.`
         : isPaid
-        ? 'Sua reserva foi cancelada pelo clube. Entre em contato para informações sobre reembolso.'
-        : 'Sua reserva foi cancelada pelo clube.';
+        ? `${who} Entre em contato para informações sobre reembolso.`
+        : who;
       await supabase.from('notifications').insert({
         user_id: booking.created_by,
         type: 'booking_cancelled',

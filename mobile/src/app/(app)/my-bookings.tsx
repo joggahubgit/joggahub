@@ -3,15 +3,14 @@
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { router } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
+import { supabase } from '@/lib/supabase';
 import { useQuery } from '@tanstack/react-query';
-import { AlertCircle, Calendar, ChevronLeft, ChevronRight, Clock, MapPin, Shield, Trophy, Users, XCircle } from 'lucide-react-native';
+import { AlertCircle, Calendar, CheckCircle, ChevronLeft, ChevronRight, Clock, MapPin, Shield, Trophy, Users, XCircle } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { fetchMyBookings, type BookingItem } from '@/features/bookings/api';
-import { getEnv } from '@/lib/env';
 import { wallDate, wallTime } from '@/lib/shared';
 import palette from '../../../tailwind.palette';
 
@@ -62,6 +61,31 @@ export default function MyBookings() {
   const q = useQuery({ queryKey: ['myBookings', userId], queryFn: () => fetchMyBookings(userId) });
   const [page, setPage] = useState(1);
   const [cancelTarget, setCancelTarget] = useState<BookingItem | null>(null);
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelDone, setCancelDone] = useState(false);
+  const [cancelError, setCancelError] = useState('');
+
+  const closeCancel = () => {
+    setCancelTarget(null);
+    setCancelDone(false);
+    setCancelError('');
+  };
+
+  // The server refunds/releases and (for private games) cancels for every player.
+  const confirmCancel = async () => {
+    if (!cancelTarget) return;
+    setCancelBusy(true);
+    setCancelError('');
+    const { data, error } = await supabase.functions.invoke('cancel-booking', { body: { bookingId: cancelTarget.id } });
+    setCancelBusy(false);
+    if (error || data?.error) {
+      const ctx = await (error as { context?: Response } | null)?.context?.json?.().catch(() => null);
+      setCancelError(ctx?.error ?? data?.error ?? 'Erro ao cancelar');
+      return;
+    }
+    setCancelDone(true);
+    q.refetch();
+  };
   // Captured once per load (like the web's `now`), keeping render pure.
   const nowMs = q.dataUpdatedAt;
 
@@ -207,8 +231,22 @@ export default function MyBookings() {
         </ScrollView>
       )}
 
-      <BottomSheet visible={!!cancelTarget} onClose={() => setCancelTarget(null)}>
-        {cancelTarget && (
+      <BottomSheet visible={!!cancelTarget} onClose={() => !cancelBusy && closeCancel()}>
+        {cancelTarget && cancelDone && (
+          <View className="items-center gap-4">
+            <View className="w-14 h-14 bg-green-100 rounded-full items-center justify-center">
+              <CheckCircle size={32} color={palette.green['600']} />
+            </View>
+            <View className="items-center">
+              <Text className="text-lg font-bold text-gray-900">Reserva cancelada</Text>
+              <Text className="text-sm text-gray-500 mt-1">Você receberá uma confirmação em breve.</Text>
+            </View>
+            <Pressable onPress={closeCancel} className="w-full bg-gray-900 py-3.5 rounded-2xl items-center">
+              <Text className="text-white font-bold text-base">Fechar</Text>
+            </Pressable>
+          </View>
+        )}
+        {cancelTarget && !cancelDone && (
           <View className="gap-4">
             <View>
               <Text className="text-lg font-bold text-gray-900">Cancelar reserva</Text>
@@ -224,18 +262,18 @@ export default function MyBookings() {
                 </Text>
               </View>
             )}
+            {!!cancelError && (
+              <View className="bg-red-50 rounded-xl px-3 py-2 border border-red-100">
+                <Text className="text-sm text-red-600">{cancelError}</Text>
+              </View>
+            )}
             <View className="flex-row gap-3 pt-1">
-              <Pressable onPress={() => setCancelTarget(null)} className="flex-1 py-3 border-2 border-gray-200 rounded-xl items-center">
+              <Pressable onPress={closeCancel} disabled={cancelBusy} className={`flex-1 py-3 border-2 border-gray-200 rounded-xl items-center ${cancelBusy ? 'opacity-50' : ''}`}>
                 <Text className="text-gray-600 font-semibold text-base">Voltar</Text>
               </Pressable>
-              <Pressable
-                onPress={() => {
-                  setCancelTarget(null);
-                  WebBrowser.openBrowserAsync(`${getEnv().webUrl}/my-bookings`).catch(() => {});
-                }}
-                className="flex-1 py-3 bg-red-600 rounded-xl items-center"
-              >
-                <Text className="text-white font-bold text-base">Cancelar no site</Text>
+              <Pressable onPress={confirmCancel} disabled={cancelBusy} className={`flex-1 py-3 bg-red-600 rounded-xl flex-row items-center justify-center gap-2 ${cancelBusy ? 'opacity-50' : ''}`}>
+                {cancelBusy && <ActivityIndicator size="small" color="#ffffff" />}
+                <Text className="text-white font-bold text-base">{cancelBusy ? 'Cancelando...' : 'Confirmar'}</Text>
               </Pressable>
             </View>
           </View>
