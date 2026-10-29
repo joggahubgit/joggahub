@@ -190,7 +190,7 @@ joggahub/
 | Fase | Entrega | Toca produção? |
 |---|---|---|
 | **1 — Auditoria** | Este documento | Não |
-| **2 — Fundação** ✅ base pronta (2026-10-29) | App Expo, navegação, design system, env, cliente Supabase seguro, login/cadastro/logout/sessão. Typecheck, lint, expo-doctor e export Android/iOS ok; **ainda não testado em aparelho** | Não |
+| **2 — Fundação** ✅ base pronta (2026-10-29) | App Expo, navegação, design system, env, cliente Supabase seguro, login/cadastro/logout/sessão. Typecheck, lint, expo-doctor e export Android/iOS ok; login testado em iPhone real via Expo Go (2026-10-29); Android ainda não testado em aparelho | Não |
 | **2b — Backend pré-requisito** | Finalização de pagamento no webhook (§5.1), allowlist de URLs (§5.3), `delete-account`, recuperação de senha | **Sim — com aprovação, teste controlado** |
 | **3 — Core** | Quadras → horário → revisão → Stripe → confirmação → Minhas reservas; partidas abertas (entrar/sair/organizar); pagar reserva do gestor; cancelar | Não (usa backend da 2b) |
 | **4 — Suporte** | Perfil/edição/avatar, notificações in-app, comunidade, chat, resultados, deep links, push | Push: tabela nova (migration compatível) |
