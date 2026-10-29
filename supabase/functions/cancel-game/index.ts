@@ -43,7 +43,8 @@ function cancelledEmailHtml(title: string, message: string): string {
 </body></html>`;
 }
 
-async function sendCancelledEmail(supabase: ReturnType<typeof createClient>, userId: string, title: string, message: string) {
+// deno-lint-ignore no-explicit-any
+async function sendCancelledEmail(supabase: any, userId: string, title: string, message: string) {
   try {
     const { data } = await supabase.auth.admin.getUserById(userId);
     const email = data?.user?.email;
@@ -103,9 +104,21 @@ serve(async (req) => {
     // Fetch game — need slot_id, booking_id, organizer_id, is_open, and stripe_session_id for hold release
     const { data: game } = await supabase
       .from('games')
-      .select('slot_id, booking_id, scheduled_end_at, organizer_id, is_open, stripe_session_id')
+      .select('slot_id, booking_id, scheduled_end_at, organizer_id, is_open, stripe_session_id, status')
       .eq('id', gameId)
       .single();
+
+    // Idempotent: a second cancel (double tap, retry) must not run refunds again.
+    if (game?.status === 'cancelled') {
+      return new Response(JSON.stringify({ success: true, alreadyCancelled: true, refunds: [] }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    if (game && ['completed', 'pending_results', 'expired'].includes(game.status)) {
+      return new Response(JSON.stringify({ error: 'Esta partida já foi encerrada e não pode ser cancelada.' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     const slotId = game?.slot_id ?? null;
     const bookingId = game?.booking_id ?? null;
@@ -176,11 +189,14 @@ serve(async (req) => {
       }
 
       if (!paymentIntentId) {
-        // Fallback: search by slotId (covers old games without stripe_session_id)
+        // Fallback for old games without stripe_session_id: the ORGANIZER's own
+        // completed session for this slot (a slot can be booked again after a
+        // cancellation, so slotId alone could match someone else's payment).
         const sessions = await stripe.checkout.sessions.list({ limit: 100 });
         const matching = sessions.data.find(
-          s => s.metadata?.slotId === slotId &&
-               (s.payment_status === 'paid' || s.payment_status === 'unpaid'),
+          (s: Stripe.Checkout.Session) => s.metadata?.slotId === slotId &&
+               s.status === 'complete' &&
+               !!organizerId && s.metadata?.userId === organizerId,
         );
         if (matching) {
           paymentIntentId = typeof matching.payment_intent === 'string'
@@ -199,8 +215,11 @@ serve(async (req) => {
       } else {
         refunds.push({ name: 'Organizador', status: 'manual_required' });
       }
-    } else if (!isPrivateGame) {
-      // Open game: cancel each player's hold via game_players.stripe_payment_intent_id
+    }
+
+    // Every player who paid their own share has a hold on game_players — open
+    // games AND private split games (their joiners were never released before).
+    {
       const { data: playersWithPI } = await supabase
         .from('game_players')
         .select('player_id, player_name, stripe_payment_intent_id')
@@ -212,10 +231,13 @@ serve(async (req) => {
           await cancelOrReleasePi(stripe, gp.stripe_payment_intent_id!);
           refunds.push({ name: gp.player_name, status: 'released' });
         } catch (e: any) {
+          console.error('[cancel-game] RELEASE FAILED — refund manually', gp.stripe_payment_intent_id, e);
           refunds.push({ name: gp.player_name, status: e.message ?? 'error' });
         }
       }
+    }
 
+    if (!isPrivateGame) {
       // Organizer's hold is via games.stripe_session_id (gameId was '' at checkout time)
       if (game?.stripe_session_id) {
         try {
@@ -261,10 +283,11 @@ serve(async (req) => {
       }
     }
 
-    // Notify open game players
-    if (allPlayers.length > 0) {
+    // Notify players (the private-game organizer gets their own message below)
+    const notifyPlayers = isPrivateGame && organizerId ? allPlayers.filter(p => p.player_id !== organizerId) : allPlayers;
+    if (notifyPlayers.length > 0) {
       await supabase.from('notifications').insert(
-        allPlayers.map(p => ({
+        notifyPlayers.map(p => ({
           user_id: p.player_id,
           type: 'game_cancelled',
           title: 'Partida cancelada',
@@ -274,7 +297,7 @@ serve(async (req) => {
           game_id: gameId,
         })),
       );
-      await Promise.all(allPlayers.map(p => sendCancelledEmail(
+      await Promise.all(notifyPlayers.map(p => sendCancelledEmail(
         supabase,
         p.player_id,
         'Partida cancelada',

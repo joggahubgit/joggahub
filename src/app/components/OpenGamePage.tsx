@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { ArrowLeft, Share2, MessageCircle, Calendar, CheckCircle, Copy, Loader2, MapPin, Search, X, Crown, Trash2, Zap, Shield, Clock, Lock } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { notify, notifyGamePlayers } from '@/app/lib/notify';
 import { redirectToCheckout, calcFees } from '@/app/lib/checkout';
 import { PLAYER_CANCEL_CUTOFF_HOURS, CAPTURE_CUTOFF_HOURS, getMinPlayersForSport } from '@/app/lib/gameConfig';
 import GameResultSubmit from './GameResultSubmit';
@@ -37,6 +36,7 @@ interface PageState {
 }
 
 interface Player {
+  id?: string;
   name: string;
   isOrganizer?: boolean;
   paid?: boolean;
@@ -156,8 +156,8 @@ export default function OpenGamePage() {
 
       const joined = (gamePlayers ?? [])
         .filter(p => p.player_id !== game.organizer_id)
-        .map(p => ({ name: p.player_name, paid: p.paid, isCurrentUser: user ? p.player_id === user.id : false, team: p.team as 'a' | 'b' | undefined, avatarUrl: avatarByPlayerId[p.player_id] ?? null }));
-      setPlayers([{ name, isOrganizer: true, paid: orgIsPaid, team: (organizerEntry?.team as 'a' | 'b' | undefined) ?? 'a', avatarUrl: avatarByPlayerId[game.organizer_id] ?? null }, ...joined]);
+        .map(p => ({ id: p.player_id, name: p.player_name, paid: p.paid, isCurrentUser: user ? p.player_id === user.id : false, team: p.team as 'a' | 'b' | undefined, avatarUrl: avatarByPlayerId[p.player_id] ?? null }));
+      setPlayers([{ id: game.organizer_id, name, isOrganizer: true, paid: orgIsPaid, team: (organizerEntry?.team as 'a' | 'b' | undefined) ?? 'a', avatarUrl: avatarByPlayerId[game.organizer_id] ?? null }, ...joined]);
 
       setGamePlayerRoster([
         { id: game.organizer_id, name, avatarUrl: avatarByPlayerId[game.organizer_id] ?? null },
@@ -380,52 +380,22 @@ export default function OpenGamePage() {
   }
 
   async function handleLeaveAsOrganizer() {
-    // Player self-cancel: enforce 12h window
     if (withinCancelCutoff) {
       setLeaving(false);
       setShowLeaveConfirm(false);
       return;
     }
     setLeaving(true);
-    const nextPlayer = players[1];
-
-    // Decrement the player count while the leaving user is still organizer_id —
-    // RLS on games.UPDATE is scoped to organizer/participants, so this must run
-    // before the organizer_id transfer below flips that ownership away.
-    await supabase.from('games').update({ current_players: currentPlayers - 1 }).eq('id', id);
-
-    if (nextPlayer) {
-      const { data: nextProfile } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('name', nextPlayer.name)
-        .single();
-
-      if (nextProfile) {
-        await supabase.from('games').update({ organizer_id: nextProfile.id }).eq('id', id);
-        // Notify the new organizer
-        await notify(
-          nextProfile.id,
-          'organizer_transferred',
-          'Você é o novo organizador!',
-          `O organizador anterior saiu da partida de ${sportLabel(courtSport)} em ${courtName}. Você agora é o responsável pela partida.`,
-          id,
-        );
-      }
-      await supabase.from('game_players').delete().eq('game_id', id).eq('player_name', nextPlayer.name);
+    // The server releases the organizer's hold, hands the game to the earliest
+    // other player and notifies everyone.
+    const { data, error } = await supabase.functions.invoke('leave-game', { body: { gameId: id } });
+    if (error || data?.error) {
+      const body = await (error as any)?.context?.json?.().catch(() => null);
+      setCancelError(body?.error ?? data?.error ?? 'Erro ao sair da partida');
+      setLeaving(false);
+      setShowLeaveConfirm(false);
+      return;
     }
-
-    // Notify remaining players that organizer left
-    if (currentUserId) {
-      await notifyGamePlayers(
-        id!,
-        currentUserId,
-        'game_left',
-        'Organizador saiu da partida',
-        `O organizador saiu da partida de ${sportLabel(courtSport)} em ${courtName}. Agora são ${currentPlayers - 1}/${maxPlayers} jogadores.`,
-      );
-    }
-
     setLeaving(false);
     navigate('/home', { replace: true });
   }
@@ -433,48 +403,18 @@ export default function OpenGamePage() {
   async function handleLeaveAsPlayer() {
     if (withinCancelCutoff || !currentUserId) return;
     setLeaving(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setLeaving(false); return; }
-
-    const { data: prof } = await supabase.from('profiles').select('name').eq('id', user.id).single();
-    const firstName = prof?.name?.split(' ')[0] ?? 'Jogador';
-
+    // The server releases the hold and notifies the other players.
     const { error } = await supabase.functions.invoke('leave-game', { body: { gameId: id } });
     if (error) { setLeaving(false); setShowPlayerLeaveConfirm(false); return; }
-
-    await notifyGamePlayers(
-      id!,
-      user.id,
-      'game_left',
-      'Jogador saiu da partida',
-      `${firstName} saiu da partida de ${sportLabel(courtSport)} em ${courtName}. Agora são ${currentPlayers - 1}/${maxPlayers} jogadores.`,
-    );
-
     setLeaving(false);
     navigate('/home', { replace: true });
   }
 
   async function handleRemovePlayer(index: number, player: Player) {
-    if (withinCancelCutoff) return;
-
-    const { data: gp } = await supabase
-      .from('game_players')
-      .select('player_id')
-      .eq('game_id', id)
-      .eq('player_name', player.name)
-      .single();
-
-    if (!gp?.player_id) return;
-
-    await supabase.functions.invoke('leave-game', { body: { gameId: id, targetPlayerId: gp.player_id } });
-
-    await notifyGamePlayers(
-      id!,
-      gp.player_id,
-      'game_left',
-      'Jogador saiu da partida',
-      `${player.name.split(' ')[0]} foi removido da partida. Agora são ${currentPlayers - 1}/${maxPlayers} jogadores.`,
-    );
+    if (withinCancelCutoff || !player.id) return;
+    // By id (names aren't unique). The server releases the hold and notifies.
+    const { error } = await supabase.functions.invoke('leave-game', { body: { gameId: id, targetPlayerId: player.id } });
+    if (error) return;
 
     setPlayers(prev => prev.filter((_, pi) => pi !== index));
     setCurrentPlayers(p => p - 1);

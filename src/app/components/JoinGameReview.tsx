@@ -3,7 +3,6 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { X, Clock, Users, MapPin, ShieldCheck, ChevronDown, ChevronUp, Loader2, CheckCircle, Lock } from 'lucide-react';
 import { redirectToCheckout, calcFees } from '@/app/lib/checkout';
 import { supabase } from '@/lib/supabase';
-import { notifyGamePlayers } from '@/app/lib/notify';
 
 interface JoinState {
   gameId: string;
@@ -67,56 +66,25 @@ export default function JoinGameReview() {
     setConfirming(true);
     setError('');
     try {
-      // Check if already in game
-      const { data: existing } = await supabase
-        .from('game_players')
-        .select('id')
-        .eq('game_id', state.gameId)
-        .eq('player_id', state.playerId)
-        .maybeSingle();
-
-      if (existing) {
-        navigate(`/open-game/${state.gameId}`, { replace: true });
-        return;
-      }
-
-      // Add player directly (no payment needed)
-      const { error: insertErr } = await supabase.from('game_players').insert({
-        game_id: state.gameId,
-        player_id: state.playerId,
-        player_name: state.playerName,
-        paid: true,
-        ...(state.team ? { team: state.team } : {}),
+      // The server validates, enrolls and notifies (works for self or for another player).
+      const { data, error: fnErr } = await supabase.functions.invoke('join-free-game', {
+        body: {
+          gameId: state.gameId,
+          ...(isSelf ? {} : { targetPlayerId: state.playerId }),
+          ...(state.team ? { team: state.team } : {}),
+        },
       });
-      if (insertErr) throw new Error(insertErr.message);
-
-      // Increment current_players
-      const { data: game } = await supabase
-        .from('games')
-        .select('current_players, max_players')
-        .eq('id', state.gameId)
-        .single();
-      const newCount = (game?.current_players ?? 1) + 1;
-      await supabase
-        .from('games')
-        .update({ current_players: newCount })
-        .eq('id', state.gameId);
-
-      // Notify all other players
-      await notifyGamePlayers(
-        state.gameId,
-        state.playerId,
-        'game_joined',
-        'Novo jogador entrou!',
-        `${state.playerName} entrou na partida. Agora são ${newCount}/${game?.max_players ?? state.maxPlayers} jogadores.`,
-      );
-
+      if (fnErr || data?.error) {
+        const body = await (fnErr as any)?.context?.json?.().catch(() => null);
+        throw new Error(body?.error ?? data?.error ?? 'Erro ao adicionar jogador');
+      }
       navigate(`/open-game/${state.gameId}`, { replace: true });
     } catch (e: any) {
       setError(e.message);
       setConfirming(false);
     }
   }
+
 
   async function handleConfirmPaid() {
     setConfirming(true);
