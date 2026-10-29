@@ -40,6 +40,7 @@ import SettingsPage from './components/SettingsPage';
 import HelpPage from './components/HelpPage';
 import TermsPage from './components/TermsPage';
 import PrivacyPage from './components/PrivacyPage';
+import ResetPassword from './components/ResetPassword';
 import BookCourt from './components/BookCourt';
 import PrivateGameReview from './components/PrivateGameReview';
 import OpenGameReview from './components/OpenGameReview';
@@ -84,6 +85,7 @@ function AppRoutes() {
         <Route path="/auth" element={<Auth />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/terms" element={<TermsPage />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/privacy" element={<PrivacyPage />} />
 
         {/* Protected */}

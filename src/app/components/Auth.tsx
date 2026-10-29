@@ -14,6 +14,25 @@ export default function Auth() {
   const [formData, setFormData] = useState({ name: '', email: '', password: '' });
   const [pendingConfirmation, setPendingConfirmation] = useState(false);
   const [resent, setResent] = useState(false);
+  // Password recovery: email with a link to /reset-password.
+  const [forgot, setForgot] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+
+  async function handleForgotSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    const { error: resetErr } = await supabase.auth.resetPasswordForEmail(formData.email.trim(), {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setLoading(false);
+    // Always show the same message, so the form does not reveal which emails have accounts.
+    if (resetErr && resetErr.status === 429) {
+      setError('Muitas tentativas. Aguarde alguns minutos e tente de novo.');
+      return;
+    }
+    setResetSent(true);
+  }
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,6 +104,70 @@ export default function Auth() {
         >
           Voltar para o login
         </button>
+      </div>
+    );
+  }
+
+  // ── Forgot password ──────────────────────────────────────────────────────
+  if (forgot) {
+    return (
+      <div className="min-h-screen bg-white">
+        <div className="bg-violet-600 text-white px-6 py-4">
+          <button onClick={() => { setForgot(false); setResetSent(false); setError(''); }} className="flex items-center gap-2">
+            <ArrowLeft className="w-5 h-5" />
+            <span>Voltar</span>
+          </button>
+        </div>
+        <div className="px-6 py-8">
+          {resetSent ? (
+            <div className="flex flex-col items-center text-center">
+              <div className="w-20 h-20 bg-violet-100 rounded-full flex items-center justify-center mb-6">
+                <Mail className="w-10 h-10 text-violet-600" />
+              </div>
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">Verifique seu email</h1>
+              <p className="text-gray-500 mb-1">Se existir uma conta com</p>
+              <p className="font-semibold text-gray-900 mb-4">{formData.email}</p>
+              <p className="text-gray-500 text-sm mb-8">
+                você vai receber um link para criar uma nova senha. Se não encontrar, verifique a pasta de spam.
+              </p>
+              <button
+                onClick={() => { setForgot(false); setResetSent(false); }}
+                className="text-violet-600 font-semibold text-sm hover:underline"
+              >
+                Voltar para o login
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleForgotSubmit} className="space-y-4">
+              <div className="mb-4">
+                <h1 className="text-2xl font-bold text-gray-900">Esqueceu a senha?</h1>
+                <p className="text-gray-600 mt-2">Digite seu email e enviaremos um link para criar uma nova senha.</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                <input
+                  type="email"
+                  required
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-violet-600 focus:outline-none"
+                  placeholder="seu@email.com"
+                />
+              </div>
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">{error}</div>
+              )}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-violet-600 text-white py-4 rounded-xl font-semibold hover:bg-violet-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {loading && <Loader2 className="w-5 h-5 animate-spin" />}
+                Enviar link
+              </button>
+            </form>
+          )}
+        </div>
       </div>
     );
   }
@@ -207,6 +290,15 @@ export default function Auth() {
                 className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-violet-600 focus:outline-none"
                 placeholder="••••••••"
               />
+              {!isSignUp && (
+                <button
+                  type="button"
+                  onClick={() => { setForgot(true); setError(''); }}
+                  className="mt-2 text-sm text-violet-600 font-semibold hover:underline"
+                >
+                  Esqueci minha senha
+                </button>
+              )}
             </div>
 
             {error && (
