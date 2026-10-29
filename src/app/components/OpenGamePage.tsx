@@ -494,27 +494,17 @@ export default function OpenGamePage() {
       if (gamePayMode === 'full') {
         // Free join — organizer already paid the full court price
         setJoining(true);
-        const { error: insertErr } = await supabase.from('game_players').insert({
-          game_id: id,
-          player_id: user.id,
-          player_name: playerName,
-          paid: true,
-          ...(courtSport === 'futevolei' ? { team } : {}),
+        // The server validates and enrolls (and notifies the other players).
+        const { data: joined, error: joinErr } = await supabase.functions.invoke('join-free-game', {
+          body: { gameId: id, ...(courtSport === 'futevolei' ? { team } : {}) },
         });
-        if (insertErr && insertErr.code !== '23505') {
-          setJoinError('Erro ao entrar na partida. Tente novamente.');
+        if (joinErr || joined?.error) {
+          const body = await (joinErr as any)?.context?.json?.().catch(() => null);
+          setJoinError(body?.error ?? joined?.error ?? 'Erro ao entrar na partida. Tente novamente.');
           setJoining(false);
           return;
         }
-        const newCount = currentPlayers + 1;
-        await supabase.from('games').update({ current_players: newCount }).eq('id', id);
-        await notifyGamePlayers(
-          id!,
-          user.id,
-          'game_joined',
-          'Novo jogador entrou!',
-          `${playerName} entrou na partida. Agora são ${newCount}/${maxPlayers} jogadores.`,
-        );
+        const newCount = joined?.currentPlayers ?? currentPlayers + 1;
         setPlayers(prev => [...prev, { name: playerName, paid: true, isCurrentUser: true, team }]);
         setCurrentPlayers(newCount);
         setIsEnrolled(true);
@@ -1244,12 +1234,12 @@ export default function OpenGamePage() {
                   <span className="font-semibold text-gray-900">R$ {pricePerPlayer.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Taxa de serviço (15%)</span>
-                  <span className="font-semibold text-gray-900">R$ {(pricePerPlayer * 0.15).toFixed(2)}</span>
+                  <span className="text-gray-500">Taxa de serviço (8% + R$ 2,50)</span>
+                  <span className="font-semibold text-gray-900">R$ {calcFees(pricePerPlayer).fee.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between pt-1 border-t border-gray-100">
                   <span className="font-bold text-gray-900">Total</span>
-                  <span className="text-xl font-bold text-violet-600">R$ {(pricePerPlayer * 1.15).toFixed(2)}</span>
+                  <span className="text-xl font-bold text-violet-600">R$ {calcFees(pricePerPlayer).total.toFixed(2)}</span>
                 </div>
               </div>
             </div>
@@ -1271,7 +1261,7 @@ export default function OpenGamePage() {
               >
                 {joining
                   ? <><Loader2 className="w-5 h-5 animate-spin" /> Entrando...</>
-                  : <><CheckCircle className="w-5 h-5" /> Pagar minha parte · R$ {(pricePerPlayer * 1.15).toFixed(2)}</>}
+                  : <><CheckCircle className="w-5 h-5" /> Pagar minha parte · R$ {calcFees(pricePerPlayer).total.toFixed(2)}</>}
               </button>
             )}
             <button onClick={() => setShowJoin(false)} className="w-full mt-3 py-3 text-sm text-gray-500 font-semibold">

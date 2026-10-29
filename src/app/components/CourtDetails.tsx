@@ -791,7 +791,7 @@ const CourtDetails: React.FC = () => {
                           <strong>R$ {((selectedSlot.price / privateMinPlayers) * 1.08 + 2.50).toFixed(2)}</strong> no cartão — quanto mais jogadores entrarem, menos cada um paga.
                         </p>
                         <p className="text-sm text-blue-900 leading-relaxed">
-                          12 horas antes do jogo o valor é ajustado e cobrado automaticamente.
+                          2 horas antes do jogo o valor é ajustado e cobrado automaticamente.
                         </p>
                       </div>
                     )}

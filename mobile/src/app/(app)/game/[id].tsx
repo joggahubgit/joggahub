@@ -1,7 +1,7 @@
 // Port of src/app/components/OpenGamePage.tsx (web).
-// Money-moving actions (join/pay, pay reservation, leave, remove player, cancel,
-// add player) keep the web's UI and texts, but their final button opens the
-// website until the payment phase.
+// Join (paid or free) and paying a venue reservation run in the app through the
+// server-side checkout. Leave / remove player / cancel / add player still open
+// the website (refund flows — next step of the payment phase).
 import { useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -16,7 +16,9 @@ import { BottomSheet } from '@/components/ui/BottomSheet';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { fetchGameDetail, type GameDetail, type GamePlayer } from '@/features/games/api';
 import { GameResultSubmit } from '@/features/results/GameResultSubmit';
+import { calcFees, startCheckout } from '@/features/payments/checkout';
 import { getEnv } from '@/lib/env';
+import { supabase } from '@/lib/supabase';
 import { PLAYER_CANCEL_CUTOFF_HOURS } from '@/lib/shared';
 import palette from '../../../../tailwind.palette';
 
@@ -78,6 +80,9 @@ export default function OpenGamePage() {
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [showPlayerLeaveConfirm, setShowPlayerLeaveConfirm] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [joining, setJoining] = useState(false);
+  const [joinError, setJoinError] = useState('');
+  const [pendingTeam, setPendingTeam] = useState<'a' | 'b'>('a');
 
   const goHome = () => router.replace('/');
   const webUrl = `${getEnv().webUrl}/open-game/${id}`;
@@ -148,8 +153,71 @@ export default function OpenGamePage() {
   const status = g.status;
   const spotsLeft = g.maxPlayers - g.currentPlayers;
   const players = g.players.map(p => ({ ...p, isCurrentUser: p.id === userId }));
+  const display = { courtName: g.courtName, venueName: g.venueName, date, time, endTime };
 
-  const renderSlot = (i: number) => {
+  /** Paid join (open game, or private split game): hold the player's share. */
+  const payToJoin = async (team: 'a' | 'b') => {
+    setJoining(true);
+    setJoinError('');
+    try {
+      await startCheckout(
+        'create-checkout-session',
+        { mode: 'join_self', gameId: g.id, captureManual: true, ...(g.sport === 'futevolei' ? { team } : {}) },
+        { ...display, mode: 'join_self' },
+      );
+    } catch (e) {
+      setJoinError(e instanceof Error ? e.message : 'Erro ao iniciar pagamento.');
+    } finally {
+      setJoining(false);
+      q.refetch();
+    }
+  };
+
+  /** Private game the organizer paid in full: joining is free (server enrolls). */
+  const joinFree = async (team: 'a' | 'b') => {
+    setJoining(true);
+    setJoinError('');
+    const { data, error } = await supabase.functions.invoke('join-free-game', {
+      body: { gameId: g.id, ...(g.sport === 'futevolei' ? { team } : {}) },
+    });
+    if (error || data?.error) {
+      const body = await (error as { context?: Response } | null)?.context?.json?.().catch(() => null);
+      setJoinError(body?.error ?? data?.error ?? 'Erro ao entrar na partida. Tente novamente.');
+    }
+    setJoining(false);
+    q.refetch();
+  };
+
+  const payReservation = async () => {
+    setJoining(true);
+    setJoinError('');
+    try {
+      await startCheckout('create-checkout-session', { mode: 'pay_reservation', gameId: g.id }, { ...display, mode: 'pay_reservation' });
+    } catch (e) {
+      setJoinError(e instanceof Error ? e.message : 'Erro ao iniciar pagamento.');
+    } finally {
+      setJoining(false);
+      q.refetch();
+    }
+  };
+
+  // Same branching as the web's handleCircleClick.
+  const onEmptySlot = (team: 'a' | 'b' = 'a') => {
+    if (status === 'completed' || status === 'expired' || status === 'pending_results') return;
+    if (withinJoinCutoff || joining) return;
+    setPendingTeam(team);
+    if (g.isPrivate && !isEnrolled && !isOrganizer) {
+      if (g.payMode === 'full') joinFree(team);
+      else payToJoin(team);
+      return;
+    }
+    if (isEnrolled || isOrganizer) openSite();
+    else setShowJoin(true);
+  };
+
+  const joinFees = calcFees(g.pricePerPlayer);
+
+  const renderSlot = (i: number, team?: 'a' | 'b') => {
     const player = players[i] as (GamePlayer & { isCurrentUser: boolean }) | undefined;
     const filled = i < g.currentPlayers;
     const canRemove = isOrganizer && filled && player && !player.isOrganizer && !withinCancelCutoff;
@@ -192,7 +260,8 @@ export default function OpenGamePage() {
             </View>
           ) : (
             <Pressable
-              onPress={() => (isEnrolled ? openSite() : setShowJoin(true))}
+              onPress={() => onEmptySlot(team)}
+              disabled={joining}
               accessibilityRole="button"
               accessibilityLabel={isEnrolled ? 'Adicionar jogador' : 'Entrar na partida'}
               className="w-12 h-12 rounded-full border-2 border-dashed border-violet-300 items-center justify-center active:bg-violet-100"
@@ -229,12 +298,12 @@ export default function OpenGamePage() {
       return (
         <View className="flex-row gap-4">
           {[
-            { label: 'Time A', cls: 'text-violet-600', idx: [...teamA, ...emptyA] },
-            { label: 'Time B', cls: 'text-gray-500', idx: [...teamB, ...emptyB] },
+            { label: 'Time A', team: 'a' as const, cls: 'text-violet-600', idx: [...teamA, ...emptyA] },
+            { label: 'Time B', team: 'b' as const, cls: 'text-gray-500', idx: [...teamB, ...emptyB] },
           ].map(t => (
             <View key={t.label} className="flex-1">
               <Text className={`text-xs font-bold uppercase tracking-wide mb-2 text-center ${t.cls}`}>{t.label}</Text>
-              <View className="flex-row flex-wrap justify-center gap-3">{t.idx.map(renderSlot)}</View>
+              <View className="flex-row flex-wrap justify-center gap-3">{t.idx.map(i => renderSlot(i, t.team))}</View>
             </View>
           ))}
         </View>
@@ -287,8 +356,12 @@ export default function OpenGamePage() {
                 </Text>
               </View>
             </View>
-            <Pressable onPress={openSite} className="w-full bg-amber-500 py-3 rounded-xl items-center active:bg-amber-600">
-              <Text className="text-white font-bold text-base">Pagar no site e confirmar vaga</Text>
+            <Pressable
+              onPress={payReservation}
+              disabled={joining}
+              className={`w-full bg-amber-500 py-3 rounded-xl items-center active:bg-amber-600 ${joining ? 'opacity-60' : ''}`}
+            >
+              <Text className="text-white font-bold text-base">{joining ? 'Aguarde...' : `Pagar R$ ${joinFees.total.toFixed(2)} e confirmar vaga`}</Text>
             </Pressable>
           </View>
         )}
@@ -376,6 +449,18 @@ export default function OpenGamePage() {
             </View>
           )}
         </View>
+
+        {!!joinError && (
+          <View className="mx-5 mt-3 bg-red-50 rounded-xl px-4 py-3 border border-red-100">
+            <Text className="text-sm text-red-500">{joinError}</Text>
+          </View>
+        )}
+        {joining && (
+          <View className="mx-5 mt-3 flex-row items-center justify-center gap-2 py-2">
+            <ActivityIndicator color={palette.violet['600']} />
+            <Text className="text-sm text-gray-500">Aguarde...</Text>
+          </View>
+        )}
 
         {/* Players */}
         <View className="mx-5 mt-3 border border-gray-200 rounded-2xl p-5">
@@ -581,12 +666,12 @@ export default function OpenGamePage() {
               <Text className="text-sm font-semibold text-gray-900">R$ {g.pricePerPlayer.toFixed(2)}</Text>
             </View>
             <View className="flex-row justify-between">
-              <Text className="text-sm text-gray-500">Taxa de serviço (15%)</Text>
-              <Text className="text-sm font-semibold text-gray-900">R$ {(g.pricePerPlayer * 0.15).toFixed(2)}</Text>
+              <Text className="text-sm text-gray-500">Taxa de serviço (8% + R$ 2,50)</Text>
+              <Text className="text-sm font-semibold text-gray-900">R$ {joinFees.fee.toFixed(2)}</Text>
             </View>
             <View className="flex-row justify-between pt-1 border-t border-gray-100">
               <Text className="font-bold text-gray-900 text-base">Total</Text>
-              <Text className="text-xl font-bold text-violet-600">R$ {(g.pricePerPlayer * 1.15).toFixed(2)}</Text>
+              <Text className="text-xl font-bold text-violet-600">R$ {joinFees.total.toFixed(2)}</Text>
             </View>
           </View>
         </View>
@@ -599,12 +684,13 @@ export default function OpenGamePage() {
           <Pressable
             onPress={() => {
               setShowJoin(false);
-              openSite();
+              payToJoin(pendingTeam);
             }}
+            disabled={joining}
             className="w-full bg-violet-600 py-4 rounded-2xl flex-row items-center justify-center gap-2 active:bg-violet-700"
           >
             <CheckCircle size={20} color="#ffffff" />
-            <Text className="text-white font-bold text-base">Pagar minha parte no site</Text>
+            <Text className="text-white font-bold text-base">{joining ? 'Entrando...' : `Pagar minha parte · R$ ${joinFees.total.toFixed(2)}`}</Text>
           </Pressable>
         )}
         <Pressable onPress={() => setShowJoin(false)} className="w-full mt-3 py-3 items-center">

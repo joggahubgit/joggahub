@@ -6,7 +6,6 @@ import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Share, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
-import * as WebBrowser from 'expo-web-browser';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, ChevronLeft, ChevronRight, Clock, GraduationCap, Lock, Mail, MapPin, Phone, Share2, Star } from 'lucide-react-native';
@@ -189,7 +188,6 @@ export default function CourtDetails() {
 
   const share = () =>
     Share.share({ message: `${venue?.name ? `${venue.name} · ` : ''}${court.name} no JoggaHub\n${webUrl}` }).catch(() => {});
-  const openSite = () => WebBrowser.openBrowserAsync(webUrl).catch(() => {});
   const refreshing = page.isRefetching || grid.isRefetching;
 
   return (
@@ -496,7 +494,7 @@ export default function CourtDetails() {
                             <Text className="text-sm font-bold text-blue-900">{privateMax} jogadores</Text>. Cada um autoriza{' '}
                             <Text className="text-sm font-bold text-blue-900">R$ {((selectedSlot.price / privateMin) * 1.08 + 2.5).toFixed(2)}</Text> no cartão — quanto mais jogadores entrarem, menos cada um paga.
                           </Text>
-                          <Text className="text-sm text-blue-900 leading-relaxed">12 horas antes do jogo o valor é ajustado e cobrado automaticamente.</Text>
+                          <Text className="text-sm text-blue-900 leading-relaxed">2 horas antes do jogo o valor é ajustado e cobrado automaticamente.</Text>
                         </View>
                       )}
                     </View>
@@ -506,8 +504,28 @@ export default function CourtDetails() {
                     <Pressable onPress={() => setSelectedSlot(null)} className="px-4 py-3 border-2 border-gray-200 rounded-xl">
                       <Text className="text-gray-600 font-semibold text-sm">Cancelar</Text>
                     </Pressable>
-                    <Pressable onPress={openSite} className="flex-1 bg-violet-600 py-3 rounded-xl items-center active:bg-violet-700">
-                      <Text className="text-white font-bold text-base">Ver revisão no site →</Text>
+                    <Pressable
+                      onPress={() =>
+                        router.push({
+                          pathname: '/private-game-review',
+                          params: {
+                            slotId: selectedSlot.slotId,
+                            courtId: selectedSlot.courtId,
+                            courtName: selectedSlot.courtName,
+                            venueName: venue?.name ?? '',
+                            courtSport: sportFor(selectedSlot.courtId),
+                            date: selectedDate,
+                            time: selectedSlot.time,
+                            endTime: selectedSlot.endTime,
+                            price: String(selectedSlot.price),
+                            maxPlayers: String(privateMax),
+                            payMode,
+                          },
+                        })
+                      }
+                      className="flex-1 bg-violet-600 py-3 rounded-xl items-center active:bg-violet-700"
+                    >
+                      <Text className="text-white font-bold text-base">Ver revisão →</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -657,8 +675,28 @@ export default function CourtDetails() {
                       <Pressable onPress={() => setSelectedOpenSlot(null)} className="px-4 py-3 border-2 border-gray-200 rounded-xl">
                         <Text className="text-gray-600 font-semibold text-sm">Cancelar</Text>
                       </Pressable>
-                      <Pressable onPress={openSite} className="flex-1 bg-gray-900 py-3 rounded-xl items-center justify-center active:bg-gray-800">
-                        <Text className="text-white font-bold text-sm">Revisar partida no site</Text>
+                      <Pressable
+                        onPress={() =>
+                          router.push({
+                            pathname: '/open-game-review',
+                            params: {
+                              slotId: selectedOpenSlot.slotId,
+                              courtId: selectedOpenSlot.courtId,
+                              courtName: selectedOpenSlot.courtName,
+                              courtSport: sportFor(selectedOpenSlot.courtId),
+                              venueName: venue?.name ?? '',
+                              date: selectedDate,
+                              time: selectedOpenSlot.time,
+                              endTime: selectedOpenSlot.endTime,
+                              totalPrice: String(selectedOpenSlot.price),
+                              maxPlayers: String(openMax),
+                              minPlayers: String(openMin),
+                            },
+                          })
+                        }
+                        className="flex-1 bg-gray-900 py-3 rounded-xl items-center justify-center active:bg-gray-800"
+                      >
+                        <Text className="text-white font-bold text-sm">Revisar partida</Text>
                       </Pressable>
                     </View>
                   </View>

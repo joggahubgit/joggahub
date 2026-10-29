@@ -29,3 +29,6 @@ verify_jwt = false
 verify_jwt = false
 [functions.finalize-checkout]
 verify_jwt = false
+
+[functions.join-free-game]
+verify_jwt = false
