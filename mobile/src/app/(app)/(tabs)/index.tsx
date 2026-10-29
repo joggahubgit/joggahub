@@ -1,6 +1,5 @@
 // Port of src/app/components/Home.tsx (web).
-// Not yet ported: PendingResultBanner (results batch) and the one-off welcome
-// banner after onboarding (onboarding batch).
+// Not yet ported: the one-off welcome banner after onboarding (onboarding batch).
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
@@ -13,6 +12,7 @@ import { fetchOpenGames, fetchUpcomingGames, type UpcomingGame } from '@/feature
 import { fetchUnreadCount, fetchUpcomingBookings, fetchVenueCards, type UpcomingBooking } from '@/features/home/api';
 import { wallDate, wallTime } from '@/lib/shared';
 import { useRealtimeRefetch } from '@/lib/useRealtimeRefetch';
+import { PendingResultBanner } from '@/features/results/PendingResultBanner';
 import palette from '../../../../tailwind.palette';
 
 const SPORT_LABELS: Record<string, string> = { football: 'Society', society: 'Society', futsal: 'Futsal', futevolei: 'Futevôlei' };
@@ -213,6 +213,9 @@ export default function Home() {
             </Pressable>
           </View>
         </SafeAreaView>
+
+        {/* Result waiting for this player's confirmation */}
+        <PendingResultBanner userId={userId} />
 
         {/* Próximas partidas + reservas */}
         {(upcomingGames.length > 0 || upcomingBookings.length > 0) && (

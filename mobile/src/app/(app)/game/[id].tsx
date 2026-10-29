@@ -1,7 +1,7 @@
 // Port of src/app/components/OpenGamePage.tsx (web).
 // Money-moving actions (join/pay, pay reservation, leave, remove player, cancel,
 // add player) keep the web's UI and texts, but their final button opens the
-// website until the payment phase. Not yet ported: GameResultSubmit (results batch).
+// website until the payment phase.
 import { useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -15,6 +15,7 @@ import { Text } from '@/components/ui/Text';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { fetchGameDetail, type GameDetail, type GamePlayer } from '@/features/games/api';
+import { GameResultSubmit } from '@/features/results/GameResultSubmit';
 import { getEnv } from '@/lib/env';
 import { PLAYER_CANCEL_CUTOFF_HOURS } from '@/lib/shared';
 import palette from '../../../../tailwind.palette';
@@ -251,6 +252,11 @@ export default function OpenGamePage() {
         contentContainerClassName="pb-24"
         refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={() => { q.refetch(); }} tintColor={palette.violet['600']} />}
       >
+        {/* Futevôlei: real result registration — stays visible after completion so the scoreboard doesn't disappear */}
+        {(status === 'pending_results' || status === 'completed') && g.sport === 'futevolei' && isEnrolled && (
+          <GameResultSubmit gameId={g.id} players={g.players.map(p => ({ id: p.id, name: p.name, avatarUrl: p.avatarUrl }))} currentUserId={userId} />
+        )}
+
         {status === 'pending_results' && g.sport !== 'futevolei' && isOrganizer && (
           <View className="mx-5 mt-4 bg-orange-50 border border-orange-300 rounded-2xl px-4 py-3 flex-row items-center gap-3">
             <Zap size={20} color={palette.orange['500']} />
