@@ -1,27 +1,22 @@
+// Port of src/app/components/BottomNav.tsx (web): Início / Comunidade / Perfil.
 import { Tabs } from 'expo-router';
-import { House, User } from 'lucide-react-native';
-import { colors, fonts } from '@/theme/tokens';
+import { House, User, Users } from 'lucide-react-native';
+import palette from '../../../../tailwind.palette';
 
-// Mirrors the web BottomNav (Início / Comunidade / Perfil). Comunidade, Quadras
-// and Partidas are added in Phase 3/4 with their real data — no placeholder tabs.
 export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textMuted,
-        tabBarLabelStyle: { fontFamily: fonts.semibold, fontSize: 12 },
+        tabBarActiveTintColor: palette.violet['600'],
+        tabBarInactiveTintColor: palette.gray['400'],
+        tabBarStyle: { backgroundColor: '#ffffff', borderTopColor: palette.gray['200'], borderTopWidth: 1, paddingTop: 6 },
+        tabBarLabelStyle: { fontFamily: 'Inter_400Regular', fontSize: 12 },
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{ title: 'Início', tabBarIcon: ({ color, size }) => <House color={color} size={size} /> }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{ title: 'Perfil', tabBarIcon: ({ color, size }) => <User color={color} size={size} /> }}
-      />
+      <Tabs.Screen name="index" options={{ title: 'Início', tabBarIcon: ({ color }) => <House color={color} size={24} /> }} />
+      <Tabs.Screen name="community" options={{ title: 'Comunidade', tabBarIcon: ({ color }) => <Users color={color} size={24} /> }} />
+      <Tabs.Screen name="profile" options={{ title: 'Perfil', tabBarIcon: ({ color }) => <User color={color} size={24} /> }} />
     </Tabs>
   );
 }

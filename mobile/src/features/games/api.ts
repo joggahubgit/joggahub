@@ -127,13 +127,14 @@ export interface OpenGame {
   currentPlayers: number;
   maxPlayers: number;
   pricePerPlayer: number;
+  skillLevel: string | null;
 }
 
 /** Open games with free spots, starting from now (mirrors FindGames). */
 export async function fetchOpenGames(limit?: number): Promise<OpenGame[]> {
   let q = supabase
     .from('games')
-    .select('id, court_id, scheduled_at, current_players, max_players, price_per_player')
+    .select('id, court_id, scheduled_at, current_players, max_players, price_per_player, skill_level')
     .eq('is_open', true)
     .in('status', ACTIVE)
     .gte('scheduled_at', new Date().toISOString())
@@ -160,6 +161,7 @@ export async function fetchOpenGames(limit?: number): Promise<OpenGame[]> {
       currentPlayers: g.current_players ?? 0,
       maxPlayers: g.max_players ?? 0,
       pricePerPlayer: g.price_per_player ?? 0,
+      skillLevel: g.skill_level ?? null,
     };
   });
 }
