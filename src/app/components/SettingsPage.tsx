@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronRight, Loader2, Check } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Loader2, Check, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 
 export default function SettingsPage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const isPasswordAccount = user?.app_metadata?.provider === 'email';
 
   const [showPasswordForm, setShowPasswordForm] = useState(false);
@@ -46,6 +46,33 @@ export default function SettingsPage() {
       setShowPasswordForm(false);
       setSuccess(false);
     }, 1500);
+  };
+
+  // Account deletion: the server refuses while games, bookings or plans are still
+  // active and tells the user what to close first.
+  const [showDelete, setShowDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<{ message: string; blockers: string[] } | null>(null);
+
+  const handleDeleteAccount = async () => {
+    if (deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    const { data, error: fnErr } = await supabase.functions.invoke('delete-account', { body: { confirm: true } });
+    if (fnErr || !data?.deleted) {
+      const body = await (fnErr as any)?.context?.json?.().catch(() => null);
+      setDeleteError({ message: body?.error ?? data?.error ?? 'Não foi possível excluir a conta. Tente novamente.', blockers: body?.blockers ?? [] });
+      setDeleting(false);
+      return;
+    }
+    await signOut().catch(() => {});
+    navigate('/', { replace: true });
+  };
+
+  const closeDelete = () => {
+    if (deleting) return;
+    setShowDelete(false);
+    setDeleteError(null);
   };
 
   return (
@@ -100,15 +127,57 @@ export default function SettingsPage() {
               )}
             </div>
           )}
-          <a
-            href="mailto:info@joggahub.com?subject=Solicita%C3%A7%C3%A3o%20de%20exclus%C3%A3o%20de%20conta"
+          <button
+            onClick={() => setShowDelete(true)}
             className="w-full p-4 flex items-center justify-between hover:bg-gray-50"
           >
             <h3 className="font-semibold text-red-600">Excluir conta</h3>
             <ChevronRight className="w-5 h-5 text-gray-400" />
-          </a>
+          </button>
         </div>
       </div>
+      {showDelete && (
+        <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-50" onClick={closeDelete}>
+          <div className="bg-white rounded-t-3xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-5" />
+            <div className="flex flex-col items-center text-center mb-4">
+              <div className="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mb-3">
+                <AlertTriangle className="w-7 h-7 text-red-600" />
+              </div>
+              <h3 className="font-bold text-gray-900 text-xl">Excluir conta?</h3>
+            </div>
+            {deleteError ? (
+              <div className="bg-red-50 border border-red-100 rounded-2xl p-4 mb-5 space-y-2">
+                <p className="text-sm font-semibold text-red-600">{deleteError.message}</p>
+                {deleteError.blockers.map(b => <p key={b} className="text-sm text-red-600">• {b}</p>)}
+              </div>
+            ) : (
+              <div className="space-y-2 mb-5">
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  Seus dados pessoais (nome, telefone, foto e perfil) serão apagados e você não poderá mais entrar com esta conta.
+                </p>
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  Partidas já jogadas continuam no histórico dos outros jogadores como “Usuário removido”. Esta ação não pode ser desfeita.
+                </p>
+              </div>
+            )}
+            <div className="space-y-3">
+              {!deleteError?.blockers.length && (
+                <button
+                  onClick={handleDeleteAccount}
+                  disabled={deleting}
+                  className="w-full bg-red-600 text-white py-4 rounded-2xl font-bold hover:bg-red-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  {deleting ? <><Loader2 className="w-5 h-5 animate-spin" /> Excluindo...</> : 'Excluir minha conta'}
+                </button>
+              )}
+              <button onClick={closeDelete} disabled={deleting} className="w-full py-3 text-sm text-gray-500 font-semibold">
+                {deleteError?.blockers.length ? 'Entendi' : 'Cancelar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
