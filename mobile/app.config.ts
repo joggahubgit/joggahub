@@ -35,6 +35,9 @@ const config: ExpoConfig = {
     'expo-secure-store',
     'expo-web-browser',
     'expo-font',
+    // Permission prompts (pt-BR). Only asked when the user taps the related button.
+    ['expo-image-picker', { photosPermission: 'O JoggaHub usa suas fotos para você escolher a foto do seu perfil.', cameraPermission: false, microphonePermission: false }],
+    ['expo-location', { locationWhenInUsePermission: 'O JoggaHub usa sua localização apenas para preencher sua cidade no perfil.' }],
     ['expo-splash-screen', { image: './assets/splash-icon.png', backgroundColor: '#7C3AED', imageWidth: 160 }],
   ],
   experiments: { typedRoutes: true },

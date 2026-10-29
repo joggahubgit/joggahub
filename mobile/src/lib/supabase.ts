@@ -43,5 +43,8 @@ export interface Profile {
   avatar_url: string | null;
   location: string | null;
   preferred_position: string | null;
+  dominant_foot: 'right' | 'left' | 'both' | null;
+  availability: { days?: string[]; periods?: string[] } | null;
+  bio: string | null;
   onboarding_completed: boolean | null;
 }

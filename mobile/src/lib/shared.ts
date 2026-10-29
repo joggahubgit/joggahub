@@ -5,3 +5,5 @@
 export * from '../../../src/app/lib/gameConfig';
 export * from '../../../src/app/lib/wallClock';
 export * from '../../../src/app/lib/futevoleiSetRules';
+export * from '../../../src/app/lib/profileFields';
+export * from '../../../src/app/lib/futevoleiLevels';

@@ -25,7 +25,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Profile rows are created by the on_auth_user_created trigger; the app only reads.
     const { data } = await supabase
       .from('profiles')
-      .select('id, name, avatar_url, location, preferred_position, onboarding_completed')
+      .select('id, name, avatar_url, location, preferred_position, dominant_foot, availability, bio, onboarding_completed')
       .eq('id', userId)
       .maybeSingle();
     setProfile((data as Profile) ?? null);
