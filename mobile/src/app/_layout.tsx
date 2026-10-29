@@ -1,3 +1,4 @@
+import '../../global.css';
 import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Stack } from 'expo-router';
@@ -33,7 +34,10 @@ function RootNavigator() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       {/* Guards: screens are unreachable — even by deep link — unless the condition holds. */}
-      <Stack.Protected guard={signedIn} redirectTo="/login">
+      {/* Public on the web too: reachable signed in or out. */}
+      <Stack.Screen name="terms" />
+      <Stack.Screen name="privacy" />
+      <Stack.Protected guard={signedIn} redirectTo="/welcome">
         {/* Every signed-in screen lives under (app) so new routes are protected by default. */}
         <Stack.Screen name="(app)" />
       </Stack.Protected>

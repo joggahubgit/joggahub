@@ -18,6 +18,9 @@ export default function AppLayout() {
       <Stack.Screen name="game/[id]" options={{ title: 'Partida' }} />
       <Stack.Screen name="courts" options={{ title: 'Quadras' }} />
       <Stack.Screen name="court/[id]" options={{ title: 'Quadra' }} />
+      {/* Web-style screens draw their own header (PageHeader / VioletHeader). */}
+      <Stack.Screen name="help" options={{ headerShown: false }} />
+      <Stack.Screen name="settings" options={{ headerShown: false }} />
     </Stack>
   );
 }

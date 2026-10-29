@@ -1,30 +1,32 @@
 /**
- * Design tokens taken from the web app's Tailwind usage so both apps share
- * one visual identity (see docs/mobile/AUDIT.md §8).
+ * Named tokens for non-className props (icon colours, native header options).
+ * Values come from the exact web palette (Tailwind v4, see tailwind.palette.js);
+ * screens themselves use Tailwind classes, like the web.
  */
+import palette from '../../tailwind.palette';
+
 export const colors = {
-  primary: '#7C3AED', // violet-600 — main brand colour
-  primaryPressed: '#6D28D9', // violet-700
-  primarySoft: '#F5F3FF', // violet-50
-  primaryBorder: '#DDD6FE', // violet-200
-  brandGradient: ['#9333EA', '#6D28D9', '#3730A3'] as const, // purple-600 → indigo-800
+  primary: palette.violet['600'],
+  primaryPressed: palette.violet['700'],
+  primarySoft: palette.violet['50'],
+  primaryBorder: palette.violet['200'],
 
-  background: '#F9FAFB', // gray-50
+  background: palette.gray['50'],
   surface: '#FFFFFF',
-  border: '#F3F4F6', // gray-100
-  borderStrong: '#E5E7EB', // gray-200
+  border: palette.gray['100'],
+  borderStrong: palette.gray['200'],
 
-  text: '#111827', // gray-900
-  textSecondary: '#6B7280', // gray-500
-  textMuted: '#9CA3AF', // gray-400
+  text: palette.gray['900'],
+  textSecondary: palette.gray['500'],
+  textMuted: palette.gray['400'],
   onPrimary: '#FFFFFF',
 
-  success: '#16A34A', // green-600
-  successSoft: '#DCFCE7',
-  warning: '#D97706', // amber-600
-  warningSoft: '#FEF3C7',
-  danger: '#D4183D', // --destructive
-  dangerSoft: '#FEE2E2',
+  success: palette.green['600'],
+  successSoft: palette.green['100'],
+  warning: palette.amber['600'],
+  warningSoft: palette.amber['100'],
+  danger: palette.red['600'],
+  dangerSoft: palette.red['100'],
 } as const;
 
 export const fonts = {

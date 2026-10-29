@@ -1,5 +1,6 @@
 const path = require('path');
 const { getDefaultConfig } = require('expo/metro-config');
+const { withNativeWind } = require('nativewind/metro');
 
 const config = getDefaultConfig(__dirname);
 
@@ -7,4 +8,4 @@ const config = getDefaultConfig(__dirname);
 // by the web's Vitest suite). Only this folder is exposed — never web UI code.
 config.watchFolders = [path.resolve(__dirname, '../src/app/lib')];
 
-module.exports = config;
+module.exports = withNativeWind(config, { input: './global.css' });
