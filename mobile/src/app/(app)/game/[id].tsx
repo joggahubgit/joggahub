@@ -807,7 +807,7 @@ export default function OpenGamePage() {
             </Pressable>
           )}
         </View>
-        <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
+        <ScrollView style={{ maxHeight: 240 }} keyboardShouldPersistTaps="handled">
           {!searchQuery && <Text className="text-sm text-gray-400 text-center py-8">Digite o nome do jogador para buscar</Text>}
           {!!searchQuery && !searching && searchResults.length === 0 && (
             <Text className="text-sm text-gray-400 text-center py-8">Nenhum jogador encontrado</Text>
