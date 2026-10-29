@@ -80,11 +80,13 @@ export function buildSlotGrid(opts: {
 
 /** Next 14 calendar days in the device's local calendar, as YYYY-MM-DD (like the web). */
 export function nextDays(count = 14, from = new Date()) {
-  const DAYS = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+  // Same labels as the web's buildWeekDays.
+  const DAYS = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
+  const MONTHS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
   return Array.from({ length: count }, (_, i) => {
     const d = new Date(from);
     d.setDate(d.getDate() + i);
     const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    return { date, dayLabel: DAYS[d.getDay()], dayNum: String(d.getDate()).padStart(2, '0') };
+    return { date, dayLabel: DAYS[d.getDay()], dayNum: String(d.getDate()).padStart(2, '0'), monthLabel: MONTHS[d.getMonth()] };
   });
 }

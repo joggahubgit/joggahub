@@ -5,7 +5,7 @@
  * the backend (cron / edge functions).
  */
 import { supabase } from '@/lib/supabase';
-import { getMinPlayersForSport } from '@/lib/shared';
+import { CAPTURE_CUTOFF_HOURS, getMinPlayersForSport, PLAYER_CANCEL_CUTOFF_HOURS } from '@/lib/shared';
 
 const ACTIVE = ['scheduled', 'confirmed_booking'];
 
@@ -193,6 +193,13 @@ export interface GameDetail {
   minPlayers: number;
   pricePerPlayer: number;
   organizerId: string;
+  organizerPaid: boolean;
+  courtPrice: number;
+  /** slots.start_time — the instant the web compares cutoffs against. */
+  startTime: string | null;
+  /** Evaluated when the game is loaded, like the web (refetch to re-evaluate). */
+  withinCancelCutoff: boolean;
+  withinJoinCutoff: boolean;
   players: GamePlayer[];
 }
 
@@ -241,12 +248,16 @@ export async function fetchGameDetail(id: string): Promise<GameDetail | null> {
       })),
   ];
 
-  // Fallback end time for older games without scheduled_end_at.
+  // Slot gives the cutoff reference (start) and the end for older games without scheduled_end_at.
   let endAt: string | null = game.scheduled_end_at ?? null;
-  if (!endAt && game.slot_id) {
-    const { data: slot } = await supabase.from('slots').select('end_time').eq('id', game.slot_id).maybeSingle();
-    endAt = slot?.end_time ?? null;
+  let startTime: string | null = null;
+  if (game.slot_id) {
+    const { data: slot } = await supabase.from('slots').select('start_time, end_time').eq('id', game.slot_id).maybeSingle();
+    startTime = slot?.start_time ?? null;
+    endAt = endAt ?? slot?.end_time ?? null;
   }
+
+  const msUntilStart = startTime ? new Date(startTime).getTime() - Date.now() : Infinity;
 
   const unavailable =
     game.status === 'cancelled' ? 'cancelled' : game.status === 'expired' || (game.current_players ?? 0) === 0 ? 'inactive' : null;
@@ -269,6 +280,11 @@ export async function fetchGameDetail(id: string): Promise<GameDetail | null> {
     minPlayers: getMinPlayersForSport(sport),
     pricePerPlayer: game.price_per_player ?? 0,
     organizerId: game.organizer_id,
+    organizerPaid: orgEntry?.paid ?? true,
+    courtPrice: game.court_price ?? (game.price_per_player ?? 0) * 18,
+    startTime,
+    withinCancelCutoff: msUntilStart < PLAYER_CANCEL_CUTOFF_HOURS * 3_600_000,
+    withinJoinCutoff: msUntilStart < CAPTURE_CUTOFF_HOURS * 3_600_000,
     players,
   };
 }

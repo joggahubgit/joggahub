@@ -14,13 +14,16 @@ export interface CourtListItem {
   venueName: string;
   venueCity: string;
   venueAddress: string;
+  rating: number | null;
+  reviewCount: number | null;
+  isActive: boolean;
 }
 
 /** Active courts with their club and cheapest open slot in the next 14 days (mirrors FindCourts). */
 export async function fetchCourts(): Promise<CourtListItem[]> {
   const { data: courts, error } = await supabase
     .from('courts')
-    .select('id, name, venue_id, images, price_per_hour, sport_type, surface')
+    .select('id, name, venue_id, images, price_per_hour, sport_type, surface, rating, review_count, is_active')
     .neq('is_active', false);
   if (error) throw error;
   if (!courts?.length) return [];
@@ -60,9 +63,12 @@ export async function fetchCourts(): Promise<CourtListItem[]> {
         venueName: v?.name ?? '',
         venueCity: v?.city ?? '',
         venueAddress: v?.address ?? '',
+        rating: c.rating ?? null,
+        reviewCount: c.review_count ?? null,
+        isActive: c.is_active !== false,
       };
-    })
-    .sort((a, b) => a.venueName.localeCompare(b.venueName) || a.name.localeCompare(b.name));
+    });
+  // Database order, like the web (no client-side sort).
 }
 
 export interface VenueCourt {
@@ -74,6 +80,9 @@ export interface VenueCourt {
 
 export interface CourtPage {
   courtId: string;
+  name: string;
+  rating: number;
+  reviews: number;
   images: string[];
   amenities: string[];
   venue: {
@@ -82,6 +91,7 @@ export interface CourtPage {
     address: string | null;
     city: string | null;
     phone: string | null;
+    email: string | null;
     description: string | null;
     openingHours: string | null;
   } | null;
@@ -98,7 +108,7 @@ export async function fetchCourtPage(courtId: string): Promise<CourtPage | null>
   let courts: VenueCourt[] = [{ id: court.id, name: court.name, sport: court.sport_type ?? '', pricePerHour: court.price_per_hour ?? 0 }];
   if (court.venue_id) {
     const [{ data: v }, { data: siblings }] = await Promise.all([
-      supabase.from('venues').select('id, name, address, city, phone, description, opening_hours').eq('id', court.venue_id).maybeSingle(),
+      supabase.from('venues').select('id, name, address, city, phone, email, description, opening_hours').eq('id', court.venue_id).maybeSingle(),
       supabase.from('courts').select('id, name, sport_type, price_per_hour').eq('venue_id', court.venue_id).neq('is_active', false).order('name'),
     ]);
     if (v) {
@@ -108,6 +118,7 @@ export async function fetchCourtPage(courtId: string): Promise<CourtPage | null>
         address: v.address,
         city: v.city,
         phone: v.phone,
+        email: v.email,
         description: v.description,
         openingHours: v.opening_hours,
       };
@@ -117,7 +128,16 @@ export async function fetchCourtPage(courtId: string): Promise<CourtPage | null>
     }
   }
 
-  return { courtId: court.id, images: court.images ?? [], amenities: court.amenities ?? [], venue, courts };
+  return {
+    courtId: court.id,
+    name: court.name,
+    rating: court.rating ?? 0,
+    reviews: court.review_count ?? 0,
+    images: court.images?.length ? court.images : ['https://images.unsplash.com/photo-1624880357913-a8539238245b?w=800&q=80'],
+    amenities: court.amenities ?? [],
+    venue,
+    courts,
+  };
 }
 
 /** Slot grid per court for one date (mirrors CourtDetails.fetchSlots). */
@@ -167,4 +187,28 @@ export async function fetchSlotGrid(courts: VenueCourt[], date: string): Promise
       ];
     }),
   );
+}
+
+export interface OpenGameAtSlot {
+  id: string;
+  maxPlayers: number;
+  currentPlayers: number;
+}
+
+/** Open games on a date keyed by slot id, for the "Jogos Abertos" tab (mirrors CourtDetails). */
+export async function fetchOpenGamesBySlot(courtIds: string[], date: string): Promise<Record<string, OpenGameAtSlot>> {
+  if (!courtIds.length) return {};
+  const { data, error } = await supabase
+    .from('games')
+    .select('id, slot_id, max_players, current_players')
+    .in('court_id', courtIds)
+    .eq('is_open', true)
+    .gte('scheduled_at', `${date}T00:00:00`)
+    .lte('scheduled_at', `${date}T23:59:59`);
+  if (error) throw error;
+  const bySlot: Record<string, OpenGameAtSlot> = {};
+  for (const g of data ?? []) {
+    if (g.slot_id) bySlot[g.slot_id] = { id: g.id, maxPlayers: g.max_players ?? 0, currentPlayers: g.current_players ?? 0 };
+  }
+  return bySlot;
 }
