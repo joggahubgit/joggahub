@@ -1,16 +1,15 @@
 // Port of src/app/components/OpenGamePage.tsx (web).
-// Join (paid or free) and paying a venue reservation run in the app through the
-// server-side checkout. Leave / remove player / cancel / add player still open
-// the website (refund flows — next step of the payment phase).
-import { useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+// Every money action runs in the app: join (paid/free), add player, pay a venue
+// reservation (server-side checkout), and leave / remove / cancel (refunds by
+// leave-game / cancel-game on the server).
+import { useRef, useState } from 'react';
+import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
-import * as WebBrowser from 'expo-web-browser';
 import * as Clipboard from 'expo-clipboard';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Calendar, CheckCircle, Clock, Copy, Crown, Lock, MapPin, MessageCircle, Share2, Shield, Trash2, X, Zap } from 'lucide-react-native';
+import { ArrowLeft, Calendar, CheckCircle, Clock, Copy, Crown, Lock, MapPin, MessageCircle, Search, Share2, Shield, Trash2, X, Zap } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { useAuth } from '@/features/auth/AuthProvider';
@@ -19,6 +18,7 @@ import { GameResultSubmit } from '@/features/results/GameResultSubmit';
 import { calcFees, startCheckout } from '@/features/payments/checkout';
 import { getEnv } from '@/lib/env';
 import { supabase } from '@/lib/supabase';
+import { confirmAction } from '@/lib/confirm';
 import { PLAYER_CANCEL_CUTOFF_HOURS } from '@/lib/shared';
 import palette from '../../../../tailwind.palette';
 
@@ -83,10 +83,15 @@ export default function OpenGamePage() {
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState('');
   const [pendingTeam, setPendingTeam] = useState<'a' | 'b'>('a');
+  const [busy, setBusy] = useState(false);
+  const [showAddPlayer, setShowAddPlayer] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<{ id: string; name: string }[]>([]);
+  const [searching, setSearching] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const goHome = () => router.replace('/');
   const webUrl = `${getEnv().webUrl}/open-game/${id}`;
-  const openSite = () => WebBrowser.openBrowserAsync(webUrl).catch(() => {});
 
   const header = (
     <SafeAreaView edges={['top']} className="bg-white border-b border-gray-100">
@@ -211,11 +216,89 @@ export default function OpenGamePage() {
       else payToJoin(team);
       return;
     }
-    if (isEnrolled || isOrganizer) openSite();
+    if (isEnrolled || isOrganizer) setShowAddPlayer(true);
     else setShowJoin(true);
   };
 
   const joinFees = calcFees(g.pricePerPlayer);
+
+  /** leave-game / cancel-game: refunds and notifications happen on the server. */
+  const runGameAction = async (fn: 'leave-game' | 'cancel-game', body: Record<string, unknown>, after: 'home' | 'refetch') => {
+    setBusy(true);
+    setJoinError('');
+    const { data, error } = await supabase.functions.invoke(fn, { body: { gameId: g.id, ...body } });
+    setBusy(false);
+    setShowCancelConfirm(false);
+    setShowLeaveConfirm(false);
+    setShowPlayerLeaveConfirm(false);
+    if (error || data?.error) {
+      const ctx = await (error as { context?: Response } | null)?.context?.json?.().catch(() => null);
+      setJoinError(ctx?.error ?? data?.error ?? 'Não foi possível concluir. Tente novamente.');
+      q.refetch();
+      return;
+    }
+    if (after === 'home') goHome();
+    else q.refetch();
+  };
+
+  const removePlayer = (player: GamePlayer) =>
+    confirmAction({
+      title: `Remover ${player.name.split(' ')[0]}?`,
+      message: 'O jogador será removido da partida e o valor dele será estornado.',
+      confirmText: 'Remover',
+      destructive: true,
+      onConfirm: () => runGameAction('leave-game', { targetPlayerId: player.id }, 'refetch'),
+    });
+
+  const closeAddPlayer = () => {
+    setShowAddPlayer(false);
+    setSearchQuery('');
+    setSearchResults([]);
+  };
+
+  const onSearch = (text: string) => {
+    setSearchQuery(text);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (!text.trim()) {
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    searchTimer.current = setTimeout(async () => {
+      // Only names: other players' phone numbers are not shown in the app.
+      const { data } = await supabase.from('profiles').select('id, name').ilike('name', `%${text.trim()}%`).limit(8);
+      const inGame = new Set(g.players.map(pl => pl.id));
+      setSearchResults((data ?? []).filter(r => r.name && !inGame.has(r.id)) as { id: string; name: string }[]);
+      setSearching(false);
+    }, 300);
+  };
+
+  const selectPlayer = (pl: { id: string; name: string }) => {
+    if (withinJoinCutoff) return;
+    closeAddPlayer();
+    router.push({
+      pathname: '/join-game-review',
+      params: {
+        gameId: g.id,
+        playerId: pl.id,
+        playerName: pl.name,
+        courtName: g.courtName,
+        courtSport: g.sport,
+        venueName: g.venueName,
+        date,
+        time,
+        endTime,
+        pricePerPlayer: String(g.pricePerPlayer),
+        mode: 'join_other',
+        isPrivate: String(g.isPrivate),
+        gamePayMode: g.payMode,
+        currentPlayers: String(g.currentPlayers),
+        maxPlayers: String(g.maxPlayers),
+        ...(g.sport === 'futevolei' ? { team: pendingTeam } : {}),
+      },
+    });
+  };
 
   const renderSlot = (i: number, team?: 'a' | 'b') => {
     const player = players[i] as (GamePlayer & { isCurrentUser: boolean }) | undefined;
@@ -245,7 +328,7 @@ export default function OpenGamePage() {
               )}
               {(canRemove || canSelfLeave) && (
                 <Pressable
-                  onPress={() => (canSelfLeave ? setShowPlayerLeaveConfirm(true) : openSite())}
+                  onPress={() => (canSelfLeave ? setShowPlayerLeaveConfirm(true) : removePlayer(player))}
                   accessibilityLabel={canSelfLeave ? 'Sair da partida' : `Remover ${player.name}`}
                   hitSlop={6}
                   className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full items-center justify-center"
@@ -581,7 +664,7 @@ export default function OpenGamePage() {
         </View>
         <SheetButtons
           onBack={() => setShowCancelConfirm(false)}
-          confirm={{ label: 'Cancelar no site', className: 'bg-red-500', onPress: () => { setShowCancelConfirm(false); openSite(); } }}
+          confirm={{ label: busy ? 'Cancelando...' : 'Confirmar cancelamento', className: busy ? 'bg-red-500 opacity-60' : 'bg-red-500', onPress: () => !busy && runGameAction('cancel-game', {}, 'home') }}
         />
       </BottomSheet>
 
@@ -605,7 +688,7 @@ export default function OpenGamePage() {
         </View>
         <SheetButtons
           onBack={() => setShowPlayerLeaveConfirm(false)}
-          confirm={withinCancelCutoff ? undefined : { label: 'Sair pelo site', className: 'bg-red-500', onPress: () => { setShowPlayerLeaveConfirm(false); openSite(); } }}
+          confirm={withinCancelCutoff ? undefined : { label: busy ? 'Saindo...' : 'Confirmar saída', className: busy ? 'bg-red-500 opacity-60' : 'bg-red-500', onPress: () => !busy && runGameAction('leave-game', {}, 'home') }}
         />
       </BottomSheet>
 
@@ -632,7 +715,7 @@ export default function OpenGamePage() {
                     <Text className="text-sm font-bold text-gray-700">{players[1].name.split(' ')[0]}</Text> assumirá como novo organizador.
                   </>
                 ) : (
-                  'a partida continuará sem organizador.'
+                  'como você é o único jogador, para sair é preciso cancelar a partida.'
                 )}
               </Text>
               <Text className="text-sm text-gray-500 leading-relaxed text-center">O estorno da sua parte será processado de acordo com as políticas do JoggaHub.</Text>
@@ -641,7 +724,7 @@ export default function OpenGamePage() {
         </View>
         <SheetButtons
           onBack={() => setShowLeaveConfirm(false)}
-          confirm={withinCancelCutoff ? undefined : { label: 'Sair pelo site', className: 'bg-amber-500', onPress: () => { setShowLeaveConfirm(false); openSite(); } }}
+          confirm={withinCancelCutoff || !players[1] ? undefined : { label: busy ? 'Saindo...' : 'Confirmar saída', className: busy ? 'bg-amber-500 opacity-60' : 'bg-amber-500', onPress: () => !busy && runGameAction('leave-game', {}, 'home') }}
         />
       </BottomSheet>
 
@@ -696,6 +779,49 @@ export default function OpenGamePage() {
         <Pressable onPress={() => setShowJoin(false)} className="w-full mt-3 py-3 items-center">
           <Text className="text-sm text-gray-500 font-semibold">Cancelar</Text>
         </Pressable>
+      </BottomSheet>
+
+      {/* Add player */}
+      <BottomSheet visible={showAddPlayer} onClose={closeAddPlayer}>
+        <View className="flex-row items-center justify-between mb-4">
+          <Text className="font-bold text-gray-900 text-xl">Adicionar jogador</Text>
+          <Pressable onPress={closeAddPlayer} accessibilityLabel="Fechar" className="p-2 rounded-full">
+            <X size={20} color={palette.gray['500']} />
+          </Pressable>
+        </View>
+        <View className="flex-row items-center gap-2 bg-gray-100 rounded-2xl px-4 py-3 mb-4">
+          <Search size={16} color={palette.gray['400']} />
+          <TextInput
+            autoFocus
+            placeholder="Buscar por nome..."
+            placeholderTextColor={palette.gray['400']}
+            value={searchQuery}
+            onChangeText={onSearch}
+            className="flex-1 text-gray-800 text-sm"
+            style={{ fontFamily: 'Inter_400Regular', paddingVertical: 0 }}
+          />
+          {searching && <ActivityIndicator size="small" color={palette.gray['400']} />}
+          {!!searchQuery && !searching && (
+            <Pressable onPress={() => onSearch('')} accessibilityLabel="Limpar busca">
+              <X size={16} color={palette.gray['400']} />
+            </Pressable>
+          )}
+        </View>
+        <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
+          {!searchQuery && <Text className="text-sm text-gray-400 text-center py-8">Digite o nome do jogador para buscar</Text>}
+          {!!searchQuery && !searching && searchResults.length === 0 && (
+            <Text className="text-sm text-gray-400 text-center py-8">Nenhum jogador encontrado</Text>
+          )}
+          {searchResults.map(r => (
+            <Pressable key={r.id} onPress={() => selectPlayer(r)} className="flex-row items-center gap-3 px-2 py-3 rounded-2xl active:bg-gray-50">
+              <View className="w-10 h-10 bg-violet-600 rounded-full items-center justify-center">
+                <Text className="text-white font-bold">{r.name.charAt(0).toUpperCase()}</Text>
+              </View>
+              <Text className="flex-1 font-semibold text-gray-900 text-sm">{r.name}</Text>
+              <Text className="text-xs text-violet-600 font-semibold">Selecionar</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
       </BottomSheet>
 
       {/* Share */}
