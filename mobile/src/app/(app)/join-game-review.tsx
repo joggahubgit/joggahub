@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useQueryClient } from '@tanstack/react-query';
 import { CheckCircle, ChevronDown, ChevronUp, Clock, Lock, MapPin, ShieldCheck, Users, X } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { calcFees, startCheckout } from '@/features/payments/checkout';
@@ -39,6 +40,7 @@ const formatDate = (iso: string) =>
 
 export default function JoinGameReview() {
   const p = useLocalSearchParams<Params>();
+  const qc = useQueryClient();
   const [policyExpanded, setPolicyExpanded] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState('');
@@ -73,7 +75,11 @@ export default function JoinGameReview() {
       setConfirming(false);
       return;
     }
-    router.replace({ pathname: '/game/[id]', params: { id: p.gameId } });
+    // Refresh the cached game (and lists) so the new player shows up, then
+    // return to the game screen underneath instead of stacking a second copy.
+    await qc.invalidateQueries();
+    if (router.canGoBack()) router.back();
+    else router.replace({ pathname: '/game/[id]', params: { id: p.gameId } });
   }
 
   async function confirmPaid() {
