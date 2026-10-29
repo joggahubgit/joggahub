@@ -30,7 +30,7 @@ export default function GameChat() {
   useEffect(() => {
     if (!id) return;
     const channel = supabase
-      .channel(`game-chat-${id}`)
+      .channel(`game-chat-${id}-${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_messages', filter: `game_id=eq.${id}` }, payload => {
         const msg = payload.new as ChatMessage;
         qc.setQueryData<ChatData>(['chat', id], prev => (prev && !prev.messages.some(m => m.id === msg.id) ? { ...prev, messages: [...prev.messages, msg] } : prev));

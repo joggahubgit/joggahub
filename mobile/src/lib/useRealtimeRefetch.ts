@@ -15,7 +15,9 @@ export function useRealtimeRefetch(channelName: string | null, tables: string[],
   const key = tables.join(',');
   useEffect(() => {
     if (!channelName) return;
-    let channel = supabase.channel(channelName);
+    // Unique topic per subscription: removeChannel is async, so a quick remount
+    // would otherwise get back the old, already-subscribed channel and crash.
+    let channel = supabase.channel(`${channelName}-${Math.random().toString(36).slice(2)}`);
     for (const table of key.split(',')) {
       channel = channel.on('postgres_changes', { event: '*', schema: 'public', table }, () => cb.current());
     }
