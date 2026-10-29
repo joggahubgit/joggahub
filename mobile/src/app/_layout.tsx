@@ -33,11 +33,11 @@ function RootNavigator() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       {/* Guards: screens are unreachable — even by deep link — unless the condition holds. */}
-      <Stack.Protected guard={signedIn}>
+      <Stack.Protected guard={signedIn} redirectTo="/login">
         {/* Every signed-in screen lives under (app) so new routes are protected by default. */}
         <Stack.Screen name="(app)" />
       </Stack.Protected>
-      <Stack.Protected guard={!signedIn}>
+      <Stack.Protected guard={!signedIn} redirectTo="/">
         <Stack.Screen name="(auth)" />
       </Stack.Protected>
     </Stack>

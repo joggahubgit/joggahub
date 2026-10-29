@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 
 /**
@@ -20,7 +21,7 @@ async function removeChunks(base: string) {
   await SecureStore.deleteItemAsync(`${base}.n`);
 }
 
-export const secureStorage = {
+const nativeStorage = {
   async getItem(key: string): Promise<string | null> {
     const base = safeKey(key);
     const count = Number(await SecureStore.getItemAsync(`${base}.n`)) || 0;
@@ -46,3 +47,19 @@ export const secureStorage = {
     await removeChunks(safeKey(key));
   },
 };
+
+// Browser preview only (`expo start --web`, used for quick feedback on a PC).
+// SecureStore has no web implementation; the shipped apps are iOS/Android only.
+const webStorage = {
+  async getItem(key: string) {
+    return globalThis.localStorage?.getItem(key) ?? null;
+  },
+  async setItem(key: string, value: string) {
+    globalThis.localStorage?.setItem(key, value);
+  },
+  async removeItem(key: string) {
+    globalThis.localStorage?.removeItem(key);
+  },
+};
+
+export const secureStorage = Platform.OS === 'web' ? webStorage : nativeStorage;

@@ -3,6 +3,7 @@ import { Alert, StyleSheet, Text, View } from 'react-native';
 import { Screen } from '@/components/Screen';
 import { Button } from '@/components/Button';
 import { useAuth } from '@/features/auth/AuthProvider';
+import { confirmAction } from '@/lib/confirm';
 import { colors, fonts, radius, spacing, type } from '@/theme/tokens';
 
 export default function ProfileScreen() {
@@ -10,22 +11,21 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(false);
 
   function confirmSignOut() {
-    Alert.alert('Sair da conta?', 'Você precisará entrar de novo neste aparelho.', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Sair',
-        style: 'destructive',
-        onPress: async () => {
-          setLoading(true);
-          try {
-            await signOut();
-          } catch {
-            setLoading(false);
-            Alert.alert('Não foi possível sair', 'Tente novamente.');
-          }
-        },
+    confirmAction({
+      title: 'Sair da conta?',
+      message: 'Você precisará entrar de novo neste aparelho.',
+      confirmText: 'Sair',
+      destructive: true,
+      onConfirm: async () => {
+        setLoading(true);
+        try {
+          await signOut();
+        } catch {
+          setLoading(false);
+          Alert.alert('Não foi possível sair', 'Tente novamente.');
+        }
       },
-    ]);
+    });
   }
 
   const name = profile?.name ?? 'Jogador';
