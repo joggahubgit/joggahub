@@ -16,6 +16,8 @@ export default function AppLayout() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="games" options={{ title: 'Partidas abertas' }} />
       <Stack.Screen name="game/[id]" options={{ title: 'Partida' }} />
+      <Stack.Screen name="courts" options={{ title: 'Quadras' }} />
+      <Stack.Screen name="court/[id]" options={{ title: 'Quadra' }} />
     </Stack>
   );
 }

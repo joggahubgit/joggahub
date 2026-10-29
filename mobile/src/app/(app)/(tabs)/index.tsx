@@ -2,7 +2,7 @@ import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRight, Search } from 'lucide-react-native';
+import { MapPin, Search } from 'lucide-react-native';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { fetchOpenGames, fetchUpcomingGames } from '@/features/games/api';
 import { GameCard } from '@/features/games/GameCard';
@@ -49,11 +49,18 @@ export default function HomeScreen() {
           </Text>
         </View>
 
-        <Card onPress={() => router.push('/games')} style={styles.search} accessibilityLabel="Encontrar partidas abertas">
-          <Search size={20} color={colors.primary} />
-          <Text style={[type.label, styles.fill]}>Encontrar partidas</Text>
-          <ChevronRight size={20} color={colors.textMuted} />
-        </Card>
+        <View style={styles.actions}>
+          <Card onPress={() => router.push('/courts')} style={styles.action} accessibilityLabel="Encontrar quadras">
+            <MapPin size={22} color={colors.primary} />
+            <Text style={type.label}>Quadras</Text>
+            <Text style={type.caption}>Ver horários</Text>
+          </Card>
+          <Card onPress={() => router.push('/games')} style={styles.action} accessibilityLabel="Encontrar partidas abertas">
+            <Search size={22} color={colors.primary} />
+            <Text style={type.label}>Partidas</Text>
+            <Text style={type.caption}>Com vagas abertas</Text>
+          </Card>
+        </View>
 
         <SectionHeader title="Próximas partidas" />
         {upcoming.isPending ? (
@@ -89,7 +96,8 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl },
-  search: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  actions: { flexDirection: 'row', gap: spacing.md },
+  action: { flex: 1, gap: spacing.xs },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.md },
   sectionAction: { fontFamily: fonts.semibold, fontSize: 14, color: colors.primary, padding: spacing.sm },
 });
