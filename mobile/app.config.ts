@@ -3,9 +3,8 @@ import type { ExpoConfig } from 'expo/config';
 const appEnv = process.env.EXPO_PUBLIC_APP_ENV ?? 'development';
 const isProd = appEnv === 'production';
 
-// TODO(decision): confirm the final identifiers before the first store build.
-// They cannot be changed after the app is published.
-const BUNDLE_ID = 'com.joggahub.app';
+// Permanent store identifier (cannot change after the first publish).
+const BUNDLE_ID = 'br.com.joggahub.app';
 
 const config: ExpoConfig = {
   name: isProd ? 'JoggaHub' : `JoggaHub (${appEnv})`,
@@ -19,6 +18,10 @@ const config: ExpoConfig = {
     // Separate IDs let dev and prod builds live side by side on one device.
     bundleIdentifier: isProd ? BUNDLE_ID : `${BUNDLE_ID}.${appEnv}`,
     supportsTablet: false,
+    infoPlist: {
+      // Only standard HTTPS/TLS: skips the export-compliance question on every upload.
+      ITSAppUsesNonExemptEncryption: false,
+    },
   },
   android: {
     package: isProd ? BUNDLE_ID : `${BUNDLE_ID}.${appEnv}`,
@@ -29,6 +32,8 @@ const config: ExpoConfig = {
       monochromeImage: './assets/android-icon-monochrome.png',
     },
     predictiveBackGestureEnabled: false,
+    // The image picker would otherwise add microphone/camera permissions we never use.
+    blockedPermissions: ['android.permission.RECORD_AUDIO', 'android.permission.CAMERA'],
   },
   plugins: [
     'expo-router',
