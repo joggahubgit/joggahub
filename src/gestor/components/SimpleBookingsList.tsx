@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Search, Filter, CheckCircle, XCircle, Phone, Mail, Calendar, Clock, DollarSign, ChevronDown, MoreVertical } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
+import { GESTOR_CAN_MARK_PAID } from '../features';
 import { GestorBookingDetail } from './GestorBookingDetail';
 
 interface Props { venueId: string; }
@@ -231,7 +232,7 @@ export function SimpleBookingsList({ venueId }: Props) {
       </div>
 
       {/* Bulk actions */}
-      {selectedBookings.length > 0 && (
+      {GESTOR_CAN_MARK_PAID && selectedBookings.length > 0 && (
         <div className="bg-gradient-to-r from-purple-600 to-purple-700 rounded-xl md:rounded-2xl p-3 md:p-4 shadow-lg">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3 md:gap-4 text-white">
@@ -355,7 +356,7 @@ export function SimpleBookingsList({ venueId }: Props) {
                           </div>
                         </div>
                         <div className="flex gap-2">
-                          {booking.payment_status === 'pending' && (
+                          {GESTOR_CAN_MARK_PAID && booking.payment_status === 'pending' && (
                             <button onClick={() => confirmPayment(booking.id)}
                               className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors text-sm">
                               Confirmar Pagamento
@@ -427,7 +428,7 @@ export function SimpleBookingsList({ venueId }: Props) {
                           <p className="text-sm text-gray-600">📞 {booking.player_phone}</p>
                           <p className="text-sm text-gray-600">🆔 #{booking.id.slice(0, 8)}</p>
                           <div className="flex gap-2 mt-3">
-                            {booking.payment_status === 'pending' && (
+                            {GESTOR_CAN_MARK_PAID && booking.payment_status === 'pending' && (
                               <button onClick={() => confirmPayment(booking.id)}
                                 className="flex-1 px-3 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors text-sm">
                                 Confirmar

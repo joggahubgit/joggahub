@@ -5,6 +5,7 @@ import {
   XCircle, Bell, CreditCard, Users, Lock, ShieldCheck, Hourglass, Star,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
+import { GESTOR_CAN_MARK_PAID } from '../features';
 import { getMaxPlayersForSport } from '@/app/lib/gameConfig';
 
 interface Booking {
@@ -442,7 +443,12 @@ export function SlotModal({ slot, courtName, onClose, onRefresh }: Props) {
 
                   {/* Actions */}
                   <div className="space-y-2">
-                    {!isPaid && (
+                    {!isPaid && !GESTOR_CAN_MARK_PAID && (
+                      <p className="text-xs text-gray-500 text-center px-2">
+                        O jogador paga pelo app. Sem pagamento em até 2 horas, a reserva é cancelada automaticamente.
+                      </p>
+                    )}
+                    {!isPaid && GESTOR_CAN_MARK_PAID && (
                       <button onClick={handleConfirmPayment} disabled={busy}
                         className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-green-600 text-white font-semibold hover:bg-green-700 transition-colors disabled:opacity-60">
                         {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}

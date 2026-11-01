@@ -4,6 +4,7 @@ import {
   CheckCircle, AlertCircle, XCircle, Loader2, Bell, CreditCard,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
+import { GESTOR_CAN_MARK_PAID } from '../features';
 
 interface Props {
   bookingId: string;
@@ -254,7 +255,12 @@ export function GestorBookingDetail({ bookingId, onClose, onChanged }: Props) {
               {/* Actions */}
               {!isCancelled && (
                 <div className="space-y-3">
-                  {!isPaid && (
+                  {!isPaid && !GESTOR_CAN_MARK_PAID && (
+                    <p className="text-xs text-gray-500 text-center px-2">
+                      O jogador paga pelo app. Sem pagamento em até 2 horas, a reserva é cancelada automaticamente.
+                    </p>
+                  )}
+                  {!isPaid && GESTOR_CAN_MARK_PAID && (
                     <button
                       onClick={confirmPayment}
                       disabled={busy}
