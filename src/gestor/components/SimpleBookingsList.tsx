@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Filter, CheckCircle, XCircle, Phone, Mail, Calendar, Clock, DollarSign, ChevronDown, MoreVertical } from 'lucide-react';
+import { Search, Filter, CheckCircle, XCircle, Calendar, Clock, DollarSign } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
 import { GESTOR_CAN_MARK_PAID } from '../features';
 import { GestorBookingDetail } from './GestorBookingDetail';
@@ -29,7 +29,6 @@ export function SimpleBookingsList({ venueId }: Props) {
   const [filterDate, setFilterDate] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBookings, setSelectedBookings] = useState<string[]>([]);
-  const [expandedBooking, setExpandedBooking] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [courts, setCourts] = useState<{ id: string; name: string }[]>([]);
   const [detailBookingId, setDetailBookingId] = useState<string | null>(null);
@@ -95,23 +94,6 @@ export function SimpleBookingsList({ venueId }: Props) {
       setBookings(combined);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  }
-
-  async function confirmPayment(id: string) {
-    await supabase.from('bookings').update({ payment_status: 'paid' }).eq('id', id);
-    fetchBookings();
-    setSelectedBookings(prev => prev.filter(i => i !== id));
-  }
-
-  async function cancelBooking(id: string) {
-    if (!confirm('Cancelar esta reserva?')) return;
-    const booking = bookings.find(b => b.id === id);
-    await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', id);
-    // Re-enable the slot so players can book it again
-    if (booking?.slot_id) {
-      await supabase.from('slots').update({ is_available: true }).eq('id', booking.slot_id);
-    }
-    fetchBookings();
   }
 
   async function bulkConfirmPayment() {
@@ -330,45 +312,9 @@ export function SimpleBookingsList({ venueId }: Props) {
                             )}
                           </div>
                         </div>
-                        <button onClick={() => setExpandedBooking(expandedBooking === booking.id ? null : booking.id)}
-                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                          <ChevronDown className={`w-5 h-5 text-gray-600 transition-transform ${expandedBooking === booking.id ? 'rotate-180' : ''}`} />
-                        </button>
+                        <div className="w-10" />
                       </div>
                     </div>
-
-                    {expandedBooking === booking.id && (
-                      <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                          <div className="flex items-center gap-3">
-                            <Phone className="w-5 h-5 text-gray-400" />
-                            <div>
-                              <p className="text-xs text-gray-600">Telefone</p>
-                              <p className="font-semibold text-gray-900">{booking.player_phone}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <Mail className="w-5 h-5 text-gray-400" />
-                            <div>
-                              <p className="text-xs text-gray-600">ID da Reserva</p>
-                              <p className="font-semibold text-gray-900 text-xs">#{booking.id.slice(0, 8)}</p>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          {GESTOR_CAN_MARK_PAID && booking.payment_status === 'pending' && (
-                            <button onClick={() => confirmPayment(booking.id)}
-                              className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors text-sm">
-                              Confirmar Pagamento
-                            </button>
-                          )}
-                          <button onClick={() => cancelBooking(booking.id)}
-                            className="px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-colors text-sm">
-                            Cancelar Reserva
-                          </button>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
@@ -400,10 +346,6 @@ export function SimpleBookingsList({ venueId }: Props) {
                             <span>{formatTime(booking.start_time)}</span>
                           </div>
                         </div>
-                        <button onClick={() => setExpandedBooking(expandedBooking === booking.id ? null : booking.id)}
-                          className="p-1 hover:bg-gray-100 rounded-lg transition-colors ml-2">
-                          <MoreVertical className="w-5 h-5 text-gray-600" />
-                        </button>
                       </div>
 
                       <div className="flex items-center gap-2 mb-2">
@@ -422,25 +364,6 @@ export function SimpleBookingsList({ venueId }: Props) {
                           </div>
                         )}
                       </div>
-
-                      {expandedBooking === booking.id && (
-                        <div className="mt-3 pt-3 border-t border-gray-200 space-y-2">
-                          <p className="text-sm text-gray-600">📞 {booking.player_phone}</p>
-                          <p className="text-sm text-gray-600">🆔 #{booking.id.slice(0, 8)}</p>
-                          <div className="flex gap-2 mt-3">
-                            {GESTOR_CAN_MARK_PAID && booking.payment_status === 'pending' && (
-                              <button onClick={() => confirmPayment(booking.id)}
-                                className="flex-1 px-3 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors text-sm">
-                                Confirmar
-                              </button>
-                            )}
-                            <button onClick={() => cancelBooking(booking.id)}
-                              className="flex-1 px-3 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-colors text-sm">
-                              Cancelar
-                            </button>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>
