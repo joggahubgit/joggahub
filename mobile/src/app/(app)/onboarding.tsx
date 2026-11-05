@@ -5,11 +5,11 @@ import { router } from 'expo-router';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
-import { Camera, Check, ChevronRight, LocateFixed, Zap } from 'lucide-react-native';
+import { Camera, Check, ChevronRight, Zap } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { declareInitialRating, fetchFutevoleiRating, pickAvatar, updateProfile, uploadAvatar, type PickedImage } from '@/features/profile/api';
-import { detectCity } from '@/features/profile/detectCity';
+import { CityInput } from '@/features/profile/CityInput';
 import { supabase } from '@/lib/supabase';
 import { DAY_OPTIONS as DAYS, FOOT_OPTIONS, FUTEVOLEI_LEVELS, PERIOD_OPTIONS as PERIODS, POSITION_OPTIONS as POSITIONS } from '@/lib/shared';
 import palette from '../../../tailwind.palette';
@@ -34,8 +34,7 @@ export default function Onboarding() {
 
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
-  const [locating, setLocating] = useState(false);
-  const [locateError, setLocateError] = useState('');
+  const [cityValid, setCityValid] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [image, setImage] = useState<PickedImage | null>(null);
   const [name, setName] = useState(profile?.name ?? '');
@@ -48,19 +47,7 @@ export default function Onboarding() {
   const avatarPreview = image?.uri ?? profile?.avatar_url ?? null;
 
   const toggle = (list: string[], v: string) => (list.includes(v) ? list.filter(x => x !== v) : [...list, v]);
-  const canAdvance = step === 1 ? !!name.trim() && !!city.trim() : step === 2 ? !!position && !!foot : true;
-
-  async function locate() {
-    setLocating(true);
-    setLocateError('');
-    try {
-      setCity(await detectCity());
-    } catch (e) {
-      setLocateError((e as Error)?.message ?? 'Não foi possível identificar sua cidade.');
-    } finally {
-      setLocating(false);
-    }
-  }
+  const canAdvance = step === 1 ? !!name.trim() && cityValid : step === 2 ? !!position && !!foot : true;
 
   async function finish() {
     setSaving(true);
@@ -159,23 +146,7 @@ export default function Onboarding() {
               </View>
               <View>
                 <Text className="text-sm font-semibold text-gray-700 mb-2">Cidade</Text>
-                <View className="flex-row items-center border-2 border-gray-200 rounded-xl pr-3">
-                  <TextInput
-                    value={city}
-                    onChangeText={t => {
-                      setCity(t);
-                      setLocateError('');
-                    }}
-                    placeholder="São Paulo, SP"
-                    placeholderTextColor={palette.gray['400']}
-                    className="flex-1 px-4 py-3.5 text-base text-gray-900"
-                    style={inputStyle}
-                  />
-                  <Pressable onPress={locate} disabled={locating} accessibilityLabel="Usar minha localização" hitSlop={8}>
-                    {locating ? <ActivityIndicator size="small" color={palette.violet['600']} /> : <LocateFixed size={20} color={palette.violet['600']} />}
-                  </Pressable>
-                </View>
-                {!!locateError && <Text className="text-xs text-red-500 mt-1.5">{locateError}</Text>}
+                <CityInput value={city} onChange={setCity} onValidChange={setCityValid} paddingClassName="py-3.5" />
               </View>
             </View>
           )}

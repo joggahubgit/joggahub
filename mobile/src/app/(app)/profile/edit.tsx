@@ -6,11 +6,11 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollVie
 import { router, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Camera, Check, CheckCircle2, LocateFixed } from 'lucide-react-native';
+import { ArrowLeft, Camera, Check, CheckCircle2 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { pickAvatar, updateProfile, uploadAvatar, type PickedImage } from '@/features/profile/api';
-import { detectCity } from '@/features/profile/detectCity';
+import { CityInput } from '@/features/profile/CityInput';
 import { ProfileCompletenessCard } from '@/features/profile/ProfileCards';
 import type { Profile } from '@/lib/supabase';
 import { DAY_OPTIONS, FOOT_OPTIONS, PERIOD_OPTIONS, POSITION_OPTIONS, profileCompleteness, type ProfileSection } from '@/lib/shared';
@@ -215,20 +215,7 @@ function IdentitySection({ profile, userId, save, highlight, onLayoutY }: Sectio
 
 function CitySection({ profile, save, highlight, onLayoutY }: SectionProps) {
   const [city, setCity] = useState(profile.location ?? '');
-  const [locating, setLocating] = useState(false);
-  const [locateError, setLocateError] = useState('');
-
-  async function locate() {
-    setLocating(true);
-    setLocateError('');
-    try {
-      setCity(await detectCity());
-    } catch (e) {
-      setLocateError((e as Error)?.message ?? 'Não foi possível identificar sua cidade.');
-    } finally {
-      setLocating(false);
-    }
-  }
+  const [cityValid, setCityValid] = useState(false);
 
   return (
     <Section
@@ -236,28 +223,11 @@ function CitySection({ profile, save, highlight, onLayoutY }: SectionProps) {
       hint="Usada no ranking da sua cidade"
       highlight={highlight}
       dirty={city.trim() !== (profile.location ?? '')}
-      canSave={city.trim().length > 0}
+      canSave={cityValid}
       onSave={() => save({ location: city.trim() })}
       onLayoutY={onLayoutY}
     >
-      <View className="flex-row items-center border-2 border-gray-200 rounded-xl pr-3">
-        <TextInput
-          value={city}
-          onChangeText={t => {
-            setCity(t);
-            setLocateError('');
-          }}
-          placeholder="São Paulo, SP"
-          placeholderTextColor={palette.gray['400']}
-          maxLength={80}
-          className="flex-1 px-4 py-3 text-base text-gray-900"
-          style={inputStyle}
-        />
-        <Pressable onPress={locate} disabled={locating} accessibilityLabel="Usar minha localização" hitSlop={8}>
-          {locating ? <ActivityIndicator size="small" color={palette.violet['600']} /> : <LocateFixed size={20} color={palette.violet['600']} />}
-        </Pressable>
-      </View>
-      {!!locateError && <Text className="text-xs text-red-500 mt-1.5">{locateError}</Text>}
+      <CityInput value={city} onChange={setCity} onValidChange={setCityValid} />
     </Section>
   );
 }

@@ -47,7 +47,13 @@ export function CityInput({ value, onChange, onValidChange, inputClassName }: Pr
   );
   useEffect(() => { setActive(0); }, [value]);
 
+  // Latest text, also set by pick(): the blur that follows a pick still sees
+  // the typed text in `value` ("santos") and would overwrite the chosen city.
+  const latest = useRef(value);
+  latest.current = value;
+
   function pick(city: City) {
+    latest.current = city.label;
     onChange(city.label);
     setError('');
     inputRef.current?.blur();
@@ -55,10 +61,10 @@ export function CityInput({ value, onChange, onValidChange, inputClassName }: Pr
 
   function handleBlur() {
     setFocused(false);
-    if (cities && value && !valid) {
-      const fixed = canonicalCity(cities, value);
-      if (fixed) onChange(fixed);
-    }
+    const text = latest.current;
+    if (!cities || !text || cities.some(c => c.label === text)) return;
+    const fixed = canonicalCity(cities, text);
+    if (fixed) onChange(fixed);
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
