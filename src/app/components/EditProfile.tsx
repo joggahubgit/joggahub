@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Camera, Check, Loader2, LocateFixed, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Camera, Check, Loader2, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { supabase, type Profile } from '@/lib/supabase';
 import {
   POSITION_OPTIONS, FOOT_OPTIONS, DAY_OPTIONS, PERIOD_OPTIONS,
-  profileCompleteness, detectCity, type ProfileSection,
+  profileCompleteness, type ProfileSection,
 } from '@/app/lib/profileFields';
 import { ProfileCompletenessCard } from './ProfileCompletenessCard';
+import { CityInput } from './CityInput';
 
 const BIO_MAX = 160;
 
@@ -181,32 +182,16 @@ function IdentitySection({ profile, userId, save, highlight }: { profile: Profil
 
 function CitySection({ profile, save, highlight }: { profile: Profile; save: SaveFn; highlight: boolean }) {
   const [city, setCity] = useState(profile.location ?? '');
-  const [locating, setLocating] = useState(false);
-  const [locateError, setLocateError] = useState('');
+  const [cityValid, setCityValid] = useState(false);
 
   useEffect(() => { setCity(profile.location ?? ''); }, [profile.location]);
 
-  async function locate() {
-    setLocating(true);
-    setLocateError('');
-    try { setCity(await detectCity()); }
-    catch (e: any) { setLocateError(e?.message ?? 'Não foi possível identificar sua cidade.'); }
-    finally { setLocating(false); }
-  }
-
   return (
     <Section id="cidade" title="Cidade" hint="Usada no ranking da sua cidade" highlight={highlight}
-      dirty={city.trim() !== (profile.location ?? '')} canSave={city.trim().length > 0}
+      dirty={city.trim() !== (profile.location ?? '')} canSave={cityValid}
       onSave={() => save({ location: city.trim() })}>
-      <div className="relative">
-        <input value={city} onChange={e => { setCity(e.target.value); setLocateError(''); }} placeholder="São Paulo, SP" maxLength={80}
-          className="w-full px-4 py-3 pr-12 border-2 border-gray-200 rounded-xl focus:border-violet-600 focus:outline-none" />
-        <button type="button" onClick={locate} disabled={locating} title="Usar minha localização"
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-violet-600 disabled:text-gray-300">
-          {locating ? <Loader2 className="w-5 h-5 animate-spin" /> : <LocateFixed className="w-5 h-5" />}
-        </button>
-      </div>
-      {locateError && <p className="text-xs text-red-500 mt-1.5">{locateError}</p>}
+      <CityInput value={city} onChange={setCity} onValidChange={setCityValid}
+        inputClassName="w-full px-4 py-3 pr-12 border-2 border-gray-200 rounded-xl focus:border-violet-600 focus:outline-none" />
     </Section>
   );
 }

@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, ChevronRight, Camera, Loader2, Zap, LocateFixed } from 'lucide-react';
+import { Check, ChevronRight, Camera, Loader2, Zap } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { FUTEVOLEI_LEVELS } from '@/app/lib/futevoleiLevels';
 import {
-  POSITION_OPTIONS as POSITIONS, FOOT_OPTIONS, DAY_OPTIONS as DAYS, PERIOD_OPTIONS as PERIODS, detectCity,
+  POSITION_OPTIONS as POSITIONS, FOOT_OPTIONS, DAY_OPTIONS as DAYS, PERIOD_OPTIONS as PERIODS,
 } from '@/app/lib/profileFields';
+import { CityInput } from './CityInput';
 
 export default function Onboarding() {
   const navigate = useNavigate();
@@ -26,8 +27,7 @@ export default function Onboarding() {
       .then(({ data }) => setHasRating(!!data));
   }, [user?.id]);
   const [saving, setSaving] = useState(false);
-  const [locating, setLocating] = useState(false);
-  const [locateError, setLocateError] = useState('');
+  const [cityValid, setCityValid] = useState(false);
   const [saveError, setSaveError] = useState('');
 
   // Step 1
@@ -47,18 +47,6 @@ export default function Onboarding() {
   // Step 4 (optional — futevôlei only, for now)
   const [futevoleiLevel, setFutevoleiLevel] = useState('');
 
-  async function detectLocation() {
-    setLocating(true);
-    setLocateError('');
-    try {
-      setCity(await detectCity());
-    } catch (e: any) {
-      setLocateError(e?.message ?? 'Não foi possível identificar sua cidade.');
-    } finally {
-      setLocating(false);
-    }
-  }
-
   function toggleDay(d: string) {
     setDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]);
   }
@@ -74,7 +62,7 @@ export default function Onboarding() {
   }
 
   function canAdvance() {
-    if (step === 1) return name.trim().length > 0 && city.trim().length > 0;
+    if (step === 1) return name.trim().length > 0 && cityValid;
     if (step === 2) return position !== '' && foot !== '';
     return true; // step 3 is skippable
   }
@@ -229,30 +217,12 @@ export default function Onboarding() {
             {/* City */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Cidade</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={city}
-                  onChange={e => { setCity(e.target.value); setLocateError(''); }}
-                  className="w-full px-4 py-3.5 pr-14 border-2 border-gray-200 rounded-xl focus:border-violet-600 focus:outline-none text-base"
-                  placeholder="São Paulo, SP"
-                />
-                <button
-                  type="button"
-                  onClick={detectLocation}
-                  disabled={locating}
-                  title="Usar minha localização"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-violet-600 hover:text-violet-800 disabled:text-gray-300 transition-colors"
-                >
-                  {locating
-                    ? <Loader2 className="w-5 h-5 animate-spin" />
-                    : <LocateFixed className="w-5 h-5" />
-                  }
-                </button>
-              </div>
-              {locateError && (
-                <p className="text-xs text-red-500 mt-1.5">{locateError}</p>
-              )}
+              <CityInput
+                value={city}
+                onChange={setCity}
+                onValidChange={setCityValid}
+                inputClassName="w-full px-4 py-3.5 pr-14 border-2 border-gray-200 rounded-xl focus:border-violet-600 focus:outline-none text-base"
+              />
             </div>
           </div>
         )}
