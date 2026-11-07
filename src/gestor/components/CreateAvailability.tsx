@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Check, Loader2, ChevronLeft } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
+import { classSlotIds } from './classSlots';
 
 interface CreateAvailabilityProps {
   onClose: () => void;
@@ -144,7 +145,10 @@ export function CreateAvailability({ onClose, onSaved, venueId, prefill }: Creat
       const ids = slots.map(s => s.id);
       const { data: booked } = await supabase.from('bookings').select('slot_id').in('slot_id', ids).neq('status', 'cancelled');
       const { data: games } = await supabase.from('games').select('slot_id').in('slot_id', ids);
-      const protectedIds = new Set([...(booked ?? []).map(b => b.slot_id), ...(games ?? []).map(g => g.slot_id)]);
+      const protectedIds = new Set([
+        ...(booked ?? []).map(b => b.slot_id), ...(games ?? []).map(g => g.slot_id),
+        ...(await classSlotIds(ids)), // horários de aula nunca são apagados
+      ]);
       const toDelete = ids.filter(id => !protectedIds.has(id));
       if (toDelete.length) await supabase.from('slots').delete().in('id', toDelete);
       // track protected ranges so we don't insert overlapping slots

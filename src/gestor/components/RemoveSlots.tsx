@@ -5,6 +5,7 @@ import {
   ChevronRight, XCircle,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
+import { classSlotIds } from './classSlots';
 
 interface Props {
   onClose: () => void;
@@ -118,7 +119,9 @@ export function RemoveSlots({ onClose, onSaved, venueId }: Props) {
       .gte('start_time', `${startDate}T${timeFrom}:00`)
       .lte('start_time', `${endDate}T${timeTo}:59`);
 
-    const inDates = (slotRows ?? []).filter(s => dates.includes(s.start_time?.substring(0, 10)));
+    // Horários de aula ficam de fora: só saem cancelando o curso (seção Aulas)
+    const classIds = await classSlotIds((slotRows ?? []).map(s => s.id));
+    const inDates = (slotRows ?? []).filter(s => dates.includes(s.start_time?.substring(0, 10)) && !classIds.has(s.id));
     if (!inDates.length) {
       setPreview({ total: 0, withPendingBookings: 0, withPaidBookings: 0, withGames: 0, freeSlots: 0 });
       setLoadingPreview(false); return;

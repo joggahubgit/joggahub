@@ -9,10 +9,13 @@ import { DynamicSlotModal } from './DynamicSlotModal';
 import { GestorBookingDetail } from './GestorBookingDetail';
 import { ArenaDayView, AgendaLegend } from './ArenaDayView';
 import { ScheduleGrid, freeMinutesFrom, type GridColumn } from './ScheduleGrid';
+import { CLASSES_ENABLED } from '@/app/lib/features';
 
 interface Props {
   venueId: string;
   onNavigate?: (tab: string) => void;
+  /** Clique numa aula na agenda: abre o curso na seção Aulas. */
+  onOpenClass?: (classId: string) => void;
 }
 
 interface Court { id: string; name: string; }
@@ -39,6 +42,7 @@ interface Slot {
     max_players: number;
     scheduled_end_at?: string | null;
   } | null;
+  classInfo?: { classId: string; title: string; coach: string; start: string; end: string } | null;
 }
 
 function addDays(date: Date, days: number) {
@@ -85,7 +89,7 @@ type ViewMode = 'week' | 'day';
 interface CourtScheduleEntry { open_time: string; close_time: string; price: number; }
 type CourtScheduleMap = Record<string, Record<number, CourtScheduleEntry>>;
 
-export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
+export function SmartBookingCalendar({ venueId, onNavigate, onOpenClass }: Props) {
   const [courts, setCourts] = useState<Court[]>([]);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [courtSchedules, setCourtSchedules] = useState<CourtScheduleMap>({});
@@ -215,10 +219,25 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
         .in('slot_id', allSlotIds);
       (gameRows ?? []).filter(g => g.is_open === true).forEach(g => { gameBySlot[g.slot_id] = g; });
 
+      // Horários bloqueados por aulas de cursos ativos
+      const classBySlot: Record<string, Slot['classInfo']> = {};
+      if (CLASSES_ENABLED) {
+        const { data: classLinks } = await supabase
+          .from('class_session_slots')
+          .select('slot_id, class_sessions(class_id, starts_at, ends_at, classes(title, coach_name, status))')
+          .in('slot_id', allSlotIds);
+        (classLinks ?? []).forEach((l: any) => {
+          const cs = l.class_sessions;
+          if (!cs || cs.classes?.status !== 'active') return;
+          classBySlot[l.slot_id] = { classId: cs.class_id, title: cs.classes.title, coach: cs.classes.coach_name, start: cs.starts_at, end: cs.ends_at };
+        });
+      }
+
       setSlots(slotRows.map(s => ({
         ...s,
         booking: bookingBySlot[s.id] ?? null,
         game: gameBySlot[s.id] ?? null,
+        classInfo: classBySlot[s.id] ?? null,
       })));
     } catch (e) {
       console.error('[Calendar] fetchAll error', e);
@@ -347,6 +366,7 @@ export function SmartBookingCalendar({ venueId, onNavigate }: Props) {
 
   /** Booked / open game / blocked slot clicked: open its detail modal. */
   function openSlot(slot: Slot) {
+    if (slot.classInfo && !slot.booking && !slot.game) { onOpenClass?.(slot.classInfo.classId); return; }
     if (slot.game) setSelectedGameSlot(slot);
     else if (slot.booking) setSelectedBookingId(slot.booking.id);
     else setSelectedSlot(slot);

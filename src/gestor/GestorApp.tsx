@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Calendar, List, DollarSign, Settings, LogOut, Menu, X } from 'lucide-react';
+import { Calendar, List, DollarSign, Settings, LogOut, Menu, X, GraduationCap } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
 import { LoginPage } from './components/LoginPage';
 import { SmartBookingCalendar } from './components/SmartBookingCalendar';
@@ -8,8 +8,10 @@ import { SimpleRevenue } from './components/SimpleRevenue';
 import { SimpleSettings } from './components/SimpleSettings';
 import { VenueProfile } from './components/VenueProfile';
 import { GestorNotifications } from './components/GestorNotifications';
+import { ClassesPanel } from './components/ClassesPanel';
+import { CLASSES_ENABLED } from '@/app/lib/features';
 
-type Tab = 'calendar' | 'bookings' | 'revenue' | 'settings';
+type Tab = 'calendar' | 'bookings' | 'classes' | 'revenue' | 'settings';
 
 export default function GestorApp() {
   const [user, setUser] = useState<any>(null);
@@ -17,6 +19,7 @@ export default function GestorApp() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>('calendar');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [openClassId, setOpenClassId] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -82,6 +85,7 @@ export default function GestorApp() {
   const menuItems = [
     { id: 'calendar' as Tab, label: 'Agenda', icon: Calendar },
     { id: 'bookings' as Tab, label: 'Reservas', icon: List },
+    ...(CLASSES_ENABLED ? [{ id: 'classes' as Tab, label: 'Aulas', icon: GraduationCap }] : []),
     { id: 'revenue' as Tab, label: 'Financeiro', icon: DollarSign },
     { id: 'settings' as Tab, label: 'Configurações', icon: Settings },
   ];
@@ -91,7 +95,17 @@ export default function GestorApp() {
   const renderContent = () => {
     switch (activeTab) {
       case 'calendar':
-        return <SmartBookingCalendar venueId={venue?.id} onNavigate={(tab) => setActiveTab(tab as Tab)} />;
+        return (
+          <SmartBookingCalendar
+            venueId={venue?.id}
+            onNavigate={(tab) => setActiveTab(tab as Tab)}
+            onOpenClass={CLASSES_ENABLED ? (id) => { setOpenClassId(id); setActiveTab('classes'); } : undefined}
+          />
+        );
+      case 'classes':
+        return CLASSES_ENABLED
+          ? <ClassesPanel venueId={venue?.id} openClassId={openClassId} onOpenedClass={() => setOpenClassId(null)} />
+          : null;
       case 'bookings':
         return <SimpleBookingsList venueId={venue?.id} />;
       case 'revenue':

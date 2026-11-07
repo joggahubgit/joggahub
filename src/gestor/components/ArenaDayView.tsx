@@ -4,6 +4,7 @@ import {
   ScheduleGrid, GridColumn, GridSlot, GridSchedule, BookingState,
   STATE_STYLE, buildBlocks, columnStats, useNowMinutes,
 } from './ScheduleGrid';
+import { CLASSES_ENABLED } from '@/app/lib/features';
 
 /**
  * Day view of the whole venue: one column per court, venue summary on top
@@ -108,6 +109,7 @@ export function AgendaLegend() {
         <span key={s} className="flex items-center gap-1"><span className={`w-2.5 h-2.5 rounded-sm border-l-2 ${STATE_STYLE[s].card}`} />{STATE_STYLE[s].label}</span>
       ))}
       <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm border-l-2 bg-sky-50 border-l-sky-500" />Partida aberta</span>
+      {CLASSES_ENABLED && <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm border-l-2 bg-amber-50 border-l-amber-500" />Aula</span>}
       <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm border-l-2 bg-gray-100 border-l-gray-300" />Bloqueado</span>
     </div>
   );

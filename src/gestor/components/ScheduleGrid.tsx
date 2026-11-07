@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Ban, Users } from 'lucide-react';
+import { Ban, GraduationCap, Users } from 'lucide-react';
 
 /**
  * Shared time grid for the gestor agenda. Each column is one court on one
@@ -30,6 +30,8 @@ export interface GridSlot {
     max_players: number;
     scheduled_end_at?: string | null;
   } | null;
+  /** Horário bloqueado por uma aula (curso). start/end = início e fim da aula. */
+  classInfo?: { classId: string; title: string; coach: string; start: string; end: string } | null;
 }
 
 export interface GridSchedule { open_time: string; close_time: string }
@@ -46,7 +48,7 @@ export interface GridColumn {
 }
 
 export type GridFilter = 'all' | 'available' | 'booked' | 'blocked';
-type BlockKind = 'booking' | 'open_game' | 'blocked';
+type BlockKind = 'booking' | 'open_game' | 'blocked' | 'class';
 export type BookingState = 'pending' | 'done' | 'live' | 'scheduled';
 
 export interface Block {
@@ -109,10 +111,23 @@ export function buildBlocks(slots: GridSlot[]): Block[] {
   const main: Block[] = slots
     .filter(s => s.booking || s.game)
     .map(s => ({ key: s.id, kind: s.booking ? 'booking' : 'open_game', start: slotStart(s), end: slotEnd(s), slot: s }));
+
+  // Aulas: um bloco por aula, cobrindo todos os slots que ela bloqueou
+  const seenClass = new Set<string>();
+  for (const s of slots.filter(s => s.classInfo && !s.booking && !s.game)) {
+    const ci = s.classInfo!;
+    const key = `${ci.classId}_${ci.start}`;
+    if (seenClass.has(key)) continue;
+    seenClass.add(key);
+    const start = toMin(ci.start.substring(11, 16));
+    let end = toMin(ci.end.substring(11, 16));
+    if (end <= start) end += 1440;
+    main.push({ key: `class_${key}`, kind: 'class', start, end, slot: s });
+  }
   const covered = (min: number) => main.some(b => min >= b.start && min < b.end);
 
   const blocked: Block[] = [];
-  for (const s of slots.filter(s => !s.booking && !s.game && !s.is_available)
+  for (const s of slots.filter(s => !s.booking && !s.game && !s.classInfo && !s.is_available)
     .sort((a, b) => a.start_time.localeCompare(b.start_time))) {
     const start = slotStart(s);
     if (covered(start)) continue;
@@ -167,7 +182,7 @@ export function columnStats(col: Pick<GridColumn, 'slots' | 'schedule'>, blocks:
   const busyNow = now != null && blocks.some(b => now >= b.start && now < b.end);
   const openNow = now != null && now >= firstStart && now < lastEnd;
   return {
-    bookings: busy.length,
+    bookings: busy.filter(b => b.kind !== 'class').length, // aulas ocupam a quadra, mas não são reservas
     busyMin,
     capacity,
     pct: capacity > 0 ? Math.min(100, Math.round((busyMin / capacity) * 100)) : 0,
@@ -251,7 +266,7 @@ export function ScheduleGrid({ columns, columnWidth, headerHeight, filter = 'all
 
   const showFree = filter === 'all' || filter === 'available';
   const showKind = (k: BlockKind) =>
-    filter === 'all' || (filter === 'booked' && (k === 'booking' || k === 'open_game')) || (filter === 'blocked' && k === 'blocked');
+    filter === 'all' || (filter === 'booked' && (k === 'booking' || k === 'open_game' || k === 'class')) || (filter === 'blocked' && k === 'blocked');
 
   return (
     <div ref={scrollRef} className="overflow-auto" style={maxHeight ? { maxHeight } : undefined}>
@@ -327,6 +342,18 @@ export function ScheduleGrid({ columns, columnWidth, headerHeight, filter = 'all
                         style={{ ...pos, backgroundImage: 'repeating-linear-gradient(135deg, transparent 0 6px, rgba(0,0,0,0.03) 6px 12px)' }}>
                         <span className="flex items-center gap-1 text-[11px] font-semibold text-gray-500"><Ban className="w-3 h-3 flex-shrink-0" />Bloqueado</span>
                         {!compact && <span className="text-[10px] text-gray-400 tabular-nums">{range}</span>}
+                      </button>
+                    );
+                  }
+
+                  if (b.kind === 'class') {
+                    const ci = b.slot.classInfo!;
+                    return (
+                      <button key={b.key} onClick={() => onSlotClick(b.slot)}
+                        className="absolute left-1.5 right-1.5 z-10 rounded-lg bg-amber-50 border-l-4 border-l-amber-500 text-left px-2.5 py-1.5 overflow-hidden shadow-sm hover:shadow-md hover:brightness-[0.98] transition-all"
+                        style={pos}>
+                        <span className="flex items-center gap-1 text-[11px] font-semibold text-amber-800 truncate"><GraduationCap className="w-3 h-3 flex-shrink-0" />Aula · {ci.title}</span>
+                        {!compact && <span className="block text-[10px] text-amber-700/80 truncate">{ci.coach} · <span className="tabular-nums">{range}</span></span>}
                       </button>
                     );
                   }
