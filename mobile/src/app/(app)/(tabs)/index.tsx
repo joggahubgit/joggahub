@@ -180,44 +180,45 @@ export default function Home() {
 
   return (
     <View className="flex-1 bg-gray-50">
-      <ScrollView
-        contentContainerClassName="pb-6"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor="#ffffff" />}
-      >
-        {/* Header */}
-        <SafeAreaView edges={['top']} className="bg-violet-600">
-          <View className="bg-violet-600 px-6 py-6">
-            <View className="flex-row items-center justify-between mb-4">
-              <View className="flex-row items-center gap-3">
-                <Image source={require('../../../../assets/logo.png')} style={{ width: 32, height: 32 }} contentFit="contain" tintColor="#ffffff" />
-                <View>
-                  <Text className="text-sm text-violet-100">Olá,</Text>
-                  <Text className="text-xl font-bold text-white">{firstName}</Text>
-                </View>
-              </View>
-              <View className="flex-row items-center gap-2">
-                <Pressable
-                  onPress={() => router.push('/notifications')}
-                  accessibilityRole="button"
-                  accessibilityLabel={unread.data ? `Notificações, ${unread.data} não lidas` : 'Notificações'}
-                  className="bg-white/20 rounded-full p-2"
-                >
-                  <Bell size={24} color="#ffffff" />
-                  {!!unread.data && <View className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />}
-                </Pressable>
-                <Pressable onPress={() => router.push('/menu')} accessibilityRole="button" accessibilityLabel="Menu" className="bg-white/20 rounded-full p-2">
-                  <Menu size={24} color="#ffffff" />
-                </Pressable>
+      {/* Header — outside the ScrollView so it stays fixed while the content scrolls */}
+      <SafeAreaView edges={['top']} className="bg-violet-600">
+        <View className="bg-violet-600 px-6 py-6">
+          <View className="flex-row items-center justify-between mb-4">
+            <View className="flex-row items-center gap-3">
+              <Image source={require('../../../../assets/logo.png')} style={{ width: 32, height: 32 }} contentFit="contain" tintColor="#ffffff" />
+              <View>
+                <Text className="text-sm text-violet-100">Olá,</Text>
+                <Text className="text-xl font-bold text-white">{firstName}</Text>
               </View>
             </View>
-
-            <Pressable onPress={() => router.push('/courts')} accessibilityRole="search" className="bg-white rounded-xl p-3 flex-row items-center gap-3">
-              <Search size={20} color={palette.gray['400']} />
-              <Text className="flex-1 text-gray-400 text-base">Buscar quadras, jogos...</Text>
-            </Pressable>
+            <View className="flex-row items-center gap-2">
+              <Pressable
+                onPress={() => router.push('/notifications')}
+                accessibilityRole="button"
+                accessibilityLabel={unread.data ? `Notificações, ${unread.data} não lidas` : 'Notificações'}
+                className="bg-white/20 rounded-full p-2"
+              >
+                <Bell size={24} color="#ffffff" />
+                {!!unread.data && <View className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />}
+              </Pressable>
+              <Pressable onPress={() => router.push('/menu')} accessibilityRole="button" accessibilityLabel="Menu" className="bg-white/20 rounded-full p-2">
+                <Menu size={24} color="#ffffff" />
+              </Pressable>
+            </View>
           </View>
-        </SafeAreaView>
 
+          <Pressable onPress={() => router.push('/courts')} accessibilityRole="search" className="bg-white rounded-xl p-3 flex-row items-center gap-3">
+            <Search size={20} color={palette.gray['400']} />
+            <Text className="flex-1 text-gray-400 text-base">Buscar quadras, jogos...</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="pb-6"
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={palette.violet['600']} />}
+      >
         {/* Result waiting for this player's confirmation */}
         <PendingResultBanner userId={userId} />
 

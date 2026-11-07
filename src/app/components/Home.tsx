@@ -367,8 +367,8 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
-      {/* Header */}
-      <div className="bg-violet-600 text-white px-6 py-6">
+      {/* Header — stays at the top while the page scrolls */}
+      <div className="sticky top-0 z-30 bg-violet-600 text-white px-6 py-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <img src="/logo.png" alt="JoggaHub" className="w-8 h-8 object-contain" style={{ filter: 'brightness(0) invert(1)' }} />
