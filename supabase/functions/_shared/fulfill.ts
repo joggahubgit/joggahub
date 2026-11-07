@@ -27,7 +27,7 @@ export type FulfillResult =
   | { status: 'legacy' };
 
 type Md = Record<string, string>;
-type Done = { gameId: string | null; bookingId: string | null; slotId: string | null };
+type Done = { gameId: string | null; bookingId: string | null; slotId: string | null; classId?: string | null };
 
 const STALE_CLAIM_MS = 2 * 60 * 1000;
 
@@ -61,6 +61,7 @@ export async function fulfillSession(
       case 'organizer': done = await fulfillOrganizer(db, session, md); break;
       case 'join': done = await fulfillJoin(db, pi, md); break;
       case 'pay_reservation': done = await fulfillPayReservation(db, md); break;
+      case 'class_enrollment': done = await fulfillClassEnrollment(db, session, pi, md); break;
       default: throw new UserError(`Tipo de pagamento desconhecido: ${md.kind}`);
     }
     await db.from('checkout_fulfillments')
@@ -131,6 +132,27 @@ async function releasePayment(stripe: Stripe, pi: Stripe.PaymentIntent) {
     // Never hide this: the payer must not stay charged for something they didn't get.
     console.error('[fulfill] RELEASE FAILED — refund manually', pi.id, e);
   }
+}
+
+// ── Curso (aulas) ────────────────────────────────────────────────────────────
+// Inscrição criada por class_enroll no banco: trava o curso, confere status,
+// prazo (2h antes da 1ª aula), vagas e duplicidade, e é idempotente pela sessão.
+
+async function fulfillClassEnrollment(db: Db, session: Stripe.Checkout.Session, pi: Stripe.PaymentIntent, md: Md): Promise<Done> {
+  const { error } = await db.rpc('class_enroll', {
+    p_class_id: md.classId,
+    p_player_id: md.userId,
+    p_stripe_session_id: session.id,
+    p_payment_intent_id: pi.id,
+    p_amount: Number(md.price),
+    p_fee: Number(md.fee),
+  });
+  if (error) {
+    // hint 'user' = regra de negócio (lotado, fechado, cancelado…): devolve o dinheiro
+    if (error.hint === 'user') throw new UserError(error.message);
+    throw new Error(`class_enroll: ${error.message}`);
+  }
+  return { gameId: null, bookingId: null, slotId: null, classId: md.classId };
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

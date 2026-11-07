@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, MapPin, Star, Clock, Users, Share2, Heart, Phone, Mail, ChevronLeft, ChevronRight, GraduationCap, Loader2, Plus, Minus, Lock } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getMinPlayersForSport, getMaxPlayersForSport } from '@/app/lib/gameConfig';
+import { CLASSES_ENABLED } from '@/app/lib/features';
+import CourtClassesTab from './classes/CourtClassesTab';
 
 type TabType = 'home' | 'book' | 'open-games' | 'classes';
 
@@ -1018,7 +1020,8 @@ const CourtDetails: React.FC = () => {
         )}
 
         {/* ── CLASSES TAB ── */}
-        {activeTab === 'classes' && (
+        {activeTab === 'classes' && CLASSES_ENABLED && id && <CourtClassesTab courtId={id} />}
+        {activeTab === 'classes' && !CLASSES_ENABLED && (
           <div className="text-center py-10 text-gray-500">
             <GraduationCap className="w-10 h-10 text-gray-300 mx-auto mb-3" />
             <p className="text-sm">Nenhuma aula disponível nesta quadra.</p>

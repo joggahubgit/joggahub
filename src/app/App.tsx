@@ -17,6 +17,10 @@ import BookingSuccess from './components/BookingSuccess';
 import Community from './components/Community';
 import Competitions from './components/Competitions';
 import Coaching from './components/Coaching';
+import ClassesPage from './components/classes/ClassesPage';
+import ClassDetailPage from './components/classes/ClassDetailPage';
+import ClassPaymentSuccess from './components/classes/ClassPaymentSuccess';
+import { CLASSES_ENABLED } from './lib/features';
 import Profile from './components/Profile';
 import PublicProfile from './components/PublicProfile';
 import GameChat from './components/GameChat';
@@ -115,7 +119,10 @@ function AppRoutes() {
         <Route path="/community" element={<ProtectedRoute><Community /></ProtectedRoute>} />
         <Route path="/competitions" element={<ProtectedRoute><Competitions /></ProtectedRoute>} />
         <Route path="/competition-details/:id" element={<ProtectedRoute><Competitions /></ProtectedRoute>} />
-        <Route path="/coaching" element={<ProtectedRoute><Coaching /></ProtectedRoute>} />
+        <Route path="/coaching" element={CLASSES_ENABLED ? <Navigate to="/aulas" replace /> : <ProtectedRoute><Coaching /></ProtectedRoute>} />
+        {CLASSES_ENABLED && <Route path="/aulas" element={<ProtectedRoute><ClassesPage /></ProtectedRoute>} />}
+        {CLASSES_ENABLED && <Route path="/aulas/pagamento" element={<ProtectedRoute><ClassPaymentSuccess /></ProtectedRoute>} />}
+        {CLASSES_ENABLED && <Route path="/aulas/:id" element={<ProtectedRoute><ClassDetailPage /></ProtectedRoute>} />}
         <Route path="/coach-details/:id" element={<ProtectedRoute><Coaching /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/profile/edit" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />
