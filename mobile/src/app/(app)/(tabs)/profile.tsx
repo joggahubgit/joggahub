@@ -12,7 +12,8 @@ import { declareInitialRating, fetchFutevoleiRating, fetchProfileCounts, pickAnd
 import { PlayerStatsSection } from '@/features/profile/PlayerStatsSection';
 import { AdjustLevelCard, ProfileCompletenessCard } from '@/features/profile/ProfileCards';
 import { GameCountsGrid, GameInfoRows } from '@/features/profile/GameInfoRows';
-import { FOOT_LABELS, FUTEVOLEI_LEVELS, POSITION_LABELS, profileCompleteness, type FutevoleiLevelOption } from '@/lib/shared';
+import { FOOT_LABELS, POSITION_LABELS, profileCompleteness } from '@/lib/shared';
+import { LevelQuiz, emptyQuizAnswers, type QuizAnswers } from '@/features/profile/LevelQuiz';
 import palette from '../../../../tailwind.palette';
 
 export default function Profile() {
@@ -27,6 +28,7 @@ export default function Profile() {
   const [showLevelPicker, setShowLevelPicker] = useState(false);
   const [savingLevel, setSavingLevel] = useState(false);
   const [levelError, setLevelError] = useState('');
+  const [quizAnswers, setQuizAnswers] = useState<QuizAnswers>(emptyQuizAnswers);
   const [statsVersion, setStatsVersion] = useState(0);
 
   // Fresh profile every time the tab is shown, like the web's refresh on mount.
@@ -50,12 +52,12 @@ export default function Profile() {
     }
   }
 
-  async function setLevel(level: FutevoleiLevelOption) {
+  async function setLevel(rating: number) {
     setSavingLevel(true);
     setLevelError('');
     try {
-      await declareInitialRating(level.rating);
-      qc.setQueryData(['futevoleiRating', userId], { rating: level.rating, matches_played: 0 });
+      await declareInitialRating(rating);
+      qc.setQueryData(['futevoleiRating', userId], { rating, matches_played: 0 });
       setShowLevelPicker(false);
     } catch (e) {
       setLevelError((e as Error).message || 'Não foi possível definir seu nível.');
@@ -188,17 +190,7 @@ export default function Profile() {
             <Text className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-3">Pontuação · Futevôlei</Text>
             {showLevelPicker ? (
               <View className="gap-2">
-                {FUTEVOLEI_LEVELS.map(l => (
-                  <Pressable
-                    key={l.key}
-                    disabled={savingLevel}
-                    onPress={() => setLevel(l)}
-                    className={`px-3 py-2.5 rounded-xl border-2 border-gray-200 ${savingLevel ? 'opacity-50' : ''}`}
-                  >
-                    <Text className="font-semibold text-sm text-gray-900">{l.label}</Text>
-                    <Text className="text-xs text-gray-400">{l.description}</Text>
-                  </Pressable>
-                ))}
+                <LevelQuiz answers={quizAnswers} onChange={setQuizAnswers} onConfirm={setLevel} confirming={savingLevel} />
                 {!!levelError && <Text className="text-sm text-red-600">{levelError}</Text>}
               </View>
             ) : (

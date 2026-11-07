@@ -11,7 +11,8 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import { declareInitialRating, fetchFutevoleiRating, pickAvatar, updateProfile, uploadAvatar, type PickedImage } from '@/features/profile/api';
 import { CityInput } from '@/features/profile/CityInput';
 import { supabase } from '@/lib/supabase';
-import { DAY_OPTIONS as DAYS, FOOT_OPTIONS, FUTEVOLEI_LEVELS, PERIOD_OPTIONS as PERIODS, POSITION_OPTIONS as POSITIONS } from '@/lib/shared';
+import { DAY_OPTIONS as DAYS, FOOT_OPTIONS, PERIOD_OPTIONS as PERIODS, POSITION_OPTIONS as POSITIONS, quizRating } from '@/lib/shared';
+import { LevelQuiz, emptyQuizAnswers, type QuizAnswers } from '@/features/profile/LevelQuiz';
 import palette from '../../../tailwind.palette';
 
 const inputStyle = { fontFamily: 'Inter_400Regular' };
@@ -43,7 +44,7 @@ export default function Onboarding() {
   const [foot, setFoot] = useState<string>(profile?.dominant_foot ?? '');
   const [days, setDays] = useState<string[]>(profile?.availability?.days ?? []);
   const [periods, setPeriods] = useState<string[]>(profile?.availability?.periods ?? []);
-  const [level, setLevel] = useState('');
+  const [quizAnswers, setQuizAnswers] = useState<QuizAnswers>(emptyQuizAnswers);
   const avatarPreview = image?.uri ?? profile?.avatar_url ?? null;
 
   const toggle = (list: string[], v: string) => (list.includes(v) ? list.filter(x => x !== v) : [...list, v]);
@@ -73,11 +74,10 @@ export default function Onboarding() {
         onboarding_completed: true,
       });
       if (isFirstTime) await supabase.rpc('increment_xp', { user_id: userId, amount: 20 });
-      if (level && !hasRating) {
-        const l = FUTEVOLEI_LEVELS.find(x => x.key === level);
-        // Profile is already saved — a failed level isn't worth blocking on.
-        if (l) await declareInitialRating(l.rating).catch(() => {});
-      }
+      // Skipped or unfinished quiz → nothing declared (first match starts at 1.5).
+      const quiz = quizRating(quizAnswers);
+      // Profile is already saved — a failed level isn't worth blocking on.
+      if (quiz && !hasRating) await declareInitialRating(quiz.rating).catch(() => {});
       await refreshProfile();
       router.replace({ pathname: '/', params: isFirstTime ? { firstLogin: '1' } : {} });
     } catch {
@@ -243,23 +243,10 @@ export default function Onboarding() {
               <View>
                 <Text className="text-2xl font-bold text-gray-900">Qual seu nível no futevôlei?</Text>
                 <Text className="text-base text-gray-500 mt-1">
-                  Só pra começar sua pontuação num lugar razoável — ela se ajusta sozinha conforme você for jogando. Pode pular se não joga futevôlei.
+                  5 perguntas rápidas pra começar sua pontuação num lugar justo — ela se ajusta sozinha conforme você joga. Pode pular se não joga futevôlei.
                 </Text>
               </View>
-              <View className="gap-2">
-                {FUTEVOLEI_LEVELS.map(l => {
-                  const on = level === l.key;
-                  return (
-                    <Pressable key={l.key} onPress={() => setLevel(prev => (prev === l.key ? '' : l.key))} accessibilityState={{ selected: on }} className={`flex-row items-center justify-between px-4 py-3.5 rounded-xl border-2 ${on ? 'border-violet-600 bg-violet-50' : 'border-gray-200'}`}>
-                      <View className="flex-1">
-                        <Text className="font-semibold text-gray-900 text-base">{l.label}</Text>
-                        <Text className="text-xs text-gray-400">{l.description}</Text>
-                      </View>
-                      {on && <CheckDot />}
-                    </Pressable>
-                  );
-                })}
-              </View>
+              <LevelQuiz answers={quizAnswers} onChange={setQuizAnswers} />
             </View>
           )}
 
@@ -283,7 +270,9 @@ export default function Onboarding() {
             ) : step === TOTAL ? (
               <>
                 <Zap size={20} color={!canAdvance ? palette.gray['400'] : '#ffffff'} />
-                <Text className={`font-bold text-base ${!canAdvance ? 'text-gray-400' : 'text-white'}`}>Finalizar e ganhar 20 XP</Text>
+                <Text className={`font-bold text-base ${!canAdvance ? 'text-gray-400' : 'text-white'}`}>
+                  {step === 4 && !quizRating(quizAnswers) ? 'Pular e finalizar (+20 XP)' : 'Finalizar e ganhar 20 XP'}
+                </Text>
               </>
             ) : (
               <>

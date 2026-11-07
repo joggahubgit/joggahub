@@ -8,3 +8,4 @@ export * from '../../../src/app/lib/futevoleiSetRules';
 export * from '../../../src/app/lib/profileFields';
 export * from '../../../src/app/lib/futevoleiLevels';
 export * from '../../../src/app/lib/citySearch';
+export * from '../../../src/app/lib/futevoleiQuiz';

@@ -8,7 +8,7 @@ import Svg, { Circle, Defs, LinearGradient, Path, Stop } from 'react-native-svg'
 import { useQuery } from '@tanstack/react-query';
 import { Coins } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { PROVISIONAL_MATCHES_THRESHOLD, wallDate, wallTime } from '@/lib/shared';
+import { PROVISIONAL_MATCHES_THRESHOLD, levelCategory, wallDate, wallTime } from '@/lib/shared';
 import { fetchPlayerStats, type PersonRef, type ResultStatus } from './api';
 import palette from '../../../tailwind.palette';
 
@@ -179,6 +179,7 @@ export function PlayerStatsSection({ userId, version = 0 }: { userId: string; ve
                 {rating.matches_played} {rating.matches_played === 1 ? 'partida' : 'partidas'}
               </Text>
             </View>
+            <Text className="text-sm font-semibold text-violet-600 mb-1">{levelCategory(rating.rating)}</Text>
             <RatingChart points={history} />
           </>
         )}

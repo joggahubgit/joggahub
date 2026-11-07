@@ -14,7 +14,7 @@ import { BottomSheet } from '@/components/ui/BottomSheet';
 import { ComingSoonBanner } from '@/components/ui/ComingSoonBanner';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { fetchClubRankings, fetchFeed, fetchMyFutevoleiVenues, fetchRankings, type FeedPerson, type RankingRow } from '@/features/community/api';
-import { PROVISIONAL_MATCHES_THRESHOLD } from '@/lib/shared';
+import { PROVISIONAL_MATCHES_THRESHOLD, levelCategory } from '@/lib/shared';
 import palette from '../../../../tailwind.palette';
 
 type Tab = 'feed' | 'ranking' | 'messages';
@@ -296,7 +296,10 @@ export default function Community() {
                           </View>
                           <Text className="text-sm text-gray-600">{player.matches_played} partidas</Text>
                         </View>
-                        <Text className="font-bold text-violet-600 text-base">{player.rating.toFixed(2)}</Text>
+                        <View className="items-end">
+                          <Text className="font-bold text-violet-600 text-base">{player.rating.toFixed(2)}</Text>
+                          <Text className="text-[12px] text-gray-500">{levelCategory(player.rating)}</Text>
+                        </View>
                       </Pressable>
                     </FadeIn>
                   ))}
@@ -318,7 +321,10 @@ export default function Community() {
                           <Text className="font-semibold text-white text-base">Você</Text>
                           <Text className="text-sm text-violet-100">{me.matches_played} partidas</Text>
                         </View>
-                        <Text className="font-bold text-white text-base">{me.rating.toFixed(2)}</Text>
+                        <View className="items-end">
+                          <Text className="font-bold text-white text-base">{me.rating.toFixed(2)}</Text>
+                          <Text className="text-[12px] text-violet-100">{levelCategory(me.rating)}</Text>
+                        </View>
                       </Pressable>
                     </FadeIn>
                   </View>
