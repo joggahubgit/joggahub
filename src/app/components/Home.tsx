@@ -1,10 +1,11 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, MapPin, Users, Trophy, GraduationCap, Menu, Bell, Calendar, Zap, X } from 'lucide-react';
 import BottomNav from './BottomNav';
-import { useState, useEffect } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { CLASSES_ENABLED } from '../lib/features';
+import { UpcomingClassCard, useUpcomingClasses } from './classes/UpcomingClassCards';
 import { wallDate, wallTime } from '@/app/lib/wallClock';
 import { PendingResultBanner } from './PendingResultBanner';
 
@@ -55,6 +56,7 @@ export default function Home() {
   const [venues, setVenues] = useState<VenueCard[]>([]);
   const [upcomingGames, setUpcomingGames] = useState<UpcomingGame[]>([]);
   const [upcomingBookings, setUpcomingBookings] = useState<UpcomingBooking[]>([]);
+  const upcomingClasses = useUpcomingClasses(user?.id);
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
@@ -430,20 +432,25 @@ export default function Home() {
       )}
 
       {/* Próximas partidas + reservas */}
-      {(upcomingGames.length > 0 || upcomingBookings.length > 0) && (
+      {(upcomingGames.length > 0 || upcomingBookings.length > 0 || upcomingClasses.length > 0) && (
         <div className="px-6 pt-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-3">Próximas partidas</h2>
           <div className="flex gap-3 overflow-x-auto pb-2 -mx-6 px-6" style={{ scrollbarWidth: 'none' }}>
 
-            {/* Slot booking cards */}
-            {upcomingBookings.map(booking => {
+            {/* Reservas, partidas e aulas juntas: o evento mais próximo primeiro */}
+            {[
+            // Próxima aula de cada curso inscrito
+            ...upcomingClasses.map(c => ({ at: c.startsAt, key: `c_${c.classId}`, node: <UpcomingClassCard item={c} /> })),
+
+            // Slot booking cards
+            ...upcomingBookings.map(booking => {
               const dateLabel = wallDate(booking.startTime);
               const timeLabel = wallTime(booking.startTime);
               const endLabel = booking.endTime ? wallTime(booking.endTime) : null;
               const isPaid = booking.paymentStatus === 'paid';
 
-              return (
-                <div key={booking.id} onClick={() => navigate('/my-bookings', { state: { highlightId: booking.id } })} className="flex-shrink-0 w-72 bg-white rounded-2xl border border-gray-200 overflow-hidden cursor-pointer active:scale-[0.99] transition-transform">
+              return { at: booking.startTime, key: `b_${booking.id}`, node: (
+                <div onClick={() => navigate('/my-bookings', { state: { highlightId: booking.id } })} className="flex-shrink-0 w-72 bg-white rounded-2xl border border-gray-200 overflow-hidden cursor-pointer active:scale-[0.99] transition-transform">
                   <div className="h-1.5 bg-violet-600 w-full" />
                   <div className="p-4 flex flex-col gap-3">
                     <div className="flex items-start justify-between">
@@ -465,11 +472,11 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
-              );
-            })}
+              ) };
+            }),
 
-            {/* Open game cards */}
-            {upcomingGames.map(game => {
+            // Open game cards
+            ...upcomingGames.map(game => {
               const dateLabel = wallDate(game.scheduledAt);
               const timeLabel = wallTime(game.scheduledAt);
               const isFull = game.currentPlayers >= game.maxPlayers;
@@ -480,9 +487,8 @@ export default function Home() {
               const SPORT_LABELS: Record<string, string> = { football: 'Society', society: 'Society', futsal: 'Futsal', futevolei: 'Futevôlei' };
               const spotsLeft = game.maxPlayers - game.currentPlayers;
 
-              return (
+              return { at: game.scheduledAt, key: `g_${game.id}`, node: (
                 <div
-                  key={game.id}
                   onClick={() => navigate(`/open-game/${game.id}`)}
                   className="flex-shrink-0 w-72 bg-white rounded-2xl border border-gray-200 p-4 cursor-pointer active:scale-[0.99] transition-transform"
                 >
@@ -537,8 +543,11 @@ export default function Home() {
                     ))}
                   </div>
                 </div>
-              );
-            })}
+              ) };
+            }),
+            ]
+              .sort((a, b) => a.at.substring(0, 19).localeCompare(b.at.substring(0, 19)))
+              .map(item => <Fragment key={item.key}>{item.node}</Fragment>)}
           </div>
         </div>
       )}
