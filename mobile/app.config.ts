@@ -46,6 +46,9 @@ const config: ExpoConfig = {
     ['expo-splash-screen', { image: './assets/splash-icon.png', backgroundColor: '#7C3AED', imageWidth: 160 }],
   ],
   experiments: { typedRoutes: true },
+  owner: 'aronsouto',
+  // EAS (Expo build service) project — not a secret.
+  extra: { eas: { projectId: '5db4ca1a-c43c-4036-aeef-7b384ce42550' } },
 };
 
 export default config;
