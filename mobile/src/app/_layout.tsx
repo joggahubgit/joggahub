@@ -1,6 +1,6 @@
 import '../../global.css';
 import '@/lib/nativewindInterop';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -18,12 +18,15 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { envResult } from '@/lib/env';
 import { queryClient } from '@/lib/queryClient';
 import { AuthProvider, useAuth } from '@/features/auth/AuthProvider';
+import { AppSplash } from '@/components/AppSplash';
 import { colors, spacing } from '@/theme/tokens';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 function RootNavigator() {
   const { session, initializing } = useAuth();
+  // Branded intro (like the web's), shown once per cold start right as the native splash hides
+  const [showIntro, setShowIntro] = useState(true);
 
   useEffect(() => {
     if (!initializing) SplashScreen.hideAsync().catch(() => {});
@@ -33,19 +36,22 @@ function RootNavigator() {
 
   const signedIn = !!session;
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      {/* Guards: screens are unreachable — even by deep link — unless the condition holds. */}
-      {/* Public on the web too: reachable signed in or out. */}
-      <Stack.Screen name="terms" />
-      <Stack.Screen name="privacy" />
-      <Stack.Protected guard={signedIn} redirectTo="/welcome">
-        {/* Every signed-in screen lives under (app) so new routes are protected by default. */}
-        <Stack.Screen name="(app)" />
-      </Stack.Protected>
-      <Stack.Protected guard={!signedIn} redirectTo="/">
-        <Stack.Screen name="(auth)" />
-      </Stack.Protected>
-    </Stack>
+    <>
+      <Stack screenOptions={{ headerShown: false }}>
+        {/* Guards: screens are unreachable — even by deep link — unless the condition holds. */}
+        {/* Public on the web too: reachable signed in or out. */}
+        <Stack.Screen name="terms" />
+        <Stack.Screen name="privacy" />
+        <Stack.Protected guard={signedIn} redirectTo="/welcome">
+          {/* Every signed-in screen lives under (app) so new routes are protected by default. */}
+          <Stack.Screen name="(app)" />
+        </Stack.Protected>
+        <Stack.Protected guard={!signedIn} redirectTo="/">
+          <Stack.Screen name="(auth)" />
+        </Stack.Protected>
+      </Stack>
+      {showIntro && <AppSplash onFinish={() => setShowIntro(false)} />}
+    </>
   );
 }
 
