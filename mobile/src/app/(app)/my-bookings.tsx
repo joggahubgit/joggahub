@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AlertCircle, Calendar, CheckCircle, ChevronLeft, ChevronRight, Clock, MapPin, Shield, Trophy, Users, XCircle } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { MyClassesSection } from '@/features/classes/components';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { fetchMyBookings, type BookingItem } from '@/features/bookings/api';
@@ -178,6 +179,8 @@ export default function MyBookings() {
         </View>
       ) : items.length === 0 ? (
         <View className="items-center justify-center py-24 px-6">
+          {/* Cursos (aulas), se houver — some sozinho quando não há nenhum */}
+          {!!userId && <MyClassesSection userId={userId} className="self-stretch mb-8" />}
           <Text className="text-5xl mb-4">📋</Text>
           <Text className="font-semibold text-gray-700 text-lg">{q.isError ? 'Não foi possível carregar' : 'Nenhuma reserva ainda'}</Text>
           <Text className="text-sm text-gray-400 mt-1">{q.isError ? 'Puxe para tentar de novo.' : 'Explore os clubes e agende seu horário!'}</Text>
@@ -190,6 +193,7 @@ export default function MyBookings() {
           contentContainerClassName="px-5 py-5 gap-6 pb-8"
           refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={() => { q.refetch(); }} tintColor={palette.violet['600']} />}
         >
+          {!!userId && <MyClassesSection userId={userId} />}
           {upcoming.length > 0 && (
             <View>
               <Text className="text-sm font-bold text-gray-500 uppercase tracking-wide mb-3">Próximas</Text>

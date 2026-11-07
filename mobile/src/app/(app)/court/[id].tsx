@@ -15,6 +15,8 @@ import { nextDays, type Duration, type SlotItem } from '@/features/courts/schedu
 import { getEnv } from '@/lib/env';
 import { getMaxPlayersForSport, getMinPlayersForSport } from '@/lib/shared';
 import { useRealtimeRefetch } from '@/lib/useRealtimeRefetch';
+import { CLASSES_ENABLED } from '@/lib/features';
+import { CourtClassesTab } from '@/features/classes/CourtClassesTab';
 import palette from '../../../../tailwind.palette';
 
 type TabType = 'home' | 'book' | 'open-games' | 'classes';
@@ -706,7 +708,8 @@ export default function CourtDetails() {
           )}
 
           {/* CLASSES TAB */}
-          {activeTab === 'classes' && (
+          {activeTab === 'classes' && CLASSES_ENABLED && !!id && <CourtClassesTab courtId={id} />}
+          {activeTab === 'classes' && !CLASSES_ENABLED && (
             <View className="items-center py-10">
               <GraduationCap size={40} color={palette.gray['300']} />
               <Text className="text-sm text-gray-500 mt-3">Nenhuma aula disponível nesta quadra.</Text>

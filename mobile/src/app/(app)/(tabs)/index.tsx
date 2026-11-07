@@ -24,6 +24,9 @@ import { fetchUnreadCount, fetchUpcomingBookings, fetchVenueCards, type Upcoming
 import { wallDate, wallTime } from '@/lib/shared';
 import { useRealtimeRefetch } from '@/lib/useRealtimeRefetch';
 import { PendingResultBanner } from '@/features/results/PendingResultBanner';
+import { fetchUpcomingClasses } from '@/features/classes/api';
+import { UpcomingClassCard } from '@/features/classes/components';
+import { CLASSES_ENABLED } from '@/lib/features';
 import palette from '../../../../tailwind.palette';
 
 const SPORT_LABELS: Record<string, string> = { football: 'Society', society: 'Society', futsal: 'Futsal', futevolei: 'Futevôlei' };
@@ -178,6 +181,7 @@ export default function Home() {
 
   const upcoming = useQuery({ queryKey: ['upcomingGames', userId], queryFn: () => fetchUpcomingGames(userId) });
   const bookings = useQuery({ queryKey: ['upcomingBookings', userId], queryFn: () => fetchUpcomingBookings(userId) });
+  const classes = useQuery({ queryKey: ['upcomingClasses', userId], queryFn: () => fetchUpcomingClasses(userId), enabled: CLASSES_ENABLED });
   const open = useQuery({ queryKey: ['openGames', 'home'], queryFn: () => fetchOpenGames(3) });
   const venues = useQuery({ queryKey: ['venueCards'], queryFn: fetchVenueCards });
   const unread = useQuery({ queryKey: ['unread', userId], queryFn: () => fetchUnreadCount(userId) });
@@ -193,6 +197,7 @@ export default function Home() {
   const refresh = () => {
     upcoming.refetch();
     bookings.refetch();
+    if (CLASSES_ENABLED) classes.refetch();
     open.refetch();
     venues.refetch();
     unread.refetch();
@@ -200,6 +205,14 @@ export default function Home() {
 
   const upcomingGames = upcoming.data ?? [];
   const upcomingBookings = bookings.data ?? [];
+  const upcomingClasses = classes.data ?? [];
+
+  // Reservas, partidas e aulas juntas: o evento mais próximo primeiro (igual ao site)
+  const upcomingCards = [
+    ...upcomingClasses.map(c => ({ at: c.startsAt, node: <UpcomingClassCard key={`c_${c.classId}`} item={c} /> })),
+    ...upcomingBookings.map(b => ({ at: b.startTime, node: <BookingCard key={`b_${b.id}`} b={b} /> })),
+    ...upcomingGames.map(g => ({ at: g.scheduledAt, node: <UpcomingGameCard key={`g_${g.id}`} g={g} /> })),
+  ].sort((a, b) => a.at.substring(0, 19).localeCompare(b.at.substring(0, 19)));
 
   // Once the search bar has scrolled under the fixed row, the row gets the
   // rounded bottom and shadow that the search block has at the top
@@ -294,16 +307,11 @@ export default function Home() {
         )}
 
         {/* Próximas partidas + reservas */}
-        {(upcomingGames.length > 0 || upcomingBookings.length > 0) && (
+        {upcomingCards.length > 0 && (
           <View className="pt-6">
             <Text className="text-lg font-semibold text-gray-900 mb-3 px-6">Próximas partidas</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-3 px-6 pb-2">
-              {upcomingBookings.map(b => (
-                <BookingCard key={b.id} b={b} />
-              ))}
-              {upcomingGames.map(g => (
-                <UpcomingGameCard key={g.id} g={g} />
-              ))}
+              {upcomingCards.map(c => c.node)}
             </ScrollView>
           </View>
         )}
@@ -324,8 +332,8 @@ export default function Home() {
               subtitle="Aprenda"
               iconBg="bg-purple-100"
               icon={<GraduationCap size={24} color={palette.purple['600']} />}
-              soon
-              onPress={() => router.push({ pathname: '/coming-soon', params: { title: 'Aulas' } })}
+              soon={!CLASSES_ENABLED}
+              onPress={() => (CLASSES_ENABLED ? router.push('/aulas') : router.push({ pathname: '/coming-soon', params: { title: 'Aulas' } }))}
             />
             <ExploreCard
               title="Competições"

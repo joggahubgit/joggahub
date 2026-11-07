@@ -9,3 +9,5 @@ export * from '../../../src/app/lib/profileFields';
 export * from '../../../src/app/lib/futevoleiLevels';
 export * from '../../../src/app/lib/citySearch';
 export * from '../../../src/app/lib/futevoleiQuiz';
+export * from '../../../src/app/lib/classSchedule';
+export * from '../../../src/app/lib/emailHtml';
