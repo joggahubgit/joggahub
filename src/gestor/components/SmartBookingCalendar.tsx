@@ -222,15 +222,26 @@ export function SmartBookingCalendar({ venueId, onNavigate, onOpenClass }: Props
       // Horários bloqueados por aulas de cursos ativos
       const classBySlot: Record<string, Slot['classInfo']> = {};
       if (CLASSES_ENABLED) {
-        const { data: classLinks } = await supabase
-          .from('class_session_slots')
-          .select('slot_id, class_sessions(class_id, starts_at, ends_at, classes(title, coach_name, status))')
-          .in('slot_id', allSlotIds);
-        (classLinks ?? []).forEach((l: any) => {
-          const cs = l.class_sessions;
-          if (!cs || cs.classes?.status !== 'active') return;
-          classBySlot[l.slot_id] = { classId: cs.class_id, title: cs.classes.title, coach: cs.classes.coach_name, start: cs.starts_at, end: cs.ends_at };
-        });
+        // Busca pelas aulas do período (poucas) e depois os slots delas — filtrar
+        // pelos slot ids da semana deixaria a URL longa demais.
+        const { data: sessions } = await supabase
+          .from('class_sessions')
+          .select('id, class_id, starts_at, ends_at, classes!inner(title, coach_name, status, venue_id)')
+          .eq('classes.venue_id', venueId)
+          .eq('classes.status', 'active')
+          .gte('starts_at', `${fromDate}T00:00:00`)
+          .lte('starts_at', `${toDate}T23:59:59`);
+        const sessionById = new Map((sessions ?? []).map((s: any) => [s.id, s]));
+        if (sessionById.size) {
+          const { data: links } = await supabase
+            .from('class_session_slots')
+            .select('slot_id, session_id')
+            .in('session_id', [...sessionById.keys()]);
+          (links ?? []).forEach((l: any) => {
+            const cs: any = sessionById.get(l.session_id);
+            if (cs) classBySlot[l.slot_id] = { classId: cs.class_id, title: cs.classes.title, coach: cs.classes.coach_name, start: cs.starts_at, end: cs.ends_at };
+          });
+        }
       }
 
       setSlots(slotRows.map(s => ({
