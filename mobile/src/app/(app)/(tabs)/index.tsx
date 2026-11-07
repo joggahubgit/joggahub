@@ -180,10 +180,10 @@ export default function Home() {
 
   return (
     <View className="flex-1 bg-gray-50">
-      {/* Header — outside the ScrollView so it stays fixed while the content scrolls */}
+      {/* Header — the top row stays fixed (outside the ScrollView); the search bar scrolls away */}
       <SafeAreaView edges={['top']} className="bg-violet-600">
-        <View className="bg-violet-600 px-6 py-6">
-          <View className="flex-row items-center justify-between mb-4">
+        <View className="bg-violet-600 px-6 pt-6 pb-4">
+          <View className="flex-row items-center justify-between">
             <View className="flex-row items-center gap-3">
               <Image source={require('../../../../assets/logo.png')} style={{ width: 32, height: 32 }} contentFit="contain" tintColor="#ffffff" />
               <View>
@@ -206,19 +206,24 @@ export default function Home() {
               </Pressable>
             </View>
           </View>
-
-          <Pressable onPress={() => router.push('/courts')} accessibilityRole="search" className="bg-white rounded-xl p-3 flex-row items-center gap-3">
-            <Search size={20} color={palette.gray['400']} />
-            <Text className="flex-1 text-gray-400 text-base">Buscar quadras, jogos...</Text>
-          </Pressable>
         </View>
       </SafeAreaView>
 
       <ScrollView
         className="flex-1"
         contentContainerClassName="pb-6"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={palette.violet['600']} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor="#ffffff" />}
       >
+        {/* Purple behind the top of the list, so pulling down to refresh shows purple, not gray */}
+        <View pointerEvents="none" className="absolute left-0 right-0 bg-violet-600" style={{ top: -1000, height: 1000 }} />
+
+        <View className="bg-violet-600 px-6 pb-6">
+          <Pressable onPress={() => router.push('/courts')} accessibilityRole="search" className="bg-white rounded-xl p-3 flex-row items-center gap-3">
+            <Search size={20} color={palette.gray['400']} />
+            <Text className="flex-1 text-gray-400 text-base">Buscar quadras, jogos...</Text>
+          </Pressable>
+        </View>
+
         {/* Result waiting for this player's confirmation */}
         <PendingResultBanner userId={userId} />
 

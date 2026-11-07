@@ -367,9 +367,9 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
-      {/* Header — stays at the top while the page scrolls */}
-      <div className="sticky top-0 z-30 bg-violet-600 text-white px-6 py-6">
-        <div className="flex items-center justify-between mb-4">
+      {/* Header — the top row stays fixed; the search bar below scrolls away */}
+      <div className="sticky top-0 z-30 bg-violet-600 text-white px-6 pt-6 pb-4">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img src="/logo.png" alt="JoggaHub" className="w-8 h-8 object-contain" style={{ filter: 'brightness(0) invert(1)' }} />
             <div>
@@ -387,8 +387,10 @@ export default function Home() {
             </button>
           </div>
         </div>
+      </div>
 
-        {/* Search Bar */}
+      {/* Search Bar */}
+      <div className="bg-violet-600 px-6 pb-6">
         <div onClick={() => navigate('/find-courts')} className="bg-white rounded-xl p-3 flex items-center gap-3 cursor-pointer">
           <Search className="w-5 h-5 text-gray-400" />
           <span className="flex-1 text-gray-400">Buscar quadras, jogos...</span>
