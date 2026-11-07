@@ -1,6 +1,16 @@
 // Port of src/app/components/Home.tsx (web).
-import { useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { useRef, useState } from 'react';
+import {
+  Animated,
+  Platform,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  type ScrollViewInstance,
+} from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -145,6 +155,8 @@ function ExploreCard({
   );
 }
 
+const IS_IOS = Platform.OS === 'ios';
+
 // Rounded bottom + soft violet shadow of the purple header (web: rounded-b-3xl shadow-lg)
 const headerBottom = {
   borderBottomLeftRadius: 24,
@@ -193,6 +205,17 @@ export default function Home() {
   // rounded bottom and shadow that the search block has at the top
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
 
+  // Search bar height (measured; 72 = pb-6 + p-3 + one text line) and how far it
+  // has slid up. iOS scroll offsets start at -searchH because of the content inset.
+  const [searchH, setSearchH] = useState(72);
+  const scrollRef = useRef<ScrollViewInstance>(null);
+  const scrollY = useRef(new Animated.Value(IS_IOS ? -72 : 0)).current;
+  const searchShift = scrollY.interpolate({
+    inputRange: IS_IOS ? [-searchH, 0] : [0, searchH],
+    outputRange: [0, -searchH],
+    extrapolate: 'clamp',
+  });
+
   return (
     <View className="flex-1 bg-gray-50">
       {/* Header — the top row stays fixed (outside the ScrollView); the search bar scrolls away */}
@@ -224,25 +247,27 @@ export default function Home() {
         </View>
       </SafeAreaView>
 
-      <ScrollView
+      <View className="flex-1">
+      {/* The list starts below the search bar (iOS: content inset; Android: padding), so
+          pulling down to refresh moves only the list — the spinner shows between the
+          search bar and the content, and the search bar never stretches down. */}
+      <Animated.ScrollView
+        ref={scrollRef}
         className="flex-1"
-        contentContainerClassName="pb-6"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor="#ffffff" />}
+        contentInset={IS_IOS ? { top: searchH } : undefined}
+        contentOffset={IS_IOS ? { x: 0, y: -searchH } : undefined}
+        scrollIndicatorInsets={{ top: searchH }}
+        contentContainerStyle={{ paddingBottom: 24, paddingTop: IS_IOS ? 0 : searchH }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={palette.violet['600']} progressViewOffset={searchH} />}
         scrollEventThrottle={16}
-        onScroll={e => {
-          const collapsed = e.nativeEvent.contentOffset.y > 64;
-          if (collapsed !== headerCollapsed) setHeaderCollapsed(collapsed);
-        }}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+          useNativeDriver: true,
+          listener: (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+            const collapsed = e.nativeEvent.contentOffset.y + (IS_IOS ? searchH : 0) > 64;
+            if (collapsed !== headerCollapsed) setHeaderCollapsed(collapsed);
+          },
+        })}
       >
-        {/* Purple behind the top of the list, so pulling down to refresh shows purple, not gray */}
-        <View pointerEvents="none" className="absolute left-0 right-0 bg-violet-600" style={{ top: -1000, height: 1000 }} />
-
-        <View className="bg-violet-600 px-6 pb-6" style={[{ zIndex: 1 }, headerBottom]}>
-          <Pressable onPress={() => router.push('/courts')} accessibilityRole="search" className="bg-white rounded-xl p-3 flex-row items-center gap-3">
-            <Search size={20} color={palette.gray['400']} />
-            <Text className="flex-1 text-gray-400 text-base">Buscar quadras, jogos...</Text>
-          </Pressable>
-        </View>
 
         {/* Result waiting for this player's confirmation */}
         <PendingResultBanner userId={userId} />
@@ -416,7 +441,27 @@ export default function Home() {
             </ScrollView>
           )}
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
+
+      {/* Search bar — sits over the top of the list and slides up under the fixed row
+          as the list scrolls; clamped, so pulling down to refresh leaves it in place */}
+      <Animated.View
+        onLayout={e => {
+          const h = Math.round(e.nativeEvent.layout.height);
+          if (h && h !== searchH) {
+            setSearchH(h);
+            if (IS_IOS) scrollRef.current?.scrollTo({ y: -h, animated: false });
+          }
+        }}
+        className="absolute top-0 left-0 right-0 bg-violet-600 px-6 pb-6"
+        style={[{ zIndex: 5, transform: [{ translateY: searchShift }] }, headerBottom]}
+      >
+        <Pressable onPress={() => router.push('/courts')} accessibilityRole="search" className="bg-white rounded-xl p-3 flex-row items-center gap-3">
+          <Search size={20} color={palette.gray['400']} />
+          <Text className="flex-1 text-gray-400 text-base">Buscar quadras, jogos...</Text>
+        </Pressable>
+      </Animated.View>
+      </View>
     </View>
   );
 }
