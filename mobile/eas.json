@@ -25,7 +25,11 @@
     }
   },
   "submit": {
-    "testflight": {},
-    "production": {}
+    "testflight": {
+      "ios": { "bundleIdentifier": "br.com.joggahub.app.preview", "appName": "JoggaHub (preview)" }
+    },
+    "production": {
+      "ios": { "bundleIdentifier": "br.com.joggahub.app", "appName": "JoggaHub" }
+    }
   }
 }
