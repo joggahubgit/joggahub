@@ -4,6 +4,36 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle, Loader2, XCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { classEnrolledEmail, sendEmail } from '../../lib/emailTemplates';
+import { formatSessionDate } from '../../lib/classSchedule';
+
+/** Email de confirmação para o próprio aluno (só na primeira vez que a inscrição é criada). */
+async function sendClassEmail(classId: string, sessionId: string) {
+  try {
+    const key = `class_email_${sessionId}`;
+    if (localStorage.getItem(key)) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.email) return;
+    const [{ data: c }, { data: s }, { data: e }] = await Promise.all([
+      supabase.from('classes').select('title, coach_name, venues(name), courts(name)').eq('id', classId).maybeSingle(),
+      supabase.from('class_sessions').select('starts_at, ends_at').eq('class_id', classId).order('starts_at'),
+      supabase.from('class_enrollments').select('amount_paid, service_fee').eq('stripe_session_id', sessionId).maybeSingle(),
+    ]);
+    if (!c) return;
+    const cls = c as any;
+    await sendEmail(user.email, 'Inscrição confirmada no JoggaHub 🎓', classEnrolledEmail({
+      title: cls.title,
+      coach: cls.coach_name,
+      venueName: cls.venues?.name ?? '',
+      courtName: cls.courts?.name ?? '',
+      sessions: (s ?? []).map(x => `${formatSessionDate(x.starts_at.substring(0, 10))} · ${x.starts_at.substring(11, 16)}–${x.ends_at.substring(11, 16)}`),
+      total: (Number(e?.amount_paid ?? 0) + Number(e?.service_fee ?? 0)).toFixed(2).replace('.', ','),
+    }));
+    localStorage.setItem(key, '1');
+  } catch (err) {
+    console.error('[class email]', err);
+  }
+}
 
 type State = { kind: 'waiting' } | { kind: 'done'; classId: string } | { kind: 'failed'; error: string };
 
@@ -22,7 +52,12 @@ export default function ClassPaymentSuccess() {
       tries.current += 1;
       const { data } = await supabase.functions.invoke('finalize-checkout', { body: { sessionId } });
       if (stop) return;
-      if (data?.status === 'done' && data.classId) { setState({ kind: 'done', classId: data.classId }); return; }
+      if (data?.status === 'done' && data.classId) {
+        setState({ kind: 'done', classId: data.classId });
+        // Sempre na primeira confirmação nesta tela (o webhook pode ter criado a inscrição antes)
+        sendClassEmail(data.classId, sessionId!);
+        return;
+      }
       if (data?.status === 'failed') { setState({ kind: 'failed', error: data.error ?? 'Não foi possível concluir a inscrição.' }); return; }
       if (tries.current >= 20) {
         setState({ kind: 'failed', error: 'Seu pagamento está sendo processado. Confira o curso em alguns minutos.' });

@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { Bell, X, Calendar, DollarSign, XCircle, Users, Loader2 } from 'lucide-react';
+import { Bell, X, Calendar, DollarSign, XCircle, Users, Loader2, GraduationCap } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
 import { GestorBookingDetail } from './GestorBookingDetail';
+import { CLASSES_ENABLED } from '@/app/lib/features';
 
-type NotifType = 'new_booking' | 'payment_confirmed' | 'booking_cancelled' | 'player_joined';
+type NotifType = 'new_booking' | 'payment_confirmed' | 'booking_cancelled' | 'player_joined' | 'class_enrolled' | 'class_left';
 
 interface NotifItem {
   id: string;
@@ -12,6 +13,7 @@ interface NotifItem {
   message: string;
   timestamp: string;
   bookingId?: string;
+  classId?: string;
 }
 
 const STORAGE_KEY = 'gestor_notif_last_seen';
@@ -36,12 +38,41 @@ function iconFor(type: NotifType) {
     case 'payment_confirmed': return { Icon: DollarSign, color: 'bg-green-100 text-green-600' };
     case 'booking_cancelled': return { Icon: XCircle,    color: 'bg-red-100 text-red-500' };
     case 'player_joined':     return { Icon: Users,      color: 'bg-blue-100 text-blue-600' };
+    case 'class_enrolled':    return { Icon: GraduationCap, color: 'bg-amber-100 text-amber-600' };
+    case 'class_left':        return { Icon: XCircle,    color: 'bg-red-100 text-red-500' };
   }
 }
 
-interface Props { venueId: string; }
+interface Props { venueId: string; onOpenClass?: (classId: string) => void; }
 
-export function GestorNotifications({ venueId }: Props) {
+/** Inscrições e desistências nos cursos do clube (últimos 14 dias). */
+async function loadClassItems(venueId: string, since: Date): Promise<NotifItem[]> {
+  if (!CLASSES_ENABLED) return [];
+  const { data } = await supabase
+    .from('class_enrollments')
+    .select('id, class_id, player_id, status, created_at, cancelled_at, classes!inner(title, status, venue_id)')
+    .eq('classes.venue_id', venueId)
+    .gte('created_at', since.toISOString())
+    .order('created_at', { ascending: false })
+    .limit(50);
+  const rows = (data ?? []) as any[];
+  if (!rows.length) return [];
+  const { data: profiles } = await supabase.from('profiles').select('id, name').in('id', [...new Set(rows.map(r => r.player_id))]);
+  const names: Record<string, string> = {};
+  (profiles ?? []).forEach(p => { names[p.id] = p.name ?? 'Aluno'; });
+  const out: NotifItem[] = [];
+  for (const r of rows) {
+    const who = names[r.player_id] ?? 'Aluno';
+    out.push({ id: `class-in-${r.id}`, type: 'class_enrolled', title: 'Novo aluno no curso', message: `${who} · ${r.classes.title}`, timestamp: r.created_at, classId: r.class_id });
+    // Desistência do aluno (cancelamento do curso pelo clube não gera aviso aqui)
+    if (r.status === 'cancelled' && r.cancelled_at && r.classes.status === 'active') {
+      out.push({ id: `class-out-${r.id}`, type: 'class_left', title: 'Aluno desistiu do curso', message: `${who} · ${r.classes.title}`, timestamp: r.cancelled_at, classId: r.class_id });
+    }
+  }
+  return out;
+}
+
+export function GestorNotifications({ venueId, onOpenClass }: Props) {
   const [open, setOpen]       = useState(false);
   const [items, setItems]     = useState<NotifItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -99,12 +130,14 @@ export function GestorNotifications({ venueId }: Props) {
       const courtMap: Record<string, string> = {};
       courts.forEach(c => { courtMap[c.id] = c.name; });
 
+      const classItems = await loadClassItems(venueId, since);
+
       // Slots (last 14 days)
       const { data: slots } = await supabase
         .from('slots').select('id, court_id, start_time')
         .in('court_id', courts.map(c => c.id))
         .gte('start_time', since.toISOString());
-      if (!slots?.length) { setItems([]); return; }
+      if (!slots?.length) { setItems(classItems); return; }
       const slotMap: Record<string, { court_id: string; start_time: string }> = {};
       slots.forEach(s => { slotMap[s.id] = s; });
 
@@ -190,7 +223,7 @@ export function GestorNotifications({ venueId }: Props) {
         };
       });
 
-      const all = [...bookingItems, ...gpItems]
+      const all = [...bookingItems, ...gpItems, ...classItems]
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
         .slice(0, 50);
       setItems(all);
@@ -263,7 +296,7 @@ export function GestorNotifications({ venueId }: Props) {
             {!loading && items.map(item => {
               const isNew = new Date(item.timestamp) > lastSeen;
               const { Icon, color } = iconFor(item.type);
-              const clickable = !!item.bookingId;
+              const clickable = !!item.bookingId || (!!item.classId && !!onOpenClass);
               return (
                 <div
                   key={item.id}
@@ -271,6 +304,9 @@ export function GestorNotifications({ venueId }: Props) {
                     if (item.bookingId) {
                       setOpen(false);
                       setSelectedBookingId(item.bookingId);
+                    } else if (item.classId && onOpenClass) {
+                      setOpen(false);
+                      onOpenClass(item.classId);
                     }
                   }}
                   className={`flex gap-3 px-5 py-4 transition-colors ${isNew ? 'bg-purple-50/60' : 'hover:bg-gray-50'} ${clickable ? 'cursor-pointer hover:bg-purple-50' : ''}`}

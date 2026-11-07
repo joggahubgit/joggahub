@@ -7,6 +7,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { getMinPlayersForSport, PLAYER_CANCEL_CUTOFF_HOURS } from '@/app/lib/gameConfig';
+import MyClassesSection from './classes/MyClassesSection';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -464,6 +465,9 @@ export default function MyBookings() {
         </button>
         <h1 className="text-xl font-bold text-gray-900">Minhas Reservas</h1>
       </div>
+
+      {/* Cursos (aulas): some sozinho quando não há nenhum */}
+      {user && <div className="px-5 pt-5 empty:hidden"><MyClassesSection userId={user.id} /></div>}
 
       {loading ? (
         <div className="flex justify-center items-center py-24">

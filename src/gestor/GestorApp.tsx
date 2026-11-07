@@ -145,7 +145,12 @@ export default function GestorApp() {
               <span className="text-sm font-medium text-gray-900">{venue?.name ?? 'Minha Quadra'}</span>
               <span className="text-xs text-gray-600">Administrador</span>
             </div>
-            {venue?.id && <GestorNotifications venueId={venue.id} />}
+            {venue?.id && (
+              <GestorNotifications
+                venueId={venue.id}
+                onOpenClass={CLASSES_ENABLED ? (id) => { setOpenClassId(id); setActiveTab('classes'); } : undefined}
+              />
+            )}
             <div className="w-9 h-9 md:w-10 md:h-10 bg-gradient-to-br from-purple-600 to-purple-700 rounded-full flex items-center justify-center text-white font-semibold shadow-md text-sm md:text-base">
               {venueInitials}
             </div>
