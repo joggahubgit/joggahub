@@ -4,6 +4,7 @@ import { Trophy, Search, Send, MapPin } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { PROVISIONAL_MATCHES_THRESHOLD } from '@/app/lib/futevoleiLevels';
+import { levelCategory } from '@/app/lib/futevoleiQuiz';
 import ComingSoonBanner from './ComingSoonBanner';
 import BottomNav from './BottomNav';
 
@@ -496,6 +497,7 @@ export default function Community() {
                     </div>
                     <div className="text-right">
                       <div className="font-bold text-violet-600">{player.rating.toFixed(2)}</div>
+                      <div className="text-[11px] text-gray-500">{levelCategory(player.rating)}</div>
                     </div>
                   </div>
                 ))}
@@ -517,7 +519,10 @@ export default function Community() {
                       {myRanking.avatarUrl ? <img src={myRanking.avatarUrl} alt="" className="w-full h-full object-cover" /> : myRanking.avatar}
                     </div>
                     <div className="flex-1"><div className="font-semibold">Você</div><div className="text-sm text-violet-100">{myRanking.matches_played} partidas</div></div>
-                    <div className="text-right"><div className="font-bold">{myRanking.rating.toFixed(2)}</div></div>
+                    <div className="text-right">
+                      <div className="font-bold">{myRanking.rating.toFixed(2)}</div>
+                      <div className="text-[11px] text-violet-100">{levelCategory(myRanking.rating)}</div>
+                    </div>
                   </div>
                 </div>
               )}

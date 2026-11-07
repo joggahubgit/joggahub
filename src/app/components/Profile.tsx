@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { FUTEVOLEI_LEVELS, type FutevoleiLevelOption } from '@/app/lib/futevoleiLevels';
+import { LevelQuiz, emptyQuizAnswers, type QuizAnswers } from './LevelQuiz';
 import PlayerStatsSection from './PlayerStatsSection';
 import { AdjustLevelCard } from './AdjustLevelCard';
 import BottomNav from './BottomNav';
@@ -29,6 +29,7 @@ export default function Profile() {
   const [showLevelPicker, setShowLevelPicker] = useState(false);
   const [savingLevel, setSavingLevel] = useState(false);
   const [levelError, setLevelError] = useState('');
+  const [quizAnswers, setQuizAnswers] = useState<QuizAnswers>(emptyQuizAnswers);
   const [statsVersion, setStatsVersion] = useState(0); // remounts PlayerStatsSection after a level change
   const [followerCount, setFollowerCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
@@ -55,17 +56,17 @@ export default function Profile() {
       .then(({ count }) => setFollowingCount(count ?? 0));
   }, [user?.id]);
 
-  async function handleSetLevel(level: FutevoleiLevelOption) {
+  async function handleSetLevel(rating: number) {
     if (!user) return;
     setSavingLevel(true);
     setLevelError('');
-    // One-time self-declared level; the function also writes the baseline
-    // history point and enforces the rules server-side
-    const { error } = await supabase.rpc('declare_initial_rating', { p_sport: 'futevolei', p_rating: level.rating });
+    // One-time self-declared level (from the quiz); the function also writes the
+    // baseline history point and enforces the rules server-side
+    const { error } = await supabase.rpc('declare_initial_rating', { p_sport: 'futevolei', p_rating: rating });
     if (error) {
       setLevelError(error.message || 'Não foi possível definir seu nível.');
     } else {
-      setFutevoleiRating({ rating: level.rating, matches_played: 0 });
+      setFutevoleiRating({ rating, matches_played: 0 });
       setShowLevelPicker(false);
     }
     setSavingLevel(false);
@@ -213,19 +214,7 @@ export default function Profile() {
           <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-3">Pontuação · Futevôlei</p>
           {showLevelPicker ? (
             <div className="flex flex-col gap-2">
-              {FUTEVOLEI_LEVELS.map(l => (
-                <button
-                  key={l.key}
-                  disabled={savingLevel}
-                  onClick={() => handleSetLevel(l)}
-                  className="flex items-center justify-between px-3 py-2.5 rounded-xl border-2 border-gray-200 text-left hover:border-violet-300 disabled:opacity-50"
-                >
-                  <div>
-                    <div className="font-semibold text-sm text-gray-900">{l.label}</div>
-                    <div className="text-xs text-gray-400">{l.description}</div>
-                  </div>
-                </button>
-              ))}
+              <LevelQuiz answers={quizAnswers} onChange={setQuizAnswers} onConfirm={handleSetLevel} confirming={savingLevel} />
               {levelError && <p className="text-sm text-red-600">{levelError}</p>}
             </div>
           ) : (

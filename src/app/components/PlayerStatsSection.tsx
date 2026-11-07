@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2, Coins } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { PROVISIONAL_MATCHES_THRESHOLD } from '@/app/lib/futevoleiLevels';
+import { levelCategory } from '@/app/lib/futevoleiQuiz';
 import { wallDate, wallTime } from '@/app/lib/wallClock';
 
 interface Props {
@@ -343,6 +344,7 @@ export default function PlayerStatsSection({ userId }: Props) {
               </div>
               <p className="text-xs text-gray-400">{rating.matches_played} {rating.matches_played === 1 ? 'partida' : 'partidas'}</p>
             </div>
+            <p className="text-sm font-semibold text-violet-600 mb-1">{levelCategory(rating.rating)}</p>
             <RatingChart points={history} />
           </>
         )}

@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Check, ChevronRight, Camera, Loader2, Zap } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { FUTEVOLEI_LEVELS } from '@/app/lib/futevoleiLevels';
+import { quizRating } from '@/app/lib/futevoleiQuiz';
+import { LevelQuiz, emptyQuizAnswers, type QuizAnswers } from './LevelQuiz';
 import {
   POSITION_OPTIONS as POSITIONS, FOOT_OPTIONS, DAY_OPTIONS as DAYS, PERIOD_OPTIONS as PERIODS,
 } from '@/app/lib/profileFields';
@@ -45,7 +46,7 @@ export default function Onboarding() {
   const [periods, setPeriods] = useState<string[]>(profile?.availability?.periods ?? []);
 
   // Step 4 (optional — futevôlei only, for now)
-  const [futevoleiLevel, setFutevoleiLevel] = useState('');
+  const [quizAnswers, setQuizAnswers] = useState<QuizAnswers>(emptyQuizAnswers);
 
   function toggleDay(d: string) {
     setDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]);
@@ -117,16 +118,15 @@ export default function Onboarding() {
       // Self-declared starting level for futevôlei — only when the player has
       // none yet (the step is hidden otherwise). declare_initial_rating also
       // writes the baseline history point and enforces the 5.5 cap server-side.
-      if (futevoleiLevel && !hasRating) {
-        const level = FUTEVOLEI_LEVELS.find(l => l.key === futevoleiLevel);
-        if (level) {
-          const { error: ratingErr } = await supabase.rpc('declare_initial_rating', {
-            p_sport: 'futevolei',
-            p_rating: level.rating,
-          });
-          // Profile is already saved — a failed level isn't worth blocking on
-          if (ratingErr) console.error('[Onboarding] initial rating error:', ratingErr);
-        }
+      // Skipped or unfinished quiz → nothing declared (first match starts at 1.5).
+      const quiz = quizRating(quizAnswers);
+      if (quiz && !hasRating) {
+        const { error: ratingErr } = await supabase.rpc('declare_initial_rating', {
+          p_sport: 'futevolei',
+          p_rating: quiz.rating,
+        });
+        // Profile is already saved — a failed level isn't worth blocking on
+        if (ratingErr) console.error('[Onboarding] initial rating error:', ratingErr);
       }
 
       // Mark onboarding as done in localStorage so ProtectedRoute doesn't
@@ -356,33 +356,11 @@ export default function Onboarding() {
             <div>
               <h2 className="text-2xl font-bold text-gray-900">Qual seu nível no futevôlei?</h2>
               <p className="text-gray-500 mt-1">
-                Só pra começar sua pontuação num lugar razoável — ela se ajusta sozinha conforme você for jogando. Pode pular se não joga futevôlei.
+                5 perguntas rápidas pra começar sua pontuação num lugar justo — ela se ajusta sozinha conforme você joga. Pode pular se não joga futevôlei.
               </p>
             </div>
 
-            <div className="flex flex-col gap-2">
-              {FUTEVOLEI_LEVELS.map(l => (
-                <button
-                  key={l.key}
-                  onClick={() => setFutevoleiLevel(prev => prev === l.key ? '' : l.key)}
-                  className={`flex items-center justify-between px-4 py-3.5 rounded-xl border-2 text-left transition-all ${
-                    futevoleiLevel === l.key
-                      ? 'border-violet-600 bg-violet-50'
-                      : 'border-gray-200 hover:border-violet-200'
-                  }`}
-                >
-                  <div>
-                    <div className="font-semibold text-gray-900">{l.label}</div>
-                    <div className="text-xs text-gray-400">{l.description}</div>
-                  </div>
-                  {futevoleiLevel === l.key && (
-                    <div className="w-5 h-5 bg-violet-600 rounded-full flex items-center justify-center flex-shrink-0">
-                      <Check className="w-3 h-3 text-white" />
-                    </div>
-                  )}
-                </button>
-              ))}
-            </div>
+            <LevelQuiz answers={quizAnswers} onChange={setQuizAnswers} />
           </div>
         )}
 
@@ -399,7 +377,9 @@ export default function Onboarding() {
           {saving
             ? <><Loader2 className="w-5 h-5 animate-spin" /> Salvando...</>
             : step === TOTAL_STEPS
-              ? <><Zap className="w-5 h-5" /> Finalizar e ganhar 20 XP</>
+              ? step === 4 && !quizRating(quizAnswers)
+                ? <><Zap className="w-5 h-5" /> Pular e finalizar (+20 XP)</>
+                : <><Zap className="w-5 h-5" /> Finalizar e ganhar 20 XP</>
               : <><span>Continuar</span><ChevronRight className="w-5 h-5" /></>
           }
         </button>
