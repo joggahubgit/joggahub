@@ -365,10 +365,22 @@ export default function Home() {
 
   const firstName = profile?.name?.split(' ')[0] ?? 'Jogador';
 
+  // Once the search bar has scrolled under the fixed row, the row gets the
+  // rounded bottom and shadow that the search block has at the top of the page
+  const [headerCollapsed, setHeaderCollapsed] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setHeaderCollapsed(window.scrollY > 64);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* Header — the top row stays fixed; the search bar below scrolls away */}
-      <div className="sticky top-0 z-30 bg-violet-600 text-white px-6 pt-6 pb-4">
+      <div className={`sticky top-0 z-30 bg-violet-600 text-white px-6 pt-6 pb-4 transition-[border-radius,box-shadow] duration-200 ${
+        headerCollapsed ? 'rounded-b-3xl shadow-lg shadow-violet-900/20' : ''
+      }`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img src="/logo.png" alt="JoggaHub" className="w-8 h-8 object-contain" style={{ filter: 'brightness(0) invert(1)' }} />
@@ -390,7 +402,7 @@ export default function Home() {
       </div>
 
       {/* Search Bar */}
-      <div className="bg-violet-600 px-6 pb-6">
+      <div className="bg-violet-600 px-6 pb-6 rounded-b-3xl shadow-lg shadow-violet-900/20">
         <div onClick={() => navigate('/find-courts')} className="bg-white rounded-xl p-3 flex items-center gap-3 cursor-pointer">
           <Search className="w-5 h-5 text-gray-400" />
           <span className="flex-1 text-gray-400">Buscar quadras, jogos...</span>

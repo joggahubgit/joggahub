@@ -145,6 +145,17 @@ function ExploreCard({
   );
 }
 
+// Rounded bottom + soft violet shadow of the purple header (web: rounded-b-3xl shadow-lg)
+const headerBottom = {
+  borderBottomLeftRadius: 24,
+  borderBottomRightRadius: 24,
+  shadowColor: palette.violet['900'],
+  shadowOpacity: 0.2,
+  shadowRadius: 10,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 6,
+};
+
 export default function Home() {
   const { profile, session } = useAuth();
   const userId = session!.user.id; // guaranteed by the (app) guard
@@ -178,10 +189,14 @@ export default function Home() {
   const upcomingGames = upcoming.data ?? [];
   const upcomingBookings = bookings.data ?? [];
 
+  // Once the search bar has scrolled under the fixed row, the row gets the
+  // rounded bottom and shadow that the search block has at the top
+  const [headerCollapsed, setHeaderCollapsed] = useState(false);
+
   return (
     <View className="flex-1 bg-gray-50">
       {/* Header — the top row stays fixed (outside the ScrollView); the search bar scrolls away */}
-      <SafeAreaView edges={['top']} className="bg-violet-600">
+      <SafeAreaView edges={['top']} className="bg-violet-600" style={[{ zIndex: 10 }, headerCollapsed && headerBottom]}>
         <View className="bg-violet-600 px-6 pt-6 pb-4">
           <View className="flex-row items-center justify-between">
             <View className="flex-row items-center gap-3">
@@ -213,11 +228,16 @@ export default function Home() {
         className="flex-1"
         contentContainerClassName="pb-6"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor="#ffffff" />}
+        scrollEventThrottle={16}
+        onScroll={e => {
+          const collapsed = e.nativeEvent.contentOffset.y > 64;
+          if (collapsed !== headerCollapsed) setHeaderCollapsed(collapsed);
+        }}
       >
         {/* Purple behind the top of the list, so pulling down to refresh shows purple, not gray */}
         <View pointerEvents="none" className="absolute left-0 right-0 bg-violet-600" style={{ top: -1000, height: 1000 }} />
 
-        <View className="bg-violet-600 px-6 pb-6">
+        <View className="bg-violet-600 px-6 pb-6" style={[{ zIndex: 1 }, headerBottom]}>
           <Pressable onPress={() => router.push('/courts')} accessibilityRole="search" className="bg-white rounded-xl p-3 flex-row items-center gap-3">
             <Search size={20} color={palette.gray['400']} />
             <Text className="flex-1 text-gray-400 text-base">Buscar quadras, jogos...</Text>
