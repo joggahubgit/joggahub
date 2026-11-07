@@ -427,7 +427,7 @@ export default function CourtDetails() {
                                 className={`py-2 px-1 rounded-xl border items-center gap-0.5 ${box}`}
                               >
                                 <Text className={`text-xs font-semibold ${txt}`}>{slot.time}</Text>
-                                {hasGame && <Text className="text-[9px] font-bold text-violet-500">Jogo</Text>}
+                                {hasGame && <Text className="text-[10px] font-bold text-violet-500">Jogo</Text>}
                               </Pressable>
                             </SlotCell>
                           );
@@ -598,11 +598,11 @@ export default function CourtDetails() {
                               >
                                 <Text className={`text-xs font-semibold ${txt}`}>{slot.time}</Text>
                                 {game && !isFull && (
-                                  <Text className={`text-[10px] font-bold ${txt}`}>
+                                  <Text className={`text-[11px] font-bold ${txt}`}>
                                     {spotsLeft} vaga{spotsLeft !== 1 ? 's' : ''}
                                   </Text>
                                 )}
-                                {isFull && <Text className="text-[10px] text-gray-300">Cheio</Text>}
+                                {isFull && <Text className="text-[11px] text-gray-300">Cheio</Text>}
                               </Pressable>
                             </SlotCell>
                           );

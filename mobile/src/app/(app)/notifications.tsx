@@ -121,7 +121,7 @@ export default function NotificationsScreen() {
                   <Text className={`text-sm font-semibold ${active ? 'text-white' : 'text-gray-600'}`}>{t.label}</Text>
                   {t.count > 0 && (
                     <View className={`px-1.5 py-0.5 rounded-full ${active ? 'bg-white/25' : 'bg-violet-100'}`}>
-                      <Text className={`text-[10px] font-bold ${active ? 'text-white' : 'text-violet-700'}`}>{t.count}</Text>
+                      <Text className={`text-[11px] font-bold ${active ? 'text-white' : 'text-violet-700'}`}>{t.count}</Text>
                     </View>
                   )}
                 </Pressable>

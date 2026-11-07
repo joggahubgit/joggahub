@@ -34,7 +34,7 @@ function BookingCard({ b }: { b: UpcomingBooking }) {
             <Text className="text-xs text-gray-400">{b.courtName}</Text>
           </View>
           <View className={`px-2 py-1 rounded-full ${isPaid ? 'bg-green-100' : 'bg-amber-100'}`}>
-            <Text className={`text-[10px] font-bold ${isPaid ? 'text-green-700' : 'text-amber-700'}`}>{isPaid ? 'Pago' : 'Pendente'}</Text>
+            <Text className={`text-[11px] font-bold ${isPaid ? 'text-green-700' : 'text-amber-700'}`}>{isPaid ? 'Pago' : 'Pendente'}</Text>
           </View>
         </View>
         <View className="flex-row items-center justify-between pt-1 border-t border-gray-100">
@@ -72,7 +72,7 @@ function UpcomingGameCard({ g }: { g: UpcomingGame }) {
           <Text className="text-sm text-gray-500">{g.courtName}</Text>
         </View>
         <View className={`px-2 py-1 rounded-full ml-2 ${badge.bg}`}>
-          <Text className={`text-[10px] font-bold ${badge.fg}`}>{badge.label}</Text>
+          <Text className={`text-[11px] font-bold ${badge.fg}`}>{badge.label}</Text>
         </View>
       </View>
 
@@ -135,7 +135,7 @@ function ExploreCard({
     <Pressable onPress={onPress} className="bg-white rounded-xl p-4 border-2 border-gray-200 min-w-[160px] active:border-violet-600">
       {soon && (
         <View className="absolute top-2 right-2 bg-amber-100 px-2 py-0.5 rounded-full">
-          <Text className="text-amber-700 text-[10px] font-semibold">Em breve</Text>
+          <Text className="text-amber-700 text-[11px] font-semibold">Em breve</Text>
         </View>
       )}
       <View className={`${iconBg} rounded-full p-3 self-start mb-3`}>{icon}</View>

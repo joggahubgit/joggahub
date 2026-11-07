@@ -46,7 +46,7 @@ function TeamBox({ team, winner }: { team: FeedPerson[]; winner: boolean }) {
       <Text className="text-xs font-semibold text-gray-900" numberOfLines={1}>
         {team.map(p => p.name.split(' ')[0]).join(' & ')}
       </Text>
-      {winner && <Text className="text-[10px] font-bold text-green-600 mt-0.5">VENCEDOR</Text>}
+      {winner && <Text className="text-[11px] font-bold text-green-600 mt-0.5">VENCEDOR</Text>}
     </View>
   );
 }
@@ -253,7 +253,7 @@ export default function Community() {
                 ) : (
                   <>
                     <SelectField label="Clube" value={selectedVenueId} options={venues.data.map(v => ({ value: v.id, label: v.name }))} onChange={setVenuePick} />
-                    <Text className="text-[11px] text-gray-400 mt-2">Só aparecem jogadores com {PROVISIONAL_MATCHES_THRESHOLD}+ partidas de futevôlei confirmadas.</Text>
+                    <Text className="text-[12px] text-gray-400 mt-2">Só aparecem jogadores com {PROVISIONAL_MATCHES_THRESHOLD}+ partidas de futevôlei confirmadas.</Text>
                   </>
                 ))}
             </View>
@@ -290,7 +290,7 @@ export default function Community() {
                             </Text>
                             {player.matches_played < PROVISIONAL_MATCHES_THRESHOLD && (
                               <View className="bg-amber-100 px-1 py-0.5 rounded">
-                                <Text className="text-[9px] font-bold uppercase tracking-wide text-amber-700">Provisório</Text>
+                                <Text className="text-[10px] font-bold uppercase tracking-wide text-amber-700">Provisório</Text>
                               </View>
                             )}
                           </View>

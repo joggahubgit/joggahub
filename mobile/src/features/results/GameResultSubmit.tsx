@@ -91,10 +91,10 @@ function ScoreBoard({ sets, teamIds, personFor, myId }: { sets: SetScore[]; team
         {winner === team && (
           <View className="flex-row items-center gap-0.5">
             <Trophy size={12} color={palette.amber['700']} />
-            <Text className="text-[10px] font-bold uppercase tracking-wide text-amber-700">Vencedor</Text>
+            <Text className="text-[11px] font-bold uppercase tracking-wide text-amber-700">Vencedor</Text>
           </View>
         )}
-        {myTeam === team && <Text className="text-[10px] font-bold uppercase tracking-wide text-violet-600">Seu time</Text>}
+        {myTeam === team && <Text className="text-[11px] font-bold uppercase tracking-wide text-violet-600">Seu time</Text>}
       </View>
     </View>
   );
@@ -110,7 +110,7 @@ function ScoreBoard({ sets, teamIds, personFor, myId }: { sets: SetScore[]; team
       </View>
       {sets.map((s, i) => (
         <View key={i} className="flex-row items-center border-t border-gray-100">
-          <Text className="text-[11px] font-semibold text-gray-400 uppercase pl-3 py-2" style={{ width: 56 }}>
+          <Text className="text-[12px] font-semibold text-gray-400 uppercase pl-3 py-2" style={{ width: 56 }}>
             Set {i + 1}
           </Text>
           {cell(s.a, s.a > s.b)}
@@ -118,7 +118,7 @@ function ScoreBoard({ sets, teamIds, personFor, myId }: { sets: SetScore[]; team
         </View>
       ))}
       <View className="flex-row items-center bg-gray-50 border-t border-gray-200">
-        <Text className="text-[11px] font-bold text-gray-500 uppercase pl-3 py-2.5" style={{ width: 56 }}>
+        <Text className="text-[12px] font-bold text-gray-500 uppercase pl-3 py-2.5" style={{ width: 56 }}>
           Sets
         </Text>
         <Text className={`flex-1 text-center text-2xl font-black py-2.5 ${winner === 'a' ? 'text-amber-600' : 'text-gray-400'}`}>{setsA}</Text>
@@ -160,7 +160,7 @@ function SetScoreForm({ onSubmit, submitting, error }: { onSubmit: (sets: SetSco
             <Text className="text-gray-300">×</Text>
             <TextInput value={Number.isNaN(s.b) ? '' : String(s.b)} onChangeText={v => update(i, 'b', v)} placeholder="Time B" placeholderTextColor={palette.gray['400']} keyboardType="number-pad" maxLength={2} className={input} style={{ fontFamily: 'Inter_400Regular' }} accessibilityLabel={`Set ${i + 1}, time B`} />
           </View>
-          {!!setErrors[i] && <Text className="text-[11px] text-red-600 pl-16">{setErrors[i]}</Text>}
+          {!!setErrors[i] && <Text className="text-[12px] text-red-600 pl-16">{setErrors[i]}</Text>}
         </View>
       ))}
       {hasGap && <Text className="text-xs text-red-600">Não pule um set — preencha em ordem (Set 1, depois Set 2, depois Set 3).</Text>}
@@ -248,7 +248,7 @@ export function GameResultSubmit({ gameId, players, currentUserId }: { gameId: s
                   {nameFor(id)}
                 </Text>
                 {d && (
-                  <Text className={`text-[10px] font-bold ${d.after >= d.before ? 'text-green-600' : 'text-red-500'}`}>
+                  <Text className={`text-[11px] font-bold ${d.after >= d.before ? 'text-green-600' : 'text-red-500'}`}>
                     {d.after >= d.before ? '+' : ''}
                     {(d.after - d.before).toFixed(2)}
                   </Text>
@@ -257,7 +257,7 @@ export function GameResultSubmit({ gameId, players, currentUserId }: { gameId: s
             );
           })}
         </View>
-        {isWinner && <Text className="text-[10px] font-bold text-green-600 mt-1.5 tracking-wide">VENCEDOR</Text>}
+        {isWinner && <Text className="text-[11px] font-bold text-green-600 mt-1.5 tracking-wide">VENCEDOR</Text>}
       </View>
     );
     return (

@@ -309,7 +309,7 @@ function AvailabilitySection({ profile, save, highlight, onLayoutY }: SectionPro
         {PERIOD_OPTIONS.map(p => (
           <OptionButton key={p.value} selected={periods.includes(p.value)} onPress={() => setPeriods(prev => toggle(prev, p.value))} className="py-3 px-2 items-center">
             <Text className="text-sm font-semibold text-gray-900">{p.label}</Text>
-            <Text className="text-[11px] text-gray-400">{p.sub}</Text>
+            <Text className="text-[12px] text-gray-400">{p.sub}</Text>
           </OptionButton>
         ))}
       </View>
@@ -338,7 +338,7 @@ function BioSection({ profile, save, highlight, onLayoutY }: SectionProps) {
         className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-sm text-gray-900"
         style={[inputStyle, { minHeight: 84, textAlignVertical: 'top' }]}
       />
-      <Text className="text-right text-[11px] text-gray-400">
+      <Text className="text-right text-[12px] text-gray-400">
         {bio.length}/{BIO_MAX}
       </Text>
     </Section>

@@ -39,13 +39,13 @@ function PlayerCell({ person }: { person: PersonRef | null | undefined }) {
     <View className="items-center gap-1 w-16">
       {person ? <InitialsCircle person={person} size={44} text="text-sm" /> : <View className="w-11 h-11 rounded-full bg-gray-100" />}
       {person && (
-        <Text className="text-[11px] text-gray-700 font-medium text-center w-full" numberOfLines={1}>
+        <Text className="text-[12px] text-gray-700 font-medium text-center w-full" numberOfLines={1}>
           {person.name.split(' ')[0]}
         </Text>
       )}
       {person?.rating != null && (
         <View className="bg-lime-100 px-1.5 py-0.5 rounded">
-          <Text className="text-[10px] font-bold text-lime-700">{person.rating.toFixed(1).replace('.', ',')}</Text>
+          <Text className="text-[11px] font-bold text-lime-700">{person.rating.toFixed(1).replace('.', ',')}</Text>
         </View>
       )}
     </View>
@@ -92,9 +92,9 @@ function RatingChart({ points }: { points: { rating: number }[] }) {
         <AnimatedCircle cx={last[0]} cy={last[1]} r={dotR} fill={VIOLET} stroke="white" strokeWidth={2} />
       </Svg>
       <View className="flex-row justify-between mt-1">
-        <Text className="text-[10px] text-gray-400">{min.toFixed(2)}</Text>
-        <Text className="text-[10px] font-semibold text-violet-600">{values[values.length - 1].toFixed(2)}</Text>
-        <Text className="text-[10px] text-gray-400">{max.toFixed(2)}</Text>
+        <Text className="text-[11px] text-gray-400">{min.toFixed(2)}</Text>
+        <Text className="text-[11px] font-semibold text-violet-600">{values[values.length - 1].toFixed(2)}</Text>
+        <Text className="text-[11px] text-gray-400">{max.toFixed(2)}</Text>
       </View>
     </View>
   );
@@ -171,7 +171,7 @@ export function PlayerStatsSection({ userId, version = 0 }: { userId: string; ve
                 <Text className="text-3xl font-black text-gray-900">{rating.rating.toFixed(2)}</Text>
                 {rating.matches_played < PROVISIONAL_MATCHES_THRESHOLD && (
                   <View className="bg-amber-100 px-1.5 py-0.5 rounded">
-                    <Text className="text-[10px] font-bold uppercase tracking-wide text-amber-700">Provisório</Text>
+                    <Text className="text-[11px] font-bold uppercase tracking-wide text-amber-700">Provisório</Text>
                   </View>
                 )}
               </View>

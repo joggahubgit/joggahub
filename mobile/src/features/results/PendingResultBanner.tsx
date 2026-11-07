@@ -94,7 +94,7 @@ export function PendingResultBanner({ userId }: { userId: string }) {
         <Text className="text-xs text-gray-600" numberOfLines={1}>
           {first.submitterName} registrou {won ? 'sua vitória' : 'sua derrota'} · {score}
         </Text>
-        <Text className="text-[11px] text-gray-400" numberOfLines={1}>
+        <Text className="text-[12px] text-gray-400" numberOfLines={1}>
           {[first.venueName, when].filter(Boolean).join(' · ')} · confirma sozinho em {timeLeft}
         </Text>
       </View>

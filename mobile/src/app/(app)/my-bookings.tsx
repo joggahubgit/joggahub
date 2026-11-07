@@ -21,7 +21,7 @@ const fmtDate = (iso: string) => wallDate(iso, { weekday: 'short', day: 'numeric
 function Chip({ label, bg, fg }: { label: string; bg: string; fg: string }) {
   return (
     <View className={`px-2 py-0.5 rounded-full ${bg}`}>
-      <Text className={`text-[10px] font-bold ${fg}`}>{label}</Text>
+      <Text className={`text-[11px] font-bold ${fg}`}>{label}</Text>
     </View>
   );
 }
@@ -36,7 +36,7 @@ function TypeBadge({ item }: { item: BookingItem }) {
   return (
     <View className={`flex-row items-center gap-1 px-2 py-0.5 rounded-full ${cfg.bg}`}>
       <cfg.Icon size={12} color={cfg.c} />
-      <Text className={`text-[10px] font-bold ${cfg.fg}`}>{cfg.label}</Text>
+      <Text className={`text-[11px] font-bold ${cfg.fg}`}>{cfg.label}</Text>
     </View>
   );
 }
@@ -160,7 +160,7 @@ export default function MyBookings() {
             ) : item.withinCancelCutoff && isUpcoming(item) && item.type === 'game_organizer' ? (
               <View className="flex-row items-center gap-1">
                 <Shield size={12} color={palette.gray['400']} />
-                <Text className="text-[10px] text-gray-400 font-semibold">Contate o clube</Text>
+                <Text className="text-[11px] text-gray-400 font-semibold">Contate o clube</Text>
               </View>
             ) : null}
           </View>

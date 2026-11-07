@@ -109,9 +109,9 @@ export default function GameChat() {
                       </View>
                     ))}
                   <View className={`max-w-[75%] rounded-2xl px-3.5 py-2.5 ${mine ? 'bg-violet-600 rounded-br-sm' : 'bg-white border border-gray-200 rounded-bl-sm'}`}>
-                    {!mine && <Text className="text-[11px] font-semibold text-violet-600 mb-0.5">{sender?.name ?? 'Jogador'}</Text>}
+                    {!mine && <Text className="text-[12px] font-semibold text-violet-600 mb-0.5">{sender?.name ?? 'Jogador'}</Text>}
                     <Text className={`text-sm ${mine ? 'text-white' : 'text-gray-900'}`}>{m.body}</Text>
-                    <Text className={`text-[10px] mt-1 ${mine ? 'text-violet-200' : 'text-gray-400'}`}>{formatTime(m.created_at)}</Text>
+                    <Text className={`text-[11px] mt-1 ${mine ? 'text-violet-200' : 'text-gray-400'}`}>{formatTime(m.created_at)}</Text>
                   </View>
                 </View>
               );

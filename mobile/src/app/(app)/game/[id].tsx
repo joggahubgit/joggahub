@@ -359,13 +359,13 @@ export default function OpenGamePage() {
               {player.name.split(' ')[0]}
             </Text>
             {player.isOrganizer ? (
-              <Text className="text-[10px] font-semibold text-yellow-600">Org.</Text>
+              <Text className="text-[11px] font-semibold text-yellow-600">Org.</Text>
             ) : (
-              <Text className={`text-[10px] font-semibold ${player.paid ? 'text-green-600' : 'text-amber-500'}`}>{player.paid ? 'Pago' : 'Pendente'}</Text>
+              <Text className={`text-[11px] font-semibold ${player.paid ? 'text-green-600' : 'text-amber-500'}`}>{player.paid ? 'Pago' : 'Pendente'}</Text>
             )}
           </View>
         ) : (
-          <Text className="text-[10px] text-gray-300">vaga</Text>
+          <Text className="text-[11px] text-gray-300">vaga</Text>
         )}
       </View>
     );
