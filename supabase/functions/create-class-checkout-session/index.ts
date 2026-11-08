@@ -74,7 +74,11 @@ serve(async (req) => {
       mode: 'payment',
       expires_at: checkoutExpiresAt(),
       client_reference_id: userId,
-      ...(hold ? { payment_intent_data: { capture_method: 'manual' as const } } : {}),
+      payment_intent_data: {
+        ...(hold ? { capture_method: 'manual' as const } : {}),
+        description: `${cls.kind === 'day_use' ? 'Day use' : 'Curso'} — ${cls.title} · ${d(cls.start_date)}`,
+        metadata: { tipo: cls.kind === 'day_use' ? 'day_use' : 'aula', classId: cls.id },
+      },
       line_items: [
         {
           price_data: {

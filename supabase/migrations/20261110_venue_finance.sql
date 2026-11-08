@@ -53,10 +53,10 @@ language sql stable security definer set search_path = public as $$
   )
   -- Partidas (abertas e reservas privadas com partida)
   select
-    case when g.is_open then 'partida_aberta' else 'reserva' end,
+    case when g.is_open then 'partida_aberta' else 'partida_fechada' end,
     g.id, g.scheduled_at, g.court_id, c.name,
     coalesce(p.name, 'Jogador'),
-    case when g.is_open then 'Partida aberta' else 'Reserva' end,
+    case when g.is_open then 'Partida aberta' else 'Partida fechada' end,
     round(coalesce(g.court_price,
           case when g.b_total is not null then (g.b_total - 2.5) / 1.08 end, 0)::numeric, 2),
     case
@@ -78,7 +78,7 @@ language sql stable security definer set search_path = public as $$
 
   union all
   -- Reservas antigas sem partida ligada
-  select 'reserva', b.id, s.start_time, s.court_id, c.name, coalesce(p.name, 'Jogador'), 'Reserva',
+  select 'reserva', b.id, s.start_time, s.court_id, c.name, coalesce(p.name, 'Jogador'), 'Partida fechada',
     round(((b.total_price - 2.5) / 1.08)::numeric, 2),
     case when b.status = 'cancelled' then 'cancelado'
          when b.payment_status = 'paid' then 'recebido' else 'pendente' end

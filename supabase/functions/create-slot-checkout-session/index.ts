@@ -98,14 +98,19 @@ serve(async (req) => {
       mode: 'payment',
       expires_at: checkoutExpiresAt(),
       client_reference_id: userId,
-      payment_intent_data: { capture_method: 'manual' },
+      // Nome/descrição iguais aos do app (Financeiro do gestor) para bater com o Stripe
+      payment_intent_data: {
+        capture_method: 'manual',
+        description: `Partida fechada — ${court.name} · ${date} ${time}`,
+        metadata: { tipo: 'partida_fechada', courtId: court.id },
+      },
       line_items: [
         {
           price_data: {
             currency: 'brl',
             unit_amount: Math.round(courtPrice * 100),
             product_data: {
-              name: isSplit ? `Garantia de reserva — ${court.name}` : `Bloqueio de reserva — ${court.name}`,
+              name: `Partida fechada — ${court.name}`,
               description: isSplit
                 ? `${venueName} · ${date} · ${time} – ${endTime} · Valor retido até o fim da partida`
                 : `${venueName} · ${date} · ${time} – ${endTime} · Valor cobrado 24h antes da partida`,

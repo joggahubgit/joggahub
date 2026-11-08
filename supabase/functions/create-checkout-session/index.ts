@@ -43,6 +43,7 @@ serve(async (req) => {
     let captureManual: boolean;
     let label: { sport: string; court: string; venue: string; date: string; time: string };
     let metadata: Record<string, string>;
+    let tipo: 'partida_aberta' | 'partida_fechada' = 'partida_aberta';
 
     if (mode === 'organizer') {
       // ── New open game: price comes from slot/court ──
@@ -75,7 +76,7 @@ serve(async (req) => {
       };
     } else if (mode === 'join_self' || mode === 'join_other' || mode === 'pay_reservation') {
       const { data: game } = await db.from('games')
-        .select('id, status, max_players, price_per_player, sport_type, court_id, slot_id, scheduled_at, organizer_id')
+        .select('id, status, max_players, price_per_player, sport_type, court_id, slot_id, scheduled_at, organizer_id, is_open')
         .eq('id', body.gameId).maybeSingle();
       if (!game) throw new UserError('Jogo não encontrado');
       if (game.status === 'expired' || game.status === 'cancelled') throw new UserError('Esta partida foi encerrada ou cancelada.');
@@ -83,6 +84,7 @@ serve(async (req) => {
       const court = await loadCourt(db, game.court_id);
       const startTime = await gameStart(db, game);
       label = { sport: game.sport_type ?? court.sport_type, court: court.name, venue: court.venueName, ...wallLabel(startTime) };
+      tipo = mode === 'pay_reservation' || game.is_open === false ? 'partida_fechada' : 'partida_aberta';
       vagaPrice = Number(game.price_per_player) || 0;
       if (vagaPrice <= 0) throw new UserError('Preço da vaga não encontrado');
 
@@ -129,15 +131,20 @@ serve(async (req) => {
       mode: 'payment',
       expires_at: checkoutExpiresAt(),
       client_reference_id: userId,
-      ...(captureManual ? { payment_intent_data: { capture_method: 'manual' } } : {}),
+      // Nome/descrição iguais aos do app (Financeiro do gestor) para bater com o Stripe
+      payment_intent_data: {
+        ...(captureManual ? { capture_method: 'manual' as const } : {}),
+        description: `${tipo === 'partida_aberta' ? 'Partida aberta' : 'Partida fechada'} — ${label.court} · ${label.date} ${label.time}`,
+        metadata: { tipo, ...(metadata.gameId ? { gameId: metadata.gameId } : {}) },
+      },
       line_items: [
         {
           price_data: {
             currency: 'brl',
             unit_amount: Math.round(vagaPrice * 100),
             product_data: {
-              name: `Vaga — ${SPORT_LABELS[label.sport] ?? label.sport} em ${label.court}`,
-              description: `${label.venue} · ${label.date} às ${label.time}`,
+              name: `${tipo === 'partida_aberta' ? 'Partida aberta' : 'Partida fechada'} — ${label.court}`,
+              description: `${SPORT_LABELS[label.sport] ?? label.sport} · ${label.venue} · ${label.date} às ${label.time}`,
             },
           },
           quantity: 1,

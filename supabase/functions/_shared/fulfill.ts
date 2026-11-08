@@ -60,7 +60,7 @@ export async function fulfillSession(
       case 'private_game': done = await fulfillPrivateGame(db, session, md); break;
       case 'organizer': done = await fulfillOrganizer(db, session, md); break;
       case 'join': done = await fulfillJoin(db, pi, md); break;
-      case 'pay_reservation': done = await fulfillPayReservation(db, md); break;
+      case 'pay_reservation': done = await fulfillPayReservation(db, pi, md); break;
       case 'class_enrollment': done = await fulfillClassEnrollment(db, session, pi, md); break;
       default: throw new UserError(`Tipo de pagamento desconhecido: ${md.kind}`);
     }
@@ -442,11 +442,11 @@ async function fulfillJoin(db: Db, pi: Stripe.PaymentIntent, md: Md): Promise<Do
 
 // ── Organizer pays a booking the venue (gestor) created manually ────────────
 
-async function fulfillPayReservation(db: Db, md: Md): Promise<Done> {
+async function fulfillPayReservation(db: Db, pi: Stripe.PaymentIntent, md: Md): Promise<Done> {
   const { data: row } = await db.from('game_players').select('id')
     .eq('game_id', md.gameId).eq('player_id', md.userId).maybeSingle();
   if (!row) throw new UserError('Você não faz parte desta reserva.');
-  await db.from('game_players').update({ paid: true }).eq('id', row.id);
+  await db.from('game_players').update({ paid: true, stripe_payment_intent_id: pi.id }).eq('id', row.id);
 
   const { data: game } = await db.from('games').select('booking_id, slot_id').eq('id', md.gameId).single();
   if (game?.booking_id) {

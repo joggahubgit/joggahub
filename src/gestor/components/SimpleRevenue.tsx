@@ -1,16 +1,20 @@
 // Financeiro do gestor. Os números vêm de venue_finance() no banco (extrato único
-// com o valor do clube, sem a taxa do JoggaHub): reservas, partidas abertas,
-// day use e aulas, por mês do jogo/aula. Mais ocupação, potencial e repasse.
+// com o valor do clube, sem a taxa do JoggaHub): partidas fechadas, partidas
+// abertas, day use e aulas, por mês do jogo/aula. Mais ocupação, potencial e
+// repasse. Nomes e situações iguais aos do Stripe; clicar abre o extrato.
 import { useEffect, useMemo, useState } from 'react';
 import {
   CheckCircle, ShieldCheck, Clock, TrendingUp, ChevronLeft, ChevronRight, Download, Banknote,
-  CalendarCheck, Users, Sun, GraduationCap, Wallet,
+  CalendarCheck, Users, Sun, GraduationCap, Wallet, X, Loader2, ExternalLink,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
 
 interface SimpleRevenueProps { venueId: string | null }
 
-type Kind = 'reserva' | 'partida_aberta' | 'day_use' | 'aula';
+type Kind = 'partida_fechada' | 'partida_aberta' | 'day_use' | 'aula' | 'reserva';
+type ShownKind = Exclude<Kind, 'reserva'>;
+/** Reserva antiga (sem partida ligada) aparece como partida fechada. */
+const shownKind = (k: Kind): ShownKind => (k === 'reserva' ? 'partida_fechada' : k);
 type Status = 'recebido' | 'a_cobrar' | 'reservado' | 'pendente' | 'aguardando' | 'cancelado';
 
 interface Entry {
@@ -27,22 +31,27 @@ interface Finance {
   last_payout: { amount: number; paid_at: string } | null;
 }
 
-const KIND: Record<Kind, { label: string; icon: typeof CalendarCheck; color: string }> = {
-  reserva:        { label: 'Reservas',        icon: CalendarCheck, color: 'text-purple-600 bg-purple-50' },
+const KIND: Record<ShownKind, { label: string; icon: typeof CalendarCheck; color: string }> = {
+  partida_fechada: { label: 'Partidas fechadas', icon: CalendarCheck, color: 'text-purple-600 bg-purple-50' },
   partida_aberta: { label: 'Partidas abertas', icon: Users,        color: 'text-blue-600 bg-blue-50' },
   day_use:        { label: 'Day use',          icon: Sun,          color: 'text-sky-600 bg-sky-50' },
   aula:           { label: 'Aulas',            icon: GraduationCap, color: 'text-amber-600 bg-amber-50' },
 };
 
-const ENTRY_LABEL: Record<Kind, string> = { reserva: 'Reserva', partida_aberta: 'Partida aberta', day_use: 'Day use', aula: 'Aula' };
+const ENTRY_LABEL: Record<ShownKind, string> = { partida_fechada: 'Partida fechada', partida_aberta: 'Partida aberta', day_use: 'Day use', aula: 'Aula' };
 
-const STATUS: Record<Status, { label: string; pill: string }> = {
-  recebido:   { label: 'Recebido',              pill: 'bg-green-100 text-green-700' },
-  a_cobrar:   { label: 'A cobrar',              pill: 'bg-teal-100 text-teal-700' },
-  reservado:  { label: 'Reservado',             pill: 'bg-blue-100 text-blue-700' },
-  pendente:   { label: 'Aguardando pagamento',  pill: 'bg-amber-100 text-amber-700' },
-  aguardando: { label: 'Aguardando jogadores',  pill: 'bg-orange-100 text-orange-700' },
-  cancelado:  { label: 'Cancelado',             pill: 'bg-gray-100 text-gray-500' },
+// Situações com o termo equivalente do Stripe (painel em português)
+const STATUS: Record<Status, { label: string; pill: string; stripe: string }> = {
+  recebido:   { label: 'Pago',                     pill: 'bg-green-100 text-green-700',  stripe: 'Bem-sucedido' },
+  a_cobrar:   { label: 'Retido · será cobrado',    pill: 'bg-teal-100 text-teal-700',    stripe: 'Não capturado' },
+  reservado:  { label: 'Retido · pode cancelar',   pill: 'bg-blue-100 text-blue-700',    stripe: 'Não capturado' },
+  pendente:   { label: 'Aguardando pagamento',     pill: 'bg-amber-100 text-amber-700',  stripe: '—' },
+  aguardando: { label: 'Aguardando jogadores',     pill: 'bg-orange-100 text-orange-700', stripe: 'Não capturado' },
+  cancelado:  { label: 'Cancelado / reembolsado',  pill: 'bg-gray-100 text-gray-500',    stripe: 'Cancelado / Reembolsado' },
+};
+type Filter = 'recebido' | 'a_cobrar' | 'reservado' | 'aguardando_all' | null;
+const FILTER_STATUSES: Record<Exclude<Filter, null>, Status[]> = {
+  recebido: ['recebido'], a_cobrar: ['a_cobrar'], reservado: ['reservado'], aguardando_all: ['pendente', 'aguardando'],
 };
 
 const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -56,6 +65,8 @@ export function SimpleRevenue({ venueId }: SimpleRevenueProps) {
   const [month, setMonth] = useState({ y: now.getFullYear(), m: now.getMonth() });
   const [court, setCourt] = useState<string>('all');
   const [showCancelled, setShowCancelled] = useState(false);
+  const [filter, setFilter] = useState<Filter>(null);
+  const [statement, setStatement] = useState<Entry | null>(null);
   const [data, setData] = useState<Finance | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -97,8 +108,8 @@ export function SimpleRevenue({ venueId }: SimpleRevenueProps) {
   const potential = capacity.reduce((s, c) => s + Number(c.potential), 0);
   const balance = Math.max(0, Number(data?.received_to_date ?? 0) - Number(data?.paid_out ?? 0));
 
-  const byKind = (Object.keys(KIND) as Kind[]).map(k => {
-    const list = entries.filter(e => e.kind === k && e.status !== 'cancelado');
+  const byKind = (Object.keys(KIND) as ShownKind[]).map(k => {
+    const list = entries.filter(e => shownKind(e.kind) === k && e.status !== 'cancelado');
     return {
       k,
       count: list.length,
@@ -108,16 +119,23 @@ export function SimpleRevenue({ venueId }: SimpleRevenueProps) {
   });
   const kindMax = Math.max(1, ...byKind.map(b => b.received + b.future));
 
-  const listed = entries.filter(e => showCancelled || e.status !== 'cancelado');
+  const listed = entries
+    .filter(e => !filter || FILTER_STATUSES[filter].includes(e.status))
+    .filter(e => showCancelled || filter || e.status !== 'cancelado');
+
+  function pick(f: Exclude<Filter, null>) {
+    setFilter(cur => (cur === f ? null : f));
+    setTimeout(() => document.getElementById('lancamentos')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  }
   const cancelledCount = count(['cancelado']);
   const courts = data?.capacity ?? [];
 
   function exportCsv() {
     const rows = [
-      ['Data', 'Hora', 'Tipo', 'Jogador/aluno', 'Descrição', 'Quadra', 'Valor do clube (R$)', 'Situação'],
+      ['Data', 'Hora', 'Tipo', 'Jogador/aluno', 'Descrição', 'Quadra', 'Valor do clube (R$)', 'Situação', 'Situação no Stripe'],
       ...listed.map(e => [
-        wallDay(e.event_at) + '/' + e.event_at.substring(0, 4), wallHour(e.event_at), KIND[e.kind].label,
-        e.who, e.title, e.court_name, e.amount.toFixed(2).replace('.', ','), STATUS[e.status].label,
+        wallDay(e.event_at) + '/' + e.event_at.substring(0, 4), wallHour(e.event_at), ENTRY_LABEL[shownKind(e.kind)],
+        e.who, e.title, e.court_name, e.amount.toFixed(2).replace('.', ','), STATUS[e.status].label, STATUS[e.status].stripe,
       ]),
     ];
     const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
@@ -159,10 +177,14 @@ export function SimpleRevenue({ venueId }: SimpleRevenueProps) {
         <>
           {/* Indicadores do mês */}
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-            <Kpi icon={CheckCircle} tone="green" label="Recebido" value={received} hint={`Já cobrado no cartão · ${count(['recebido'])} lançamentos`} />
-            <Kpi icon={ShieldCheck} tone="teal" label="A cobrar" value={toCharge} hint="Prazo de cancelamento já passou; cobrado até 2h antes do jogo" />
-            <Kpi icon={Wallet} tone="blue" label="Reservado" value={reserved} hint="Retido no cartão; o jogador ainda pode cancelar até 24h antes" />
-            <Kpi icon={Clock} tone="amber" label="Aguardando" value={waiting} hint="Pagamento do jogador ou mínimo de jogadores" />
+            <Kpi icon={CheckCircle} tone="green" label="Pago" value={received} active={filter === 'recebido'} onClick={() => pick('recebido')}
+              hint={`Cobrado no cartão · no Stripe: Bem-sucedido · ${count(['recebido'])} lançamentos`} />
+            <Kpi icon={ShieldCheck} tone="teal" label="Retido · será cobrado" value={toCharge} active={filter === 'a_cobrar'} onClick={() => pick('a_cobrar')}
+              hint="Prazo de cancelamento passou; cobrado até 2h antes · no Stripe: Não capturado" />
+            <Kpi icon={Wallet} tone="blue" label="Retido · pode cancelar" value={reserved} active={filter === 'reservado'} onClick={() => pick('reservado')}
+              hint="O jogador ainda pode cancelar até 24h antes · no Stripe: Não capturado" />
+            <Kpi icon={Clock} tone="amber" label="Aguardando" value={waiting} active={filter === 'aguardando_all'} onClick={() => pick('aguardando_all')}
+              hint="Pagamento do jogador ou mínimo de jogadores" />
             <Kpi icon={TrendingUp} tone="gray" label="Potencial" value={potential} hint="Horários livres que você criou, se forem vendidos" />
           </div>
 
@@ -246,11 +268,19 @@ export function SimpleRevenue({ venueId }: SimpleRevenueProps) {
           </div>
 
           {/* Lançamentos */}
-          <div className="bg-white rounded-2xl border border-gray-200">
+          <div id="lancamentos" className="bg-white rounded-2xl border border-gray-200 scroll-mt-24">
             <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-4 border-b border-gray-100">
-              <p className="font-semibold text-gray-900">Lançamentos <span className="text-gray-400 font-normal text-sm">· {listed.length}</span></p>
+              <div className="flex items-center gap-2">
+                <p className="font-semibold text-gray-900">Lançamentos <span className="text-gray-400 font-normal text-sm">· {listed.length}</span></p>
+                {filter && (
+                  <button onClick={() => setFilter(null)} className="flex items-center gap-1 text-xs font-semibold bg-gray-900 text-white rounded-full pl-2.5 pr-1.5 py-1">
+                    {filter === 'aguardando_all' ? 'Aguardando' : STATUS[FILTER_STATUSES[filter][0]].label}<X className="w-3 h-3" />
+                  </button>
+                )}
+                <span className="text-xs text-gray-400 hidden md:inline">Clique num lançamento para ver o extrato</span>
+              </div>
               <div className="flex items-center gap-3">
-                {cancelledCount > 0 && (
+                {cancelledCount > 0 && !filter && (
                   <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
                     <input type="checkbox" checked={showCancelled} onChange={e => setShowCancelled(e.target.checked)} />
                     Mostrar cancelados ({cancelledCount})
@@ -267,9 +297,10 @@ export function SimpleRevenue({ venueId }: SimpleRevenueProps) {
             ) : (
               <div className="divide-y divide-gray-100">
                 {listed.map(e => {
-                  const K = KIND[e.kind];
+                  const K = KIND[shownKind(e.kind)];
                   return (
-                    <div key={`${e.kind}-${e.ref_id}-${e.event_at}`} className="flex items-center gap-3 px-5 py-3">
+                    <button key={`${e.kind}-${e.ref_id}-${e.event_at}`} onClick={() => setStatement(e)}
+                      className="w-full text-left flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors">
                       <span className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${K.color}`}><K.icon className="w-4 h-4" /></span>
                       <div className="w-16 flex-shrink-0 text-sm">
                         <p className="font-semibold text-gray-900 tabular-nums">{wallDay(e.event_at)}</p>
@@ -277,11 +308,11 @@ export function SimpleRevenue({ venueId }: SimpleRevenueProps) {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className={`text-sm font-medium truncate ${e.status === 'cancelado' ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{e.who}</p>
-                        <p className="text-xs text-gray-500 truncate">{ENTRY_LABEL[e.kind]}{e.kind === 'aula' || e.kind === 'day_use' ? ` · ${e.title}` : ''} · {e.court_name}</p>
+                        <p className="text-xs text-gray-500 truncate">{ENTRY_LABEL[shownKind(e.kind)]}{e.kind === 'aula' || e.kind === 'day_use' ? ` · ${e.title}` : ''} · {e.court_name}</p>
                       </div>
                       <span className={`hidden sm:inline text-[11px] font-semibold px-2 py-0.5 rounded-full ${STATUS[e.status].pill}`}>{STATUS[e.status].label}</span>
                       <span className={`w-24 text-right text-sm font-bold tabular-nums ${e.status === 'cancelado' ? 'text-gray-300' : 'text-gray-900'}`}>{brl(e.amount)}</span>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -293,11 +324,15 @@ export function SimpleRevenue({ venueId }: SimpleRevenueProps) {
           </p>
         </>
       )}
+      {statement && <StatementModal entry={statement} onClose={() => setStatement(null)} />}
     </div>
   );
 }
 
-function Kpi({ icon: Icon, tone, label, value, hint }: { icon: typeof CheckCircle; tone: 'green' | 'teal' | 'blue' | 'amber' | 'gray'; label: string; value: number; hint: string }) {
+function Kpi({ icon: Icon, tone, label, value, hint, onClick, active }: {
+  icon: typeof CheckCircle; tone: 'green' | 'teal' | 'blue' | 'amber' | 'gray'; label: string; value: number; hint: string;
+  onClick?: () => void; active?: boolean;
+}) {
   const t = {
     green: 'bg-green-100 text-green-600',
     teal: 'bg-teal-100 text-teal-600',
@@ -306,11 +341,125 @@ function Kpi({ icon: Icon, tone, label, value, hint }: { icon: typeof CheckCircl
     gray: 'bg-gray-100 text-gray-500',
   }[tone];
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 p-4">
+    <button type="button" onClick={onClick} disabled={!onClick}
+      className={`text-left bg-white rounded-2xl border p-4 transition-all ${active ? 'border-gray-900 ring-2 ring-gray-900/10' : 'border-gray-200'} ${onClick ? 'hover:shadow-md cursor-pointer' : 'cursor-default'}`}>
       <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-3 ${t}`}><Icon className="w-5 h-5" /></div>
       <p className="text-sm text-gray-500">{label}</p>
       <p className="text-xl font-bold text-gray-900">{brl(value)}</p>
       <p className="text-[11px] text-gray-400 mt-1 leading-snug">{hint}</p>
+      {onClick && <p className="text-[11px] font-semibold text-purple-600 mt-2">{active ? 'Mostrando na lista ↓' : 'Ver lançamentos →'}</p>}
+    </button>
+  );
+}
+
+// ── Extrato de um lançamento (direto do Stripe) ─────────────────────────────
+
+interface StatementLine {
+  who: string; role: string; paymentId: string | null; stripeStatus: string;
+  charged: number; held: number; refunded: number; clubShare: number; fee: number; date: string | null;
+}
+interface Statement {
+  header: { title?: string; court?: string; when?: string; courtPrice?: number; lessons?: number };
+  lines: StatementLine[];
+  total: { charged: number; held: number; refunded: number; clubShare: number; fee: number };
+}
+
+function StatementModal({ entry, onClose }: { entry: Entry; onClose: () => void }) {
+  const [data, setData] = useState<Statement | null>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    supabase.functions.invoke('finance-statement', { body: { kind: entry.kind, refId: entry.ref_id } })
+      .then(async ({ data: d, error: e }) => {
+        if (e) {
+          const body = await (e as any).context?.json?.().catch(() => null);
+          setError(body?.error ?? e.message ?? 'Não foi possível carregar o extrato.');
+          return;
+        }
+        setData(d as Statement);
+      });
+  }, [entry]);
+
+  const pill = (st: string) =>
+    st === 'Bem-sucedido' ? 'bg-green-100 text-green-700'
+      : st === 'Não capturado' ? 'bg-blue-100 text-blue-700'
+        : st.startsWith('Reembolsado') || st === 'Cancelado' ? 'bg-gray-100 text-gray-500'
+          : 'bg-amber-100 text-amber-700';
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between px-6 py-4 border-b border-gray-100">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Extrato</p>
+            <h3 className="text-lg font-bold text-gray-900 truncate">{data?.header.title ?? ENTRY_LABEL[shownKind(entry.kind)]}</h3>
+            <p className="text-sm text-gray-500">
+              {entry.court_name} · {wallDay(data?.header.when ?? entry.event_at)} {wallHour(data?.header.when ?? entry.event_at)}
+              {data?.header.lessons && data.header.lessons > 1 ? ` · curso de ${data.header.lessons} aulas (valores do curso inteiro)` : ''}
+            </p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5 text-gray-500" /></button>
+        </div>
+
+        <div className="overflow-y-auto flex-1">
+          {error ? (
+            <p className="text-sm text-red-600 p-6">{error}</p>
+          ) : !data ? (
+            <p className="flex items-center justify-center gap-2 text-sm text-gray-400 py-12"><Loader2 className="w-4 h-4 animate-spin" />Buscando no Stripe…</p>
+          ) : data.lines.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-12">Nenhum pagamento nesta partida.</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="text-[11px] uppercase tracking-wide text-gray-400 bg-gray-50">
+                <tr>
+                  <th className="text-left font-semibold px-4 py-2">Quem pagou</th>
+                  <th className="text-left font-semibold px-2 py-2">No Stripe</th>
+                  <th className="text-right font-semibold px-2 py-2">No cartão</th>
+                  <th className="text-right font-semibold px-2 py-2">Taxa JoggaHub</th>
+                  <th className="text-right font-semibold px-4 py-2">Parte do clube</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {data.lines.map((l, i) => (
+                  <tr key={i} className="align-top">
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-gray-900">{l.who}</p>
+                      <p className="text-[11px] text-gray-400">{l.role}{l.date ? ` · ${new Date(l.date).toLocaleDateString('pt-BR')}` : ''}</p>
+                      {l.paymentId && <p className="text-[11px] text-gray-400 font-mono">{l.paymentId}</p>}
+                    </td>
+                    <td className="px-2 py-3"><span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${pill(l.stripeStatus)}`}>{l.stripeStatus}</span></td>
+                    <td className="px-2 py-3 text-right tabular-nums">
+                      {l.charged > 0 && <p className="text-gray-900">{brl(l.charged)}</p>}
+                      {l.held > 0 && <p className="text-blue-700">{brl(l.held)} <span className="text-[10px]">retido</span></p>}
+                      {l.refunded > 0 && <p className="text-gray-400">−{brl(l.refunded)} <span className="text-[10px]">reemb.</span></p>}
+                      {!l.charged && !l.held && !l.refunded && <p className="text-gray-300">—</p>}
+                    </td>
+                    <td className="px-2 py-3 text-right tabular-nums text-gray-500">{l.fee ? brl(l.fee) : '—'}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-gray-900">{l.clubShare ? brl(l.clubShare) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-gray-50 font-semibold">
+                <tr>
+                  <td className="px-4 py-3" colSpan={2}>Total</td>
+                  <td className="px-2 py-3 text-right tabular-nums">
+                    {data.total.charged > 0 && <p>{brl(data.total.charged)}</p>}
+                    {data.total.held > 0 && <p className="text-blue-700">{brl(data.total.held)} <span className="text-[10px]">retido</span></p>}
+                    {data.total.refunded > 0 && <p className="text-gray-400">−{brl(data.total.refunded)}</p>}
+                  </td>
+                  <td className="px-2 py-3 text-right tabular-nums text-gray-500">{brl(data.total.fee)}</td>
+                  <td className="px-4 py-3 text-right tabular-nums">{brl(data.total.clubShare)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          )}
+        </div>
+
+        <div className="px-6 py-3 border-t border-gray-100 text-[11px] text-gray-400 flex items-center gap-1.5">
+          <ExternalLink className="w-3.5 h-3.5" />
+          Valores lidos do Stripe agora. "No cartão" é o que o jogador pagou (com a taxa); procure o código pi_… no painel do Stripe para conferir.
+        </div>
+      </div>
     </div>
   );
 }
