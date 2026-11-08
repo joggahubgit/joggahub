@@ -18,6 +18,8 @@ interface Props {
   onNavigate?: (tab: string) => void;
   /** Clique numa aula na agenda: abre o curso na seção Aulas. */
   onOpenClass?: (classId: string) => void;
+  /** Abre já neste dia (YYYY-MM-DD), por ex. vindo do Financeiro. */
+  initialDate?: string | null;
 }
 
 interface Court { id: string; name: string; }
@@ -91,14 +93,15 @@ type ViewMode = 'week' | 'day';
 interface CourtScheduleEntry { open_time: string; close_time: string; price: number; }
 type CourtScheduleMap = Record<string, Record<number, CourtScheduleEntry>>;
 
-export function SmartBookingCalendar({ venueId, onNavigate, onOpenClass }: Props) {
+export function SmartBookingCalendar({ venueId, onNavigate, onOpenClass, initialDate }: Props) {
   const [courts, setCourts] = useState<Court[]>([]);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [courtSchedules, setCourtSchedules] = useState<CourtScheduleMap>({});
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('day');
-  const [focusedDate, setFocusedDate] = useState(() => new Date());
-  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
+  const startDay = () => (initialDate ? new Date(`${initialDate}T12:00:00`) : new Date());
+  const [focusedDate, setFocusedDate] = useState(startDay);
+  const [weekStart, setWeekStart] = useState(() => startOfWeek(startDay()));
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
   const [selectedGameSlot, setSelectedGameSlot] = useState<Slot | null>(null);
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);

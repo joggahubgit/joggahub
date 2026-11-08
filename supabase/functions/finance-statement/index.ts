@@ -97,13 +97,13 @@ serve(async (req) => {
 
     if (kind === 'partida_fechada' || kind === 'partida_aberta') {
       const { data: g } = await db.from('games')
-        .select('id, court_id, organizer_id, is_open, pay_mode, scheduled_at, court_price, stripe_session_id, status, courts(name)')
+        .select('id, court_id, organizer_id, is_open, pay_mode, scheduled_at, court_price, stripe_session_id, status, booking_id, courts(name)')
         .eq('id', refId).maybeSingle();
       if (!g) return json({ error: 'Partida não encontrada' }, 404);
       if (!(await isAdminOfCourt(g.court_id))) return json({ error: 'Forbidden' }, 403);
       const { data: players } = await db.from('game_players').select('player_id, player_name, paid, stripe_payment_intent_id').eq('game_id', g.id);
       // deno-lint-ignore no-explicit-any
-      header = { title: g.is_open ? 'Partida aberta' : 'Partida fechada', court: (g as any).courts?.name, when: g.scheduled_at, courtPrice: g.court_price };
+      header = { title: g.is_open ? 'Partida aberta' : 'Partida fechada', court: (g as any).courts?.name, when: g.scheduled_at, courtPrice: g.court_price, bookingId: g.booking_id, gameId: g.id };
       const orgPi = await piOfSession(g.stripe_session_id);
       const seen = new Set<string>();
       if (orgPi) {
@@ -130,7 +130,7 @@ serve(async (req) => {
       // deno-lint-ignore no-explicit-any
       const slot = (b as any)?.slots;
       if (!b || !(await isAdminOfCourt(slot?.court_id))) return json({ error: 'Forbidden' }, 403);
-      header = { title: 'Partida fechada (reserva antiga)', court: slot?.courts?.name, when: slot?.start_time };
+      header = { title: 'Partida fechada (reserva antiga)', court: slot?.courts?.name, when: slot?.start_time, bookingId: b.id };
       lines.push({
         who: (await names([b.created_by])).get(b.created_by) ?? 'Jogador', role: 'Organizador', paymentId: null,
         stripeStatus: b.payment_status === 'paid' ? 'Pago (reserva antiga, sem código)' : 'Sem pagamento',
@@ -145,7 +145,7 @@ serve(async (req) => {
       if (!cls || !(await isAdminOfCourt(cls.court_id))) return json({ error: 'Forbidden' }, 403);
       const { data: first } = await db.from('class_sessions').select('starts_at').eq('class_id', cls.id).order('starts_at').limit(1).maybeSingle();
       // deno-lint-ignore no-explicit-any
-      header = { title: cls.kind === 'day_use' ? `Day use — ${cls.title}` : `Curso — ${cls.title}`, court: (cls as any).courts?.name, when: first?.starts_at, lessons: cls.lesson_count };
+      header = { title: cls.kind === 'day_use' ? `Day use — ${cls.title}` : `Curso — ${cls.title}`, court: (cls as any).courts?.name, when: first?.starts_at, lessons: cls.lesson_count, classId: cls.id };
       const { data: ens } = await db.from('class_enrollments').select('player_id, stripe_payment_intent_id, status').eq('class_id', cls.id).order('created_at');
       const nm = await names((ens ?? []).map(e => e.player_id));
       for (const e of ens ?? []) lines.push(await fromPi(e.stripe_payment_intent_id, nm.get(e.player_id) ?? 'Jogador', cls.kind === 'day_use' ? 'Jogador' : 'Aluno'));

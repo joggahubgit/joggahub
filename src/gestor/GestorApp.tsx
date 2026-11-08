@@ -20,6 +20,7 @@ export default function GestorApp() {
   const [activeTab, setActiveTab] = useState<Tab>('calendar');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openClassId, setOpenClassId] = useState<string | null>(null);
+  const [agendaDate, setAgendaDate] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -100,6 +101,8 @@ export default function GestorApp() {
             venueId={venue?.id}
             onNavigate={(tab) => setActiveTab(tab as Tab)}
             onOpenClass={CLASSES_ENABLED ? (id) => { setOpenClassId(id); setActiveTab('classes'); } : undefined}
+            initialDate={agendaDate}
+            key={agendaDate ?? 'today'}
           />
         );
       case 'classes':
@@ -109,7 +112,7 @@ export default function GestorApp() {
       case 'bookings':
         return <SimpleBookingsList venueId={venue?.id} />;
       case 'revenue':
-        return <SimpleRevenue venueId={venue?.id} />;
+        return <SimpleRevenue venueId={venue?.id} onOpenAgenda={(d) => { setAgendaDate(d); setActiveTab('calendar'); }} />;
       case 'settings':
         return venue
           ? <VenueProfile venue={venue} onVenueUpdated={(v) => setVenue(v)} />
@@ -171,7 +174,7 @@ export default function GestorApp() {
               return (
                 <button
                   key={item.id}
-                  onClick={() => { setActiveTab(item.id); setMobileMenuOpen(false); }}
+                  onClick={() => { setActiveTab(item.id); setMobileMenuOpen(false); if (item.id === 'calendar') setAgendaDate(null); }}
                   className={`w-full flex items-center gap-3 px-3 md:px-4 py-2.5 md:py-3 rounded-xl transition-all text-sm md:text-base ${
                     activeTab === item.id
                       ? 'bg-purple-600 text-white font-semibold shadow-md'

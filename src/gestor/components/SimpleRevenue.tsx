@@ -8,8 +8,14 @@ import {
   CalendarCheck, Users, Sun, GraduationCap, Wallet, X, Loader2, ExternalLink,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
+import { GestorBookingDetail } from './GestorBookingDetail';
+import { ClassDetailModal } from './ClassesPanel';
 
-interface SimpleRevenueProps { venueId: string | null }
+interface SimpleRevenueProps {
+  venueId: string | null;
+  /** Abre a Agenda no dia do lançamento (YYYY-MM-DD). */
+  onOpenAgenda?: (date: string) => void;
+}
 
 type Kind = 'partida_fechada' | 'partida_aberta' | 'day_use' | 'aula' | 'reserva';
 type ShownKind = Exclude<Kind, 'reserva'>;
@@ -60,7 +66,7 @@ const pad = (n: number) => String(n).padStart(2, '0');
 const wallDay = (iso: string) => `${iso.substring(8, 10)}/${iso.substring(5, 7)}`;
 const wallHour = (iso: string) => iso.substring(11, 16);
 
-export function SimpleRevenue({ venueId }: SimpleRevenueProps) {
+export function SimpleRevenue({ venueId, onOpenAgenda }: SimpleRevenueProps) {
   const now = new Date();
   const [month, setMonth] = useState({ y: now.getFullYear(), m: now.getMonth() });
   const [court, setCourt] = useState<string>('all');
@@ -324,7 +330,13 @@ export function SimpleRevenue({ venueId }: SimpleRevenueProps) {
           </p>
         </>
       )}
-      {statement && <StatementModal entry={statement} onClose={() => setStatement(null)} />}
+      {statement && (
+        <StatementModal
+          entry={statement}
+          onClose={() => setStatement(null)}
+          onOpenAgenda={onOpenAgenda ? (d) => { setStatement(null); onOpenAgenda(d); } : undefined}
+        />
+      )}
     </div>
   );
 }
@@ -359,14 +371,15 @@ interface StatementLine {
   charged: number; held: number; refunded: number; clubShare: number; fee: number; date: string | null;
 }
 interface Statement {
-  header: { title?: string; court?: string; when?: string; courtPrice?: number; lessons?: number };
+  header: { title?: string; court?: string; when?: string; courtPrice?: number; lessons?: number; bookingId?: string | null; classId?: string; gameId?: string };
   lines: StatementLine[];
   total: { charged: number; held: number; refunded: number; clubShare: number; fee: number };
 }
 
-function StatementModal({ entry, onClose }: { entry: Entry; onClose: () => void }) {
+function StatementModal({ entry, onClose, onOpenAgenda }: { entry: Entry; onClose: () => void; onOpenAgenda?: (date: string) => void }) {
   const [data, setData] = useState<Statement | null>(null);
   const [error, setError] = useState('');
+  const [detail, setDetail] = useState<'booking' | 'class' | null>(null);
 
   useEffect(() => {
     supabase.functions.invoke('finance-statement', { body: { kind: entry.kind, refId: entry.ref_id } })
@@ -455,11 +468,36 @@ function StatementModal({ entry, onClose }: { entry: Entry; onClose: () => void 
           )}
         </div>
 
-        <div className="px-6 py-3 border-t border-gray-100 text-[11px] text-gray-400 flex items-center gap-1.5">
-          <ExternalLink className="w-3.5 h-3.5" />
-          Valores lidos do Stripe agora. "No cartão" é o que o jogador pagou (com a taxa); procure o código pi_… no painel do Stripe para conferir.
+        <div className="px-6 py-3 border-t border-gray-100 flex flex-wrap items-center gap-2">
+          {data?.header.bookingId && (
+            <button onClick={() => setDetail('booking')}
+              className="px-3 py-2 rounded-lg bg-purple-600 text-white text-xs font-semibold hover:bg-purple-700">Ver detalhes da partida</button>
+          )}
+          {data?.header.classId && (
+            <button onClick={() => setDetail('class')}
+              className="px-3 py-2 rounded-lg bg-purple-600 text-white text-xs font-semibold hover:bg-purple-700">
+              {entry.kind === 'day_use' ? 'Ver detalhes do day use' : 'Ver detalhes do curso'}
+            </button>
+          )}
+          {onOpenAgenda && (
+            <button onClick={() => onOpenAgenda((data?.header.when ?? entry.event_at).substring(0, 10))}
+              className="px-3 py-2 rounded-lg border border-gray-200 text-gray-700 text-xs font-semibold hover:bg-gray-50">Ver na agenda</button>
+          )}
+          <p className="text-[11px] text-gray-400 flex items-center gap-1.5 ml-auto">
+            <ExternalLink className="w-3.5 h-3.5" />Valores lidos do Stripe agora; confira pelo código pi_… no painel do Stripe.
+          </p>
         </div>
       </div>
+      {detail === 'booking' && data?.header.bookingId && (
+        <div onClick={e => e.stopPropagation()}>
+          <GestorBookingDetail bookingId={data.header.bookingId} onClose={() => setDetail(null)} onChanged={() => setDetail(null)} />
+        </div>
+      )}
+      {detail === 'class' && data?.header.classId && (
+        <div onClick={e => e.stopPropagation()}>
+          <ClassDetailModal classId={data.header.classId} onClose={() => setDetail(null)} onCancelled={() => { setDetail(null); onClose(); }} />
+        </div>
+      )}
     </div>
   );
 }
