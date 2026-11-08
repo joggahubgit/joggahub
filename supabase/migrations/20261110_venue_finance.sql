@@ -29,7 +29,21 @@ create table if not exists public.venue_payouts (
   note         text,
   created_at   timestamptz not null default now()
 );
+-- covers_until: o repasse cobre todos os jogos/aulas pagos que aconteceram até este momento
+alter table public.venue_payouts add column if not exists covers_until timestamptz;
 create index if not exists venue_payouts_venue_idx on public.venue_payouts (venue_id, paid_at desc);
+
+-- Regra de repasse de cada clube: 'per_game' (logo depois que a partida acontece,
+-- manual) ou 'weekly' (toda segunda, jogos da semana anterior). Sem linha = per_game.
+create table if not exists public.venue_payout_settings (
+  venue_id  uuid primary key references public.venues(id),
+  schedule  text not null default 'per_game' check (schedule in ('per_game', 'weekly'))
+);
+alter table public.venue_payout_settings enable row level security;
+revoke insert, update, delete on public.venue_payout_settings from anon, authenticated;
+drop policy if exists "Venue admins see own payout settings" on public.venue_payout_settings;
+create policy "Venue admins see own payout settings" on public.venue_payout_settings for select
+  using (exists (select 1 from public.venues v where v.id = venue_payout_settings.venue_id and v.admin_id = auth.uid()));
 alter table public.venue_payouts enable row level security;
 revoke insert, update, delete on public.venue_payouts from anon, authenticated;
 drop policy if exists "Venue admins see own payouts" on public.venue_payouts;
@@ -155,6 +169,69 @@ language sql stable security definer set search_path = public as $$
   order by court_name
 $$;
 
+-- Repasses: o que já pode ser repassado (pago + já aconteceu + depois do último
+-- repasse), o previsto (jogos futuros pagos/retidos) e o histórico.
+create or replace function public.venue_payout_summary(p_venue uuid)
+returns jsonb
+language sql stable security definer set search_path = public as $$
+  with cfg as (
+    select coalesce((select schedule from venue_payout_settings where venue_id = p_venue), 'per_game') as schedule,
+           coalesce((select max(covers_until) from venue_payouts where venue_id = p_venue), '2000-01-01'::timestamptz) as covered
+  ),
+  e as (
+    select * from venue_finance_entries(p_venue, '2000-01-01', ((class_wall_now() + interval '400 days') at time zone 'UTC')::date)
+  ),
+  due as (
+    select e.* from e, cfg
+    where e.status = 'recebido' and e.event_at <= class_wall_now() and e.event_at > cfg.covered
+      -- semanal: só entra o que aconteceu até o domingo passado
+      and (cfg.schedule = 'per_game'
+           or e.event_at < date_trunc('week', class_wall_now() at time zone 'UTC') at time zone 'UTC')
+  ),
+  upcoming as (
+    select e.* from e where e.status in ('recebido', 'a_cobrar', 'reservado') and e.event_at > class_wall_now()
+  )
+  select jsonb_build_object(
+    'schedule', (select schedule from cfg),
+    'covered_until', nullif((select covered from cfg), '2000-01-01'::timestamptz),
+    'due_amount', coalesce((select sum(amount) from due), 0),
+    'due_items', coalesce((select jsonb_agg(to_jsonb(d) order by d.event_at) from due d), '[]'::jsonb),
+    'upcoming_amount', coalesce((select sum(amount) from upcoming), 0),
+    'upcoming_held_amount', coalesce((select sum(amount) from upcoming where status <> 'recebido'), 0),
+    'upcoming_count', (select count(*) from upcoming),
+    'next_upcoming_at', (select min(event_at) from upcoming),
+    'history', coalesce((select jsonb_agg(to_jsonb(p) order by p.paid_at desc, p.created_at desc)
+                         from (select amount, paid_at, covers_until, note, created_at from venue_payouts
+                               where venue_id = p_venue order by paid_at desc, created_at desc limit 10) p), '[]'::jsonb)
+  )
+$$;
+revoke all on function public.venue_payout_summary(uuid) from public, anon, authenticated;
+
+-- Para o JoggaHub registrar um repasse feito (rodar no SQL Editor):
+--   select register_venue_payout('<id do clube>', 'PIX 08/11');
+-- Calcula sozinho o valor (tudo que já pode ser repassado agora) e marca até
+-- onde foi pago. Retorna o valor registrado.
+create or replace function public.register_venue_payout(p_venue uuid, p_note text default null)
+returns numeric
+language plpgsql security definer set search_path = public as $$
+declare
+  v_amount numeric;
+  v_until timestamptz;
+begin
+  select (s->>'due_amount')::numeric,
+         (select max((i->>'event_at')::timestamptz) from jsonb_array_elements(s->'due_items') i)
+    into v_amount, v_until
+  from (select venue_payout_summary(p_venue) as s) x;
+  if coalesce(v_amount, 0) <= 0 then
+    raise exception 'Nada a repassar para este clube agora.';
+  end if;
+  insert into venue_payouts (venue_id, amount, covers_until, paid_at, note)
+  values (p_venue, v_amount, v_until, (class_wall_now() at time zone 'UTC')::date, p_note);
+  return v_amount;
+end;
+$$;
+revoke all on function public.register_venue_payout(uuid, text) from public, anon, authenticated;
+
 -- Ponto de entrada do gestor: confere que ele administra o clube.
 create or replace function public.venue_finance(p_from date, p_to date)
 returns jsonb
@@ -172,11 +249,7 @@ begin
   return jsonb_build_object(
     'entries', coalesce((select jsonb_agg(to_jsonb(e) order by e.event_at) from venue_finance_entries(v_venue, p_from, p_to) e), '[]'::jsonb),
     'capacity', coalesce((select jsonb_agg(to_jsonb(c)) from venue_finance_capacity(v_venue, p_from, p_to) c), '[]'::jsonb),
-    -- Repasse (desde sempre): recebido de jogos/aulas que já aconteceram − repasses feitos
-    'received_to_date', coalesce((select sum(e.amount) from venue_finance_entries(v_venue, '2000-01-01', (class_wall_now() at time zone 'UTC')::date) e
-                                  where e.status = 'recebido' and e.event_at <= class_wall_now()), 0),
-    'paid_out', coalesce((select sum(amount) from venue_payouts where venue_id = v_venue), 0),
-    'last_payout', (select to_jsonb(p) from venue_payouts p where p.venue_id = v_venue order by paid_at desc limit 1)
+    'payout', venue_payout_summary(v_venue)
   );
 end;
 $$;

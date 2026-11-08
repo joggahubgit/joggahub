@@ -31,10 +31,20 @@ interface Capacity {
   court_id: string; court_name: string; hours_created: number; hours_sold: number;
   hours_blocked: number; hours_free_future: number; potential: number;
 }
+interface Payout {
+  schedule: 'per_game' | 'weekly';
+  covered_until: string | null;
+  due_amount: number;
+  due_items: Entry[];
+  upcoming_amount: number;
+  upcoming_held_amount: number;
+  upcoming_count: number;
+  next_upcoming_at: string | null;
+  history: { amount: number; paid_at: string; covers_until: string | null; note: string | null }[];
+}
 interface Finance {
   entries: Entry[]; capacity: Capacity[];
-  received_to_date: number; paid_out: number;
-  last_payout: { amount: number; paid_at: string } | null;
+  payout: Payout;
 }
 
 const KIND: Record<ShownKind, { label: string; icon: typeof CalendarCheck; color: string }> = {
@@ -112,7 +122,6 @@ export function SimpleRevenue({ venueId, onOpenAgenda }: SimpleRevenueProps) {
   const reserved = sum(['reservado']);
   const waiting = sum(['pendente', 'aguardando']);
   const potential = capacity.reduce((s, c) => s + Number(c.potential), 0);
-  const balance = Math.max(0, Number(data?.received_to_date ?? 0) - Number(data?.paid_out ?? 0));
 
   const byKind = (Object.keys(KIND) as ShownKind[]).map(k => {
     const list = entries.filter(e => shownKind(e.kind) === k && e.status !== 'cancelado');
@@ -194,20 +203,8 @@ export function SimpleRevenue({ venueId, onOpenAgenda }: SimpleRevenueProps) {
             <Kpi icon={TrendingUp} tone="gray" label="Potencial" value={potential} hint="Horários livres que você criou, se forem vendidos" />
           </div>
 
-          {/* Repasse */}
-          <div className="bg-white rounded-2xl border border-gray-200 p-5 flex flex-wrap items-center gap-4">
-            <div className="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center"><Banknote className="w-6 h-6 text-emerald-600" /></div>
-            <div className="flex-1 min-w-[200px]">
-              <p className="text-sm text-gray-500">Saldo a repassar pelo JoggaHub</p>
-              <p className="text-2xl font-bold text-gray-900">{brl(balance)}</p>
-              <p className="text-xs text-gray-400">Recebido de jogos e aulas que já aconteceram, menos o que já foi repassado.</p>
-            </div>
-            <div className="text-sm text-gray-500">
-              {data?.last_payout
-                ? <>Último repasse: <b className="text-gray-900">{brl(Number(data.last_payout.amount))}</b> em {wallDay(data.last_payout.paid_at)}</>
-                : 'Nenhum repasse registrado ainda.'}
-            </div>
-          </div>
+          {/* Repasses */}
+          {data?.payout && <PayoutCard payout={data.payout} onOpen={setStatement} />}
 
           <div className="grid lg:grid-cols-2 gap-4">
             {/* Por tipo */}
@@ -361,6 +358,99 @@ function Kpi({ icon: Icon, tone, label, value, hint, onClick, active }: {
       <p className="text-[11px] text-gray-400 mt-1 leading-snug">{hint}</p>
       {onClick && <p className="text-[11px] font-semibold text-purple-600 mt-2">{active ? 'Mostrando na lista ↓' : 'Ver lançamentos →'}</p>}
     </button>
+  );
+}
+
+// ── Repasses do JoggaHub ao clube ───────────────────────────────────────────
+// Não depende do mês escolhido: mostra o que já pode ser repassado, o previsto
+// e o histórico, com a regra escrita para não criar expectativa errada.
+
+function nextMonday() {
+  const d = new Date();
+  const add = ((8 - d.getDay()) % 7) || 7;
+  d.setDate(d.getDate() + add);
+  return d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' });
+}
+
+function PayoutCard({ payout, onOpen }: { payout: Payout; onOpen: (e: Entry) => void }) {
+  const [showItems, setShowItems] = useState(false);
+  const due = Number(payout.due_amount);
+  const upcoming = Number(payout.upcoming_amount);
+  const held = Number(payout.upcoming_held_amount);
+  const rule = payout.schedule === 'weekly'
+    ? `Repasse semanal: toda segunda-feira, com os jogos e aulas da semana anterior (segunda a domingo). Próximo: ${nextMonday()}.`
+    : 'Repasse por partida: o JoggaHub transfere o valor de cada partida ou aula logo depois que ela acontece.';
+  const last = payout.history[0];
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200">
+      <div className="p-5 flex flex-wrap items-start gap-4">
+        <div className="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0"><Banknote className="w-6 h-6 text-emerald-600" /></div>
+        <div className="flex-1 min-w-[220px]">
+          <p className="font-semibold text-gray-900">Repasses do JoggaHub</p>
+          <p className="text-xs text-gray-500 mt-0.5">{rule}</p>
+        </div>
+      </div>
+
+      <div className="grid sm:grid-cols-2 gap-px bg-gray-100 border-t border-gray-100">
+        <div className="bg-white p-5">
+          <p className="text-sm text-gray-500">A repassar agora</p>
+          <p className="text-2xl font-bold text-emerald-700">{brl(due)}</p>
+          <p className="text-xs text-gray-400 mt-1">
+            {payout.due_items.length
+              ? `${payout.due_items.length} ${payout.due_items.length === 1 ? 'partida/aula já realizada e paga' : 'partidas/aulas já realizadas e pagas'}${payout.covered_until ? ` desde o último repasse` : ''}.`
+              : 'Nada pendente: tudo o que já aconteceu foi repassado.'}
+          </p>
+          {payout.due_items.length > 0 && (
+            <button onClick={() => setShowItems(v => !v)} className="text-xs font-semibold text-purple-600 mt-2">
+              {showItems ? 'Esconder itens' : 'Ver o que entra →'}
+            </button>
+          )}
+        </div>
+        <div className="bg-white p-5">
+          <p className="text-sm text-gray-500">Previsto nos próximos repasses</p>
+          <p className="text-2xl font-bold text-gray-900">{brl(upcoming)}</p>
+          <p className="text-xs text-gray-400 mt-1">
+            {upcoming > 0
+              ? <>De {payout.upcoming_count} {payout.upcoming_count === 1 ? 'partida/aula futura' : 'partidas/aulas futuras'}. Entra no repasse depois que acontecer
+                  {held > 0 ? <>; {brl(held)} ainda está só retido no cartão e pode voltar ao jogador se ele cancelar a tempo</> : ''}.</>
+              : 'Nenhuma partida futura paga ainda.'}
+          </p>
+        </div>
+      </div>
+
+      {showItems && (
+        <div className="border-t border-gray-100 divide-y divide-gray-100">
+          {payout.due_items.map(e => (
+            <button key={`${e.kind}-${e.ref_id}-${e.event_at}`} onClick={() => onOpen(e)}
+              className="w-full text-left flex items-center gap-3 px-5 py-2.5 hover:bg-gray-50 text-sm">
+              <span className="w-14 text-gray-500 tabular-nums">{wallDay(e.event_at)}</span>
+              <span className="flex-1 truncate text-gray-900">{e.who} <span className="text-gray-400">· {ENTRY_LABEL[shownKind(e.kind)]} · {e.court_name}</span></span>
+              <span className="font-semibold tabular-nums">{brl(Number(e.amount))}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="border-t border-gray-100 px-5 py-3 text-xs text-gray-500">
+        {last ? (
+          <details>
+            <summary className="cursor-pointer">
+              Último repasse: <b className="text-gray-900">{brl(Number(last.amount))}</b> em {wallDay(last.paid_at)}
+              {last.covers_until ? ` (jogos até ${wallDay(last.covers_until)} ${wallHour(last.covers_until)})` : ''} · ver histórico
+            </summary>
+            <div className="mt-2 space-y-1">
+              {payout.history.map((h, i) => (
+                <p key={i} className="flex justify-between gap-3">
+                  <span>{wallDay(h.paid_at)}/{h.paid_at.substring(0, 4)}{h.covers_until ? ` · jogos até ${wallDay(h.covers_until)}` : ''}{h.note ? ` · ${h.note}` : ''}</span>
+                  <b className="text-gray-900 tabular-nums">{brl(Number(h.amount))}</b>
+                </p>
+              ))}
+            </div>
+          </details>
+        ) : 'Nenhum repasse registrado ainda.'}
+      </div>
+    </div>
   );
 }
 
