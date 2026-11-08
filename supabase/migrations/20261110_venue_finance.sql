@@ -124,7 +124,12 @@ language sql stable security definer set search_path = public as $$
   -- Cursos: valor de cada aluno dividido igualmente entre as aulas (mês da aula)
   select 'aula', e.id, cs.starts_at, cl.court_id, c.name, coalesce(p.name, 'Aluno'), cl.title,
     round(e.amount_paid / greatest(cl.lesson_count, 1), 2),
-    case when e.status = 'active' then 'recebido' else 'cancelado' end
+    case
+      when e.status <> 'active' then 'cancelado'
+      when not e.payment_held then 'recebido'
+      when (select min(s1.starts_at) from class_sessions s1 where s1.class_id = cl.id) - interval '24 hours' <= class_wall_now() then 'a_cobrar'
+      else 'reservado'
+    end
   from class_enrollments e
   join classes cl on cl.id = e.class_id and cl.kind = 'course' and cl.venue_id = p_venue
   join class_sessions cs on cs.class_id = cl.id

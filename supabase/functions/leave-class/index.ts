@@ -1,4 +1,4 @@
-// Aluno desiste do curso: reembolso total até 48h antes da 1ª aula.
+// Aluno desiste do curso/day use: sem custo até 24h antes do início (prazo checado em class_leave).
 // A regra e a vaga ficam no banco (class_leave); aqui só o reembolso no Stripe.
 
 import Stripe from 'https://esm.sh/stripe@14.21.0';

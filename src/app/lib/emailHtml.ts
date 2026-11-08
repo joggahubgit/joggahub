@@ -51,6 +51,23 @@ interface ClassEmailDetails {
   total: string;
   /** Partida aberta · Day use (sem professor, 1 data) */
   dayUse?: boolean;
+  /** Valor só reservado no cartão (ainda não cobrado) */
+  held?: boolean;
+  /** Ex.: "sáb, 14/11 às 17:00" — quando o valor reservado é cobrado */
+  chargeAt?: string;
+  /** Ex.: "sex, 13/11 às 19:00" — limite para desistir sem custo */
+  leaveUntil?: string;
+}
+
+function classPaymentLines(d: ClassEmailDetails, color: string, start: string) {
+  const amount = d.held
+    ? `<p style="margin:8px 0 0; font-weight:700; color:${color}; padding-top:8px; border-top:1px solid #e5e7eb;">Reservado no cartão: R$ ${escapeHtml(d.total)}</p>`
+    : `<p style="margin:8px 0 0; font-weight:700; color:${color}; padding-top:8px; border-top:1px solid #e5e7eb;">Pago: R$ ${escapeHtml(d.total)}</p>`;
+  const when = d.held
+    ? `<p style="margin:0 0 8px; font-size:14px; line-height:1.6; color:#111827;">O valor fica <b>reservado no seu cartão</b> e só é cobrado em <b>${escapeHtml(d.chargeAt ?? `2h antes ${start}`)}</b> (2h antes ${start}).</p>`
+    : '';
+  const leave = `<p style="margin:0; font-size:13px; line-height:1.6; color:#6b7280;">Desistência sem custo até ${d.leaveUntil ? `<b>${escapeHtml(d.leaveUntil)}</b>` : `24h antes ${start}`}, pelo app${d.held ? ': a reserva é liberada no cartão' : ': reembolso total'}. Se o clube cancelar, você recebe tudo de volta.</p>`;
+  return { amount, footer: when + leave };
 }
 
 export function classEnrolledEmail(d: ClassEmailDetails): string {
@@ -64,9 +81,9 @@ export function classEnrolledEmail(d: ClassEmailDetails): string {
     <div style="background-color:#f9fafb; border-radius:12px; padding:16px 18px; margin:0 0 24px; font-size:14px;">
       <p style="margin:0 0 4px; font-weight:600; color:#111827;">${escapeHtml(d.venueName)} · ${escapeHtml(d.courtName)}</p>
       <p style="margin:0 0 4px; color:#4b5563;">${escapeHtml(d.sessions[0] ?? '')}</p>
-      <p style="margin:8px 0 0; font-weight:700; color:#0284c7; padding-top:8px; border-top:1px solid #e5e7eb;">Pago: R$ ${escapeHtml(d.total)}</p>
+      ${classPaymentLines(d, '#0284c7', 'do início').amount}
     </div>
-    <p style="margin:0; font-size:13px; line-height:1.6; color:#6b7280;">Desistência com reembolso total até 24h antes do início, pelo app.</p>
+    ${classPaymentLines(d, '#0284c7', 'do início').footer}
   `);
   }
   return buildEmailHtml('Inscrição confirmada — JoggaHub', `
@@ -75,8 +92,8 @@ export function classEnrolledEmail(d: ClassEmailDetails): string {
     <div style="background-color:#f9fafb; border-radius:12px; padding:16px 18px; margin:0 0 24px; font-size:14px;">
       <p style="margin:0 0 4px; font-weight:600; color:#111827;">${escapeHtml(d.venueName)} · ${escapeHtml(d.courtName)}</p>
       <div style="margin:8px 0 0;">${lessons}</div>
-      <p style="margin:8px 0 0; font-weight:700; color:#7c3aed; padding-top:8px; border-top:1px solid #e5e7eb;">Pago: R$ ${escapeHtml(d.total)}</p>
+      ${classPaymentLines(d, '#7c3aed', 'da primeira aula').amount}
     </div>
-    <p style="margin:0; font-size:13px; line-height:1.6; color:#6b7280;">Desistência com reembolso total até 48h antes da primeira aula, pelo app.</p>
+    ${classPaymentLines(d, '#7c3aed', 'da primeira aula').footer}
   `);
 }

@@ -6,7 +6,7 @@ import { CheckCircle, Loader2, XCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import BottomNav from '../BottomNav';
 import { classEnrolledEmail, sendEmail } from '../../lib/emailTemplates';
-import { formatSessionDate } from '../../lib/classSchedule';
+import { CLASS_CAPTURE_HOURS, CLASS_LEAVE_HOURS, formatSessionDate, wallDateTimeLabel } from '../../lib/classSchedule';
 
 /** Email de confirmação para o próprio aluno (só na primeira vez que a inscrição é criada). */
 async function sendClassEmail(classId: string, sessionId: string) {
@@ -18,13 +18,17 @@ async function sendClassEmail(classId: string, sessionId: string) {
     const [{ data: c }, { data: s }, { data: e }] = await Promise.all([
       supabase.from('classes').select('kind, title, coach_name, venues(name), courts(name)').eq('id', classId).maybeSingle(),
       supabase.from('class_sessions').select('starts_at, ends_at').eq('class_id', classId).order('starts_at'),
-      supabase.from('class_enrollments').select('amount_paid, service_fee').eq('stripe_session_id', sessionId).maybeSingle(),
+      supabase.from('class_enrollments').select('amount_paid, service_fee, payment_held').eq('stripe_session_id', sessionId).maybeSingle(),
     ]);
     if (!c) return;
+    const first = s?.[0]?.starts_at;
     const cls = c as any;
     const isDayUse = cls.kind === 'day_use';
     await sendEmail(user.email, isDayUse ? 'Você está no day use! 🏐' : 'Inscrição confirmada no JoggaHub 🎓', classEnrolledEmail({
       dayUse: isDayUse,
+      held: !!e?.payment_held,
+      chargeAt: first ? wallDateTimeLabel(first, CLASS_CAPTURE_HOURS) : undefined,
+      leaveUntil: first ? wallDateTimeLabel(first, CLASS_LEAVE_HOURS) : undefined,
       title: cls.title,
       coach: cls.coach_name,
       venueName: cls.venues?.name ?? '',
@@ -38,7 +42,9 @@ async function sendClassEmail(classId: string, sessionId: string) {
   }
 }
 
-type State = { kind: 'waiting' } | { kind: 'done'; classId: string; dayUse: boolean } | { kind: 'failed'; error: string };
+type State = { kind: 'waiting' }
+  | { kind: 'done'; classId: string; dayUse: boolean; held: boolean; chargeAt?: string; leaveUntil?: string }
+  | { kind: 'failed'; error: string };
 
 export default function ClassPaymentSuccess() {
   const [params] = useSearchParams();
@@ -56,8 +62,17 @@ export default function ClassPaymentSuccess() {
       const { data } = await supabase.functions.invoke('finalize-checkout', { body: { sessionId } });
       if (stop) return;
       if (data?.status === 'done' && data.classId) {
-        const { data: k } = await supabase.from('classes').select('kind').eq('id', data.classId).maybeSingle();
-        setState({ kind: 'done', classId: data.classId, dayUse: k?.kind === 'day_use' });
+        const [{ data: k }, { data: f }, { data: en }] = await Promise.all([
+          supabase.from('classes').select('kind').eq('id', data.classId).maybeSingle(),
+          supabase.from('class_sessions').select('starts_at').eq('class_id', data.classId).order('starts_at').limit(1).maybeSingle(),
+          supabase.from('class_enrollments').select('payment_held').eq('stripe_session_id', sessionId).maybeSingle(),
+        ]);
+        const first = f?.starts_at as string | undefined;
+        setState({
+          kind: 'done', classId: data.classId, dayUse: k?.kind === 'day_use', held: !!en?.payment_held,
+          chargeAt: first ? wallDateTimeLabel(first, CLASS_CAPTURE_HOURS) : undefined,
+          leaveUntil: first ? wallDateTimeLabel(first, CLASS_LEAVE_HOURS) : undefined,
+        });
         // Sempre na primeira confirmação nesta tela (o webhook pode ter criado a inscrição antes)
         sendClassEmail(data.classId, sessionId!);
         return;
@@ -88,6 +103,13 @@ export default function ClassPaymentSuccess() {
             <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4"><CheckCircle className="w-9 h-9 text-green-600" /></div>
             <p className="font-bold text-gray-900 text-xl">Inscrição confirmada!</p>
             <p className="text-sm text-gray-500 mt-1">{state.dayUse ? 'Você está dentro do day use. Bom jogo!' : 'Sua vaga está garantida em todas as aulas.'}</p>
+            <div className="mt-4 bg-gray-50 rounded-2xl p-4 text-left text-sm text-gray-600 space-y-1">
+              {state.held
+                ? <p>O valor está <b className="text-gray-900">reservado no seu cartão</b> e só será cobrado em <b className="text-gray-900">{state.chargeAt}</b>.</p>
+                : <p>O pagamento foi <b className="text-gray-900">cobrado no seu cartão</b>.</p>}
+              {state.leaveUntil && <p>Desistência sem custo até <b className="text-gray-900">{state.leaveUntil}</b>, pelo app.</p>}
+              <p className="text-xs text-gray-400 pt-1">Enviamos os detalhes para o seu email.</p>
+            </div>
             <button onClick={() => navigate(state.dayUse ? `/day-use/${state.classId}` : `/aulas/${state.classId}`, { replace: true })}
               className="mt-6 w-full bg-violet-600 text-white py-3 rounded-xl font-bold">{state.dayUse ? 'Ver o day use' : 'Ver o curso'}</button>
           </>

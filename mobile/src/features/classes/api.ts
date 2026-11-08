@@ -31,12 +31,12 @@ export interface ClassFull extends ClassCard {
 }
 
 export interface ClassSession { id: string; starts_at: string; ends_at: string }
-export interface MyEnrollment { id: string; status: string; refunded: boolean; amount_paid: number; service_fee: number }
+export interface MyEnrollment { id: string; status: string; refunded: boolean; amount_paid: number; service_fee: number; payment_held: boolean }
 
 const CARD_FIELDS =
   'id, title, coach_name, level, capacity, enrolled_count, price, lesson_count, start_date, end_date, venues(name, city), courts(name)';
 
-export const LEAVE_REFUND_HOURS = 48;
+export { CLASS_LEAVE_HOURS as LEAVE_REFUND_HOURS } from '@/lib/shared';
 
 export function todayStr() {
   const d = new Date();
@@ -80,7 +80,7 @@ export async function fetchClassPage(id: string, userId: string) {
       .select('id, title, coach_name, description, level, capacity, enrolled_count, price, lesson_count, start_date, end_date, status, venues(name, city, address), courts(name)')
       .eq('id', id).maybeSingle(),
     supabase.from('class_sessions').select('id, starts_at, ends_at').eq('class_id', id).order('starts_at'),
-    supabase.from('class_enrollments').select('id, status, refunded, amount_paid, service_fee')
+    supabase.from('class_enrollments').select('id, status, refunded, amount_paid, service_fee, payment_held')
       .eq('class_id', id).eq('player_id', userId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
   ]);
   if (error) throw error;

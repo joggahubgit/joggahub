@@ -10,7 +10,7 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import {
   LEAVE_REFUND_HOURS, fetchClassPage, leaveClass, startClassCheckout, wallMs, wallNowMs,
 } from '@/features/classes/api';
-import { CLASS_ENROLL_CUTOFF_HOURS, classLevelLabel, classServiceFee, formatBRL, formatSessionDate } from '@/lib/shared';
+import { CLASS_ENROLL_CUTOFF_HOURS, classLevelLabel, classPaymentPlan, classServiceFee, formatBRL, formatSessionDate } from '@/lib/shared';
 import { confirmAction } from '@/lib/confirm';
 import palette from '../../../../tailwind.palette';
 
@@ -54,6 +54,7 @@ export default function ClassDetailScreen() {
   const total = Number(cls.price) + fee;
   const cancelled = cls.status !== 'active';
   const showBar = !enrolled && !cancelled;
+  const plan = firstStart ? classPaymentPlan(firstStart, now) : null;
 
   async function enroll() {
     setBusy(true);
@@ -71,7 +72,9 @@ export default function ClassDetailScreen() {
   function leave() {
     confirmAction({
       title: 'Desistir do curso?',
-      message: 'Você perde a vaga e recebe o valor total de volta no cartão.',
+      message: enrollment?.payment_held
+        ? 'Você perde a vaga e a reserva no seu cartão é liberada. Nada é cobrado.'
+        : 'Você perde a vaga e recebe o valor total de volta no cartão.',
       confirmText: 'Desistir',
       destructive: true,
       onConfirm: async () => {
@@ -79,7 +82,9 @@ export default function ClassDetailScreen() {
         setError('');
         try {
           const r = await leaveClass(enrollment!.id);
-          setNotice(r.refunded ? 'Inscrição cancelada. O valor total foi reembolsado no seu cartão.' : 'Inscrição cancelada.');
+          setNotice(enrollment!.payment_held
+            ? 'Inscrição cancelada. A reserva no seu cartão foi liberada, nada foi cobrado.'
+            : r.refunded ? 'Inscrição cancelada. O valor total foi reembolsado no seu cartão.' : 'Inscrição cancelada.');
           qc.invalidateQueries();
         } catch (e) {
           setError((e as Error).message);
@@ -93,7 +98,7 @@ export default function ClassDetailScreen() {
   return (
     <View className="flex-1 bg-gray-50">
       <ScrollView
-        contentContainerStyle={{ paddingBottom: showBar ? 170 : 40 }}
+        contentContainerStyle={{ paddingBottom: showBar ? 210 : 40 }}
         refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={() => { q.refetch(); }} tintColor="#ffffff" />}
       >
         <SafeAreaView edges={['top']} className="bg-violet-600 rounded-b-3xl">
@@ -125,7 +130,9 @@ export default function ClassDetailScreen() {
               <View className="flex-1">
                 <Text className="font-semibold text-violet-900 text-base">Você está inscrito</Text>
                 <Text className="text-sm text-violet-700">
-                  Pago {formatBRL(Number(enrollment!.amount_paid) + Number(enrollment!.service_fee))}. Até a primeira aula!
+                  {enrollment!.payment_held && plan
+                    ? <>{formatBRL(Number(enrollment!.amount_paid) + Number(enrollment!.service_fee))} reservado no seu cartão. Cobrado só em <Text className="text-sm font-bold text-violet-700">{plan.chargeAt}</Text>.</>
+                    : <>Pago {formatBRL(Number(enrollment!.amount_paid) + Number(enrollment!.service_fee))}. Até a primeira aula!</>}
                 </Text>
               </View>
             </View>
@@ -175,9 +182,13 @@ export default function ClassDetailScreen() {
               <Info size={16} color={palette.violet['600']} />
               <Text className="font-semibold text-gray-900 text-sm">Como funciona</Text>
             </View>
-            <Text className="text-sm text-gray-600">Você paga o curso inteiro agora e garante a vaga em todas as aulas.</Text>
             <Text className="text-sm text-gray-600">
-              Desistiu? Reembolso total até {LEAVE_REFUND_HOURS}h antes da primeira aula. Se o clube cancelar o curso, você recebe tudo de volta.
+              Você paga o curso inteiro pelo app e garante a vaga em todas as aulas. Como nas partidas, o valor fica reservado no cartão e só é cobrado {CLASS_ENROLL_CUTOFF_HOURS}h antes da primeira aula
+              {plan ? <> (<Text className="text-sm font-bold text-gray-700">{plan.chargeAt}</Text>)</> : null}. Se você se inscrever com mais de 6 dias de antecedência, a cobrança é feita na hora.
+            </Text>
+            <Text className="text-sm text-gray-600">
+              Desistiu? Sem custo até {LEAVE_REFUND_HOURS}h antes da primeira aula
+              {plan ? <> (<Text className="text-sm font-bold text-gray-700">{plan.leaveUntil}</Text>)</> : null}. Se o clube cancelar o curso, você recebe tudo de volta.
             </Text>
             <Text className="text-sm text-gray-600">As inscrições fecham {CLASS_ENROLL_CUTOFF_HOURS}h antes da primeira aula.</Text>
           </View>
@@ -213,6 +224,13 @@ export default function ClassDetailScreen() {
                   <Text className="text-sm text-gray-500">Curso {formatBRL(Number(cls.price))} + taxa {formatBRL(fee)}</Text>
                   <Text className="text-lg font-bold text-gray-900">{formatBRL(total)}</Text>
                 </View>
+                {plan && (
+                  <Text className="text-xs text-gray-500 mb-2">
+                    {plan.hold
+                      ? <>O valor fica reservado no cartão e só é cobrado em <Text className="text-xs font-bold text-gray-700">{plan.chargeAt}</Text>. Desistência sem custo até {plan.leaveUntil}.</>
+                      : <>A primeira aula é daqui a mais de 6 dias, então o valor é cobrado na hora. Desistência com reembolso total até {plan.leaveUntil}.</>}
+                  </Text>
+                )}
                 <Pressable onPress={enroll} disabled={busy} className={`bg-violet-600 py-3.5 rounded-xl items-center ${busy ? 'opacity-60' : ''}`}>
                   {busy ? <ActivityIndicator color="#ffffff" /> : <Text className="text-white font-bold text-base">Inscrever-se · {formatBRL(total)}</Text>}
                 </Pressable>

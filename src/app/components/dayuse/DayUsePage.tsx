@@ -6,7 +6,7 @@ import { ArrowLeft, Sun, MapPin, Clock, Users, CheckCircle, AlertTriangle, Info,
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import BottomNav from '../BottomNav';
-import { CLASS_ENROLL_CUTOFF_HOURS, classServiceFee, formatBRL, formatSessionDate } from '../../lib/classSchedule';
+import { CLASS_ENROLL_CUTOFF_HOURS, classPaymentPlan, classServiceFee, formatBRL, formatSessionDate } from '../../lib/classSchedule';
 import { wallNowMs } from '../classes/ClassDetailPage';
 import { SPORT_LABELS } from './dayUse';
 
@@ -151,9 +151,10 @@ export default function DayUsePage() {
   const fee = classServiceFee(Number(du.price));
   const total = Number(du.price) + fee;
   const showBar = !joined && !cancelled;
+  const plan = classPaymentPlan(session.starts_at, now);
 
   return (
-    <div className={`min-h-screen bg-gray-50 ${showBar ? 'pb-56' : 'pb-24'}`}>
+    <div className={`min-h-screen bg-gray-50 ${showBar ? 'pb-64' : 'pb-24'}`}>
       <div className="bg-sky-600 text-white px-6 pt-6 pb-8 rounded-b-3xl">
         <div className="flex items-center justify-between mb-4">
           <button onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/home'))} aria-label="Voltar"><ArrowLeft className="w-6 h-6" /></button>
@@ -174,7 +175,7 @@ export default function DayUsePage() {
               <p className="font-semibold text-sky-900">Você está dentro!</p>
               <p className="text-sm text-sky-700">
                 {enrollment!.payment_held
-                  ? `${formatBRL(Number(enrollment!.amount_paid) + Number(enrollment!.service_fee))} reservado no seu cartão, cobrado 2h antes do início.`
+                  ? <>{formatBRL(Number(enrollment!.amount_paid) + Number(enrollment!.service_fee))} reservado no seu cartão. Cobrado só em <b>{plan.chargeAt}</b>.</>
                   : `Pago ${formatBRL(Number(enrollment!.amount_paid) + Number(enrollment!.service_fee))}. Bom jogo!`}
               </p>
             </div>
@@ -237,8 +238,8 @@ export default function DayUsePage() {
 
         <div className="bg-white rounded-2xl border border-gray-200 p-5 text-sm space-y-2">
           <p className="flex items-center gap-2 font-semibold text-gray-900"><Info className="w-4 h-4 text-sky-600" />Como funciona</p>
-          <p className="text-gray-600">Jogo livre organizado pelo clube. Cada jogador paga {formatBRL(Number(du.price))} + taxa pelo app, como nas partidas de futevôlei: o valor fica reservado no cartão e é cobrado 2h antes do início (se você entrar com mais de 6 dias de antecedência, é cobrado na hora).</p>
-          <p className="text-gray-600">Desistiu? Saindo até {DAY_USE_LEAVE_HOURS}h antes do início, o valor volta inteiro para você. Se o clube cancelar, você também recebe tudo de volta.</p>
+          <p className="text-gray-600">Jogo livre organizado pelo clube. Cada jogador paga {formatBRL(Number(du.price))} + taxa pelo app, como nas partidas de futevôlei: o valor fica reservado no cartão e só é cobrado 2h antes do início (<b>{plan.chargeAt}</b>). Se você entrar com mais de 6 dias de antecedência, a cobrança é feita na hora.</p>
+          <p className="text-gray-600">Desistiu? Sem custo até {DAY_USE_LEAVE_HOURS}h antes do início (<b>{plan.leaveUntil}</b>). Se o clube cancelar, você também recebe tudo de volta.</p>
           <p className="text-gray-600">As entradas fecham {CLASS_ENROLL_CUTOFF_HOURS}h antes do início. Não conta para o ranking.</p>
         </div>
 
@@ -274,6 +275,11 @@ export default function DayUsePage() {
                 <span className="text-gray-500">{formatBRL(Number(du.price))} + taxa {formatBRL(fee)}</span>
                 <span className="text-lg font-bold text-gray-900">{formatBRL(total)}</span>
               </div>
+              <p className="text-xs text-gray-500 mb-2">
+                {plan.hold
+                  ? <>O valor fica reservado no cartão e só é cobrado em <b className="text-gray-700">{plan.chargeAt}</b>. Desistência sem custo até {plan.leaveUntil}.</>
+                  : <>Faltam mais de 6 dias, então o valor é cobrado na hora. Desistência com reembolso total até {plan.leaveUntil}.</>}
+              </p>
               <button onClick={join} disabled={busy} className="w-full bg-sky-600 text-white py-3.5 rounded-xl font-bold hover:bg-sky-700 disabled:opacity-60">
                 {busy ? 'Abrindo pagamento…' : `Entrar no day use · ${formatBRL(total)}`}
               </button>

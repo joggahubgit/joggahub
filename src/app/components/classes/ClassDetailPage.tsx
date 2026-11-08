@@ -4,7 +4,7 @@ import { ArrowLeft, GraduationCap, MapPin, CalendarDays, Users, CheckCircle, Ale
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import BottomNav from '../BottomNav';
-import { CLASS_ENROLL_CUTOFF_HOURS, classLevelLabel, classServiceFee, formatBRL, formatSessionDate } from '../../lib/classSchedule';
+import { CLASS_ENROLL_CUTOFF_HOURS, CLASS_LEAVE_HOURS, classLevelLabel, classPaymentPlan, classServiceFee, formatBRL, formatSessionDate } from '../../lib/classSchedule';
 
 interface ClassFull {
   id: string; kind?: string; title: string; coach_name: string; description: string | null; level: string;
@@ -14,9 +14,9 @@ interface ClassFull {
   courts: { name: string } | null;
 }
 interface Session { id: string; starts_at: string; ends_at: string }
-interface Enrollment { id: string; status: string; refunded: boolean; amount_paid: number; service_fee: number }
+interface Enrollment { id: string; status: string; refunded: boolean; amount_paid: number; service_fee: number; payment_held: boolean }
 
-export const LEAVE_REFUND_HOURS = 48;
+export const LEAVE_REFUND_HOURS = CLASS_LEAVE_HOURS;
 
 /** "Agora" na hora de Brasília, na mesma convenção dos horários gravados (wall clock). */
 export function wallNowMs() {
@@ -54,7 +54,7 @@ export default function ClassDetailPage() {
         .eq('id', id).maybeSingle(),
       supabase.from('class_sessions').select('id, starts_at, ends_at').eq('class_id', id).order('starts_at'),
       user
-        ? supabase.from('class_enrollments').select('id, status, refunded, amount_paid, service_fee')
+        ? supabase.from('class_enrollments').select('id, status, refunded, amount_paid, service_fee, payment_held')
             .eq('class_id', id).eq('player_id', user.id).order('created_at', { ascending: false }).limit(1).maybeSingle()
         : Promise.resolve({ data: null }),
     ]);
@@ -90,7 +90,9 @@ export default function ClassDetailPage() {
     setBusy(false);
     setConfirmLeave(false);
     if (fnErr) { setError(await fnError(fnErr, 'Não foi possível cancelar sua inscrição.')); return; }
-    setNotice(data?.refunded ? 'Inscrição cancelada. O valor total foi reembolsado no seu cartão.' : 'Inscrição cancelada.');
+    setNotice(enrollment.payment_held
+      ? 'Inscrição cancelada. A reserva no seu cartão foi liberada, nada foi cobrado.'
+      : data?.refunded ? 'Inscrição cancelada. O valor total foi reembolsado no seu cartão.' : 'Inscrição cancelada.');
     load();
   }
 
@@ -116,9 +118,10 @@ export default function ClassDetailPage() {
   const fee = classServiceFee(Number(cls.price));
   const total = Number(cls.price) + fee;
   const cancelled = cls.status !== 'active';
+  const plan = firstStart ? classPaymentPlan(firstStart, now) : null;
 
   return (
-    <div className={`min-h-screen bg-gray-50 ${!enrolled && !cancelled ? 'pb-56' : 'pb-24'}`}>
+    <div className={`min-h-screen bg-gray-50 ${!enrolled && !cancelled ? 'pb-64' : 'pb-24'}`}>
       <div className="bg-violet-600 text-white px-6 pt-6 pb-8 rounded-b-3xl">
         <button onClick={() => navigate('/aulas')} aria-label="Voltar" className="mb-4"><ArrowLeft className="w-6 h-6" /></button>
         <p className="text-xs font-semibold uppercase tracking-wide text-violet-200">{classLevelLabel(cls.level)}</p>
@@ -138,7 +141,11 @@ export default function ClassDetailPage() {
             <CheckCircle className="w-5 h-5 text-violet-600 flex-shrink-0" />
             <div>
               <p className="font-semibold text-violet-900">Você está inscrito</p>
-              <p className="text-sm text-violet-700">Pago {formatBRL(Number(enrollment!.amount_paid) + Number(enrollment!.service_fee))}. Até a primeira aula!</p>
+              <p className="text-sm text-violet-700">
+                {enrollment!.payment_held && plan
+                  ? <>{formatBRL(Number(enrollment!.amount_paid) + Number(enrollment!.service_fee))} reservado no seu cartão. Cobrado só em <b>{plan.chargeAt}</b>.</>
+                  : <>Pago {formatBRL(Number(enrollment!.amount_paid) + Number(enrollment!.service_fee))}. Até a primeira aula!</>}
+              </p>
             </div>
           </div>
         )}
@@ -169,8 +176,8 @@ export default function ClassDetailPage() {
 
         <div className="bg-white rounded-2xl border border-gray-200 p-5 text-sm space-y-2">
           <p className="flex items-center gap-2 font-semibold text-gray-900"><Info className="w-4 h-4 text-violet-600" />Como funciona</p>
-          <p className="text-gray-600">Você paga o curso inteiro agora e garante a vaga em todas as aulas.</p>
-          <p className="text-gray-600">Desistiu? Reembolso total até {LEAVE_REFUND_HOURS}h antes da primeira aula. Se o clube cancelar o curso, você recebe tudo de volta.</p>
+          <p className="text-gray-600">Você paga o curso inteiro pelo app e garante a vaga em todas as aulas. Como nas partidas, o valor fica reservado no cartão e só é cobrado {CLASS_ENROLL_CUTOFF_HOURS}h antes da primeira aula{plan ? <> (<b>{plan.chargeAt}</b>)</> : null}. Se você se inscrever com mais de 6 dias de antecedência, a cobrança é feita na hora.</p>
+          <p className="text-gray-600">Desistiu? Sem custo até {LEAVE_REFUND_HOURS}h antes da primeira aula{plan ? <> (<b>{plan.leaveUntil}</b>)</> : null}. Se o clube cancelar o curso, você recebe tudo de volta.</p>
           <p className="text-gray-600">As inscrições fecham {CLASS_ENROLL_CUTOFF_HOURS}h antes da primeira aula.</p>
         </div>
 
@@ -182,7 +189,7 @@ export default function ClassDetailPage() {
               <button onClick={() => setConfirmLeave(true)} className="w-full py-3 text-sm font-semibold text-red-600">Desistir do curso</button>
             ) : (
               <div className="bg-white border border-red-200 rounded-2xl p-4 space-y-3">
-                <p className="flex gap-2 text-sm text-gray-700"><AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />Você perde a vaga e recebe o valor total de volta no cartão.</p>
+                <p className="flex gap-2 text-sm text-gray-700"><AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />{enrollment?.payment_held ? 'Você perde a vaga e a reserva no seu cartão é liberada. Nada é cobrado.' : 'Você perde a vaga e recebe o valor total de volta no cartão.'}</p>
                 <div className="flex gap-2">
                   <button onClick={() => setConfirmLeave(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700">Voltar</button>
                   <button onClick={leave} disabled={busy} className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-bold disabled:opacity-60">{busy ? 'Cancelando…' : 'Confirmar'}</button>
@@ -209,6 +216,13 @@ export default function ClassDetailPage() {
                   <span className="text-gray-500">Curso {formatBRL(Number(cls.price))} + taxa {formatBRL(fee)}</span>
                   <span className="text-lg font-bold text-gray-900">{formatBRL(total)}</span>
                 </div>
+                {plan && (
+                  <p className="text-xs text-gray-500 mb-2">
+                    {plan.hold
+                      ? <>O valor fica reservado no cartão e só é cobrado em <b className="text-gray-700">{plan.chargeAt}</b>. Desistência sem custo até {plan.leaveUntil}.</>
+                      : <>A primeira aula é daqui a mais de 6 dias, então o valor é cobrado na hora. Desistência com reembolso total até {plan.leaveUntil}.</>}
+                  </p>
+                )}
                 <button onClick={enroll} disabled={busy}
                   className="w-full bg-violet-600 text-white py-3.5 rounded-xl font-bold hover:bg-violet-700 disabled:opacity-60">
                   {busy ? 'Abrindo pagamento…' : `Inscrever-se · ${formatBRL(total)}`}

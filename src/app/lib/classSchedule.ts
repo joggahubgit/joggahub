@@ -22,6 +22,31 @@ export const classLevelLabel = (v: string) => CLASS_LEVELS.find(l => l.value ===
 /** Inscrição fecha 2h antes da primeira aula. */
 export const CLASS_ENROLL_CUTOFF_HOURS = 2;
 
+// Curso e day use seguem as regras das partidas: o valor fica retido no cartão
+// e só é cobrado 2h antes do início (curso: 1ª aula); desistência sem custo até
+// 24h antes. A retenção do Stripe dura ~7 dias, então só retém quando faltam até
+// 6 dias; com mais antecedência a cobrança é feita na hora da inscrição.
+export const CLASS_CAPTURE_HOURS = 2;
+export const CLASS_LEAVE_HOURS = 24;
+export const CLASS_HOLD_MAX_DAYS = 6;
+
+/** "sáb, 14/11 às 17:00" — horário gravado (wall clock) menos N horas. */
+export function wallDateTimeLabel(iso: string, minusHours = 0) {
+  const d = new Date(Date.parse(`${iso.substring(0, 19)}Z`) - minusHours * 3600_000).toISOString();
+  const [, m, day] = d.substring(0, 10).split('-');
+  return `${WEEKDAY_LABELS[new Date(d).getUTCDay()].toLowerCase()}, ${day}/${m} às ${d.substring(11, 16)}`;
+}
+
+/** Como fica o pagamento para quem se inscreve agora (nowWallMs = "agora" em wall clock). */
+export function classPaymentPlan(firstStartIso: string, nowWallMs: number) {
+  const firstMs = Date.parse(`${firstStartIso.substring(0, 19)}Z`);
+  return {
+    hold: firstMs - nowWallMs <= CLASS_HOLD_MAX_DAYS * 24 * 3600_000,
+    chargeAt: wallDateTimeLabel(firstStartIso, CLASS_CAPTURE_HOURS),
+    leaveUntil: wallDateTimeLabel(firstStartIso, CLASS_LEAVE_HOURS),
+  };
+}
+
 const toMin = (hhmm: string) => {
   const [h, m] = hhmm.split(':').map(Number);
   return h * 60 + m;

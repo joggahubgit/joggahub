@@ -1,5 +1,5 @@
-// Cobra os day use 2h antes do início (mesmo prazo das partidas abertas de
-// futevôlei). Chamada a cada minuto pelo cron. Só mexe em inscrições de day use
+// Cobra day use e cursos 2h antes do início (day use) ou da 1ª aula (curso),
+// mesmo prazo das partidas abertas. Chamada pelo cron. Só mexe em inscrições
 // com valor retido (class_enrollments.payment_held). Pode ser chamada a qualquer
 // momento sem efeito colateral: só cobra o que já está dentro da janela de 2h.
 
@@ -22,21 +22,25 @@ serve(async (req) => {
   const db = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
   const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', { apiVersion: '2023-10-16' });
 
-  // Day use que começam em até 2h (e ainda não terminaram)
+  // Inscrições com valor retido; cobra as que começam em até 2h
   const limit = new Date(wallNowIso().getTime() + CAPTURE_HOURS_BEFORE * 3600_000).toISOString();
   const { data: rows, error } = await db
     .from('class_enrollments')
     .select('id, stripe_payment_intent_id, classes!inner(kind, status, title), class_id')
     .eq('status', 'active')
     .eq('payment_held', true)
-    .eq('classes.kind', 'day_use')
     .eq('classes.status', 'active');
   if (error) return json({ error: error.message }, 500);
 
   const classIds = [...new Set((rows ?? []).map(r => r.class_id))];
   if (!classIds.length) return json({ captured: 0 });
   const { data: sessions } = await db.from('class_sessions').select('class_id, starts_at').in('class_id', classIds);
-  const startByClass = new Map((sessions ?? []).map(s => [s.class_id, s.starts_at as string]));
+  // Início = primeira sessão (curso tem várias aulas; day use tem uma)
+  const startByClass = new Map<string, string>();
+  for (const s of sessions ?? []) {
+    const cur = startByClass.get(s.class_id);
+    if (!cur || (s.starts_at as string) < cur) startByClass.set(s.class_id, s.starts_at as string);
+  }
 
   let captured = 0;
   const errors: string[] = [];

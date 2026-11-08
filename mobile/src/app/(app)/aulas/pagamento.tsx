@@ -10,9 +10,12 @@ import { CheckCircle, XCircle } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { supabase } from '@/lib/supabase';
 import { sendClassEmail } from '@/features/classes/email';
+import { CLASS_CAPTURE_HOURS, CLASS_LEAVE_HOURS, wallDateTimeLabel } from '@/lib/shared';
 import palette from '../../../../tailwind.palette';
 
-type State = { kind: 'waiting' } | { kind: 'done'; classId: string } | { kind: 'failed'; error: string };
+type State = { kind: 'waiting' }
+  | { kind: 'done'; classId: string; held: boolean; chargeAt?: string; leaveUntil?: string }
+  | { kind: 'failed'; error: string };
 
 export default function ClassPaymentScreen() {
   const { session_id } = useLocalSearchParams<{ session_id?: string }>();
@@ -32,7 +35,17 @@ export default function ClassPaymentScreen() {
         const { data } = await supabase.functions.invoke('finalize-checkout', { body: { sessionId } });
         if (cancelled) return;
         if (data?.status === 'done' && data.classId) {
-          setState({ kind: 'done', classId: data.classId });
+          const [{ data: f }, { data: en }] = await Promise.all([
+            supabase.from('class_sessions').select('starts_at').eq('class_id', data.classId).order('starts_at').limit(1).maybeSingle(),
+            supabase.from('class_enrollments').select('payment_held').eq('stripe_session_id', sessionId).maybeSingle(),
+          ]);
+          if (cancelled) return;
+          const first = f?.starts_at as string | undefined;
+          setState({
+            kind: 'done', classId: data.classId, held: !!en?.payment_held,
+            chargeAt: first ? wallDateTimeLabel(first, CLASS_CAPTURE_HOURS) : undefined,
+            leaveUntil: first ? wallDateTimeLabel(first, CLASS_LEAVE_HOURS) : undefined,
+          });
           qc.invalidateQueries();
           sendClassEmail(data.classId, sessionId);
           return;
@@ -68,6 +81,17 @@ export default function ClassPaymentScreen() {
             </View>
             <Text className="font-bold text-gray-900 text-xl">Inscrição confirmada!</Text>
             <Text className="text-sm text-gray-500 mt-1 text-center">Sua vaga está garantida em todas as aulas.</Text>
+            <View className="mt-4 bg-gray-50 rounded-2xl p-4 w-full gap-1">
+              <Text className="text-sm text-gray-600">
+                {state.held
+                  ? <>O valor está <Text className="text-sm font-bold text-gray-900">reservado no seu cartão</Text> e só será cobrado em <Text className="text-sm font-bold text-gray-900">{state.chargeAt}</Text>.</>
+                  : <>O pagamento foi <Text className="text-sm font-bold text-gray-900">cobrado no seu cartão</Text>.</>}
+              </Text>
+              {!!state.leaveUntil && (
+                <Text className="text-sm text-gray-600">Desistência sem custo até <Text className="text-sm font-bold text-gray-900">{state.leaveUntil}</Text>, pelo app.</Text>
+              )}
+              <Text className="text-xs text-gray-400 pt-1">Enviamos os detalhes para o seu email.</Text>
+            </View>
             <Pressable
               onPress={() => router.replace({ pathname: '/aulas/[id]', params: { id: state.classId } })}
               className="mt-6 w-full bg-violet-600 py-3 rounded-xl items-center"

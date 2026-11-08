@@ -65,9 +65,10 @@ serve(async (req) => {
     const d = (s: string) => `${s.substring(8, 10)}/${s.substring(5, 7)}`;
 
     const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', { apiVersion: '2023-10-16' });
-    // Day use segue o futevôlei: valor retido no cartão e cobrado 2h antes
-    // (capture-day-use). Curso, ou day use com mais de 6 dias de antecedência: cobra na hora.
-    const hold = cls.kind === 'day_use' && firstMs - wallNowMs() <= HOLD_MAX_DAYS * 24 * 3600_000;
+    // Curso e day use seguem as partidas: valor retido no cartão e cobrado 2h antes
+    // do início / da 1ª aula (função capture-day-use). Com mais de 6 dias de
+    // antecedência a retenção do Stripe não dura, então cobra na hora (até o cartão salvo).
+    const hold = firstMs - wallNowMs() <= HOLD_MAX_DAYS * 24 * 3600_000;
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
