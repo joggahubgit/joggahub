@@ -40,12 +40,12 @@ serve(async (req) => {
     const db = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
 
     const { data: cls } = await db.from('classes')
-      .select('id, title, coach_name, price, capacity, enrolled_count, lesson_count, status, start_date, end_date, venues(name)')
+      .select('id, kind, title, coach_name, price, capacity, enrolled_count, lesson_count, status, start_date, end_date, venues(name)')
       .eq('id', body.classId).maybeSingle();
     if (!cls || cls.status !== 'active') throw new UserError('Este curso não está disponível.');
     if (cls.enrolled_count >= cls.capacity) throw new UserError('O curso está lotado.');
 
-    const { data: first } = await db.from('class_sessions').select('starts_at')
+    const { data: first } = await db.from('class_sessions').select('starts_at, ends_at')
       .eq('class_id', cls.id).order('starts_at').limit(1).maybeSingle();
     if (!first) throw new UserError('Este curso não tem aulas.');
     const firstMs = new Date(first.starts_at).getTime();
@@ -73,10 +73,15 @@ serve(async (req) => {
           price_data: {
             currency: 'brl',
             unit_amount: Math.round(price * 100),
-            product_data: {
-              name: `Curso — ${cls.title}`,
-              description: `${venueName} · ${cls.lesson_count} aulas · ${d(cls.start_date)} a ${d(cls.end_date)} · Prof. ${cls.coach_name}`,
-            },
+            product_data: cls.kind === 'day_use'
+              ? {
+                  name: `Day use — ${cls.title}`,
+                  description: `${venueName} · ${d(cls.start_date)} · ${first.starts_at.substring(11, 16)}–${first.ends_at.substring(11, 16)}`,
+                }
+              : {
+                  name: `Curso — ${cls.title}`,
+                  description: `${venueName} · ${cls.lesson_count} aulas · ${d(cls.start_date)} a ${d(cls.end_date)} · Prof. ${cls.coach_name}`,
+                },
           },
           quantity: 1,
         },
