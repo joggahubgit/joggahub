@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X, Plus, Trash2, CheckCircle, AlertCircle, CalendarDays, Repeat } from 'lucide-react';
+import { X, CheckCircle, AlertCircle, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
 import {
   CLASS_LEVELS, WEEKDAY_LABELS, classServiceFee, formatBRL, formatSessionDate,
-  generateWeeklySessions, sessionsPayload, sortSessions, validateClassSessions, type ClassSession,
+  sessionsPayload, sortSessions, validateClassSessions, type ClassSession,
 } from '@/app/lib/classSchedule';
 import { localDateStr } from './ScheduleGrid';
 
@@ -17,15 +17,73 @@ interface Court { id: string; name: string; sport_type: string }
 
 // Horários de 30 em 30 min (mesma grade dos slots).
 const TIMES = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, '0')}:${i % 2 ? '30' : '00'}`);
+const MONTHS = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 
 const input = 'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400';
 const label = 'text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block';
 
-function TimeSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+const fmtShort = (d: string) => `${d.substring(8, 10)}/${d.substring(5, 7)}`;
+
+function TimeSelect({ value, onChange, small }: { value: string; onChange: (v: string) => void; small?: boolean }) {
   return (
-    <select value={value} onChange={e => onChange(e.target.value)} className={input}>
+    <select value={value} onChange={e => onChange(e.target.value)}
+      className={small ? 'border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400' : input}>
       {TIMES.map(t => <option key={t} value={t}>{t}</option>)}
     </select>
+  );
+}
+
+/** Calendário do mês: clicar marca/desmarca a data. Dias passados ficam bloqueados. */
+function MonthPicker({ selected, onToggle, today }: { selected: Set<string>; onToggle: (date: string) => void; today: string }) {
+  const [month, setMonth] = useState(() => {
+    const [y, m] = today.split('-').map(Number);
+    return { y, m: m - 1 };
+  });
+  const first = new Date(month.y, month.m, 1);
+  const daysInMonth = new Date(month.y, month.m + 1, 0).getDate();
+  const cells: (string | null)[] = [
+    ...Array.from({ length: first.getDay() }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, i) =>
+      `${month.y}-${String(month.m + 1).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`),
+  ];
+  const isCurrentMonth = `${month.y}-${String(month.m + 1).padStart(2, '0')}` === today.substring(0, 7);
+  const shift = (n: number) => setMonth(({ y, m }) => {
+    const d = new Date(y, m + n, 1);
+    return { y: d.getFullYear(), m: d.getMonth() };
+  });
+
+  return (
+    <div className="border border-gray-200 rounded-2xl p-3">
+      <div className="flex items-center justify-between mb-2">
+        <button onClick={() => shift(-1)} disabled={isCurrentMonth} aria-label="Mês anterior"
+          className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent">
+          <ChevronLeft className="w-5 h-5 text-gray-600" />
+        </button>
+        <p className="text-sm font-bold text-gray-900 capitalize">{MONTHS[month.m]} {month.y}</p>
+        <button onClick={() => shift(1)} aria-label="Próximo mês" className="p-1.5 rounded-lg hover:bg-gray-100">
+          <ChevronRight className="w-5 h-5 text-gray-600" />
+        </button>
+      </div>
+      <div className="grid grid-cols-7 gap-1 text-center">
+        {WEEKDAY_LABELS.map(d => <span key={d} className="text-[11px] font-semibold text-gray-400 py-1">{d}</span>)}
+        {cells.map((date, i) => {
+          if (!date) return <span key={`e${i}`} />;
+          const past = date < today;
+          const on = selected.has(date);
+          return (
+            <button key={date} onClick={() => onToggle(date)} disabled={past}
+              className={`h-9 rounded-lg text-sm font-semibold transition-colors ${
+                on ? 'bg-purple-600 text-white shadow-sm'
+                  : past ? 'text-gray-300 cursor-not-allowed'
+                    : date === today ? 'text-purple-700 ring-1 ring-purple-300 hover:bg-purple-50'
+                      : 'text-gray-700 hover:bg-purple-50'
+              }`}>
+              {Number(date.substring(8, 10))}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -39,14 +97,9 @@ export function CreateClassModal({ venueId, onClose, onCreated }: Props) {
   const [level, setLevel] = useState('todos');
   const [capacity, setCapacity] = useState('4');
   const [price, setPrice] = useState('');
-  const [lessonCount, setLessonCount] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [mode, setMode] = useState<'weekly' | 'custom'>('weekly');
-  const [weekdays, setWeekdays] = useState<number[]>([]);
-  const [wStart, setWStart] = useState('19:00');
-  const [wEnd, setWEnd] = useState('20:00');
-  const [custom, setCustom] = useState<ClassSession[]>([]);
+  const [start, setStart] = useState('19:00');
+  const [end, setEnd] = useState('20:00');
+  const [picked, setPicked] = useState<ClassSession[]>([]);
   const [saving, setSaving] = useState(false);
   const [serverError, setServerError] = useState('');
   const [touched, setTouched] = useState(false);
@@ -59,12 +112,12 @@ export function CreateClassModal({ venueId, onClose, onCreated }: Props) {
       });
   }, [venueId]);
 
-  const sessions = useMemo(
-    () => (mode === 'weekly' ? generateWeeklySessions(startDate, endDate, weekdays, wStart, wEnd) : sortSessions(custom)),
-    [mode, startDate, endDate, weekdays, wStart, wEnd, custom],
-  );
+  // As datas escolhidas definem tudo: nº de aulas, início e término.
+  const sessions = useMemo(() => sortSessions(picked), [picked]);
+  const selectedDates = useMemo(() => new Set(picked.map(s => s.date)), [picked]);
+  const startDate = sessions[0]?.date ?? '';
+  const endDate = sessions[sessions.length - 1]?.date ?? '';
 
-  const count = Number(lessonCount);
   const priceNum = Number(price.replace(',', '.'));
   const capNum = Number(capacity);
 
@@ -74,20 +127,26 @@ export function CreateClassModal({ venueId, onClose, onCreated }: Props) {
   if (!courtId) fieldErrors.push('Escolha a quadra.');
   if (!(capNum >= 1 && capNum <= 50)) fieldErrors.push('Vagas: de 1 a 50.');
   if (!(priceNum > 0)) fieldErrors.push('Informe o preço do curso.');
-  const scheduleErrors = validateClassSessions(count, startDate, endDate, sessions, today);
+  const scheduleErrors = sessions.length
+    ? validateClassSessions(sessions.length, startDate, endDate, sessions, today)
+    : ['Escolha no calendário os dias das aulas.'];
   const errors = [...fieldErrors, ...scheduleErrors];
 
-  function toggleDay(d: number) {
-    setWeekdays(prev => (prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d].sort()));
+  function toggleDate(date: string) {
+    setPicked(prev => (prev.some(s => s.date === date)
+      ? prev.filter(s => s.date !== date)
+      : [...prev, { date, start, end }]));
   }
 
-  function addCustom() {
-    const last = custom[custom.length - 1];
-    setCustom([...custom, { date: last?.date ?? startDate ?? '', start: last?.start ?? '19:00', end: last?.end ?? '20:00' }]);
+  // Mudar o horário geral muda o de todas as aulas já marcadas.
+  function setAllTimes(patch: { start?: string; end?: string }) {
+    if (patch.start) setStart(patch.start);
+    if (patch.end) setEnd(patch.end);
+    setPicked(prev => prev.map(s => ({ ...s, ...patch })));
   }
 
-  function updateCustom(i: number, patch: Partial<ClassSession>) {
-    setCustom(custom.map((s, j) => (j === i ? { ...s, ...patch } : s)));
+  function updateSession(date: string, patch: Partial<ClassSession>) {
+    setPicked(prev => prev.map(s => (s.date === date ? { ...s, ...patch } : s)));
   }
 
   async function save() {
@@ -103,18 +162,16 @@ export function CreateClassModal({ venueId, onClose, onCreated }: Props) {
       p_level: level,
       p_capacity: capNum,
       p_price: priceNum,
-      p_lesson_count: count,
+      p_lesson_count: sessions.length,
       p_start_date: startDate,
       p_end_date: endDate,
-      p_schedule_mode: mode,
+      p_schedule_mode: 'custom',
       p_sessions: sessionsPayload(sessions),
     });
     setSaving(false);
     if (error) { setServerError(error.message); return; }
     onCreated(data as string);
   }
-
-  const showErrors = touched || sessions.length > 0;
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -177,93 +234,53 @@ export function CreateClassModal({ venueId, onClose, onCreated }: Props) {
             </p>
           )}
 
-          {/* Período */}
-          <div className="grid sm:grid-cols-3 gap-3">
-            <div>
-              <label className={label}>Nº de aulas</label>
-              <input type="number" min={1} max={100} value={lessonCount} onChange={e => setLessonCount(e.target.value)}
-                placeholder="Ex.: 8" className={input} />
-            </div>
-            <div>
-              <label className={label}>Data de início</label>
-              <input type="date" value={startDate} min={today}
-                onChange={e => { setStartDate(e.target.value); if (endDate && e.target.value > endDate) setEndDate(e.target.value); }}
-                className={input} />
-            </div>
-            <div>
-              <label className={label}>Data de término</label>
-              <input type="date" value={endDate} min={startDate || today} onChange={e => setEndDate(e.target.value)} className={input} />
-            </div>
-          </div>
-
-          {/* Modo das datas */}
+          {/* Datas: calendário + horário */}
           <div>
-            <label className={label}>Datas das aulas</label>
-            <div className="grid grid-cols-2 gap-2">
-              {([
-                { v: 'weekly', icon: Repeat, t: 'Dias fixos na semana', d: 'Ex.: terças e quintas às 19h' },
-                { v: 'custom', icon: CalendarDays, t: 'Escolher cada data', d: 'Marque aula por aula' },
-              ] as const).map(o => (
-                <button key={o.v} onClick={() => setMode(o.v)}
-                  className={`text-left p-3 rounded-xl border-2 transition-colors ${mode === o.v ? 'border-purple-600 bg-purple-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                  <span className="flex items-center gap-2 text-sm font-semibold text-gray-900"><o.icon className="w-4 h-4 text-purple-600" />{o.t}</span>
-                  <span className="block text-xs text-gray-500 mt-0.5">{o.d}</span>
-                </button>
-              ))}
+            <label className={label}>Dias das aulas</label>
+            <p className="text-xs text-gray-500 -mt-0.5 mb-2">Clique nos dias do calendário. Clique de novo para desmarcar.</p>
+            <div className="grid sm:grid-cols-[1fr_200px] gap-4">
+              <MonthPicker selected={selectedDates} onToggle={toggleDate} today={today} />
+              <div className="space-y-3">
+                <div>
+                  <p className="text-[11px] text-gray-400 mb-1">Começa</p>
+                  <TimeSelect value={start} onChange={v => setAllTimes({ start: v })} />
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-400 mb-1">Termina</p>
+                  <TimeSelect value={end} onChange={v => setAllTimes({ end: v })} />
+                </div>
+                <p className="text-[11px] text-gray-400">Vale para todas as aulas. Para mudar só uma, use a lista abaixo.</p>
+              </div>
             </div>
           </div>
 
-          {mode === 'weekly' ? (
-            <div className="space-y-3">
-              <div className="grid grid-cols-7 gap-1">
-                {WEEKDAY_LABELS.map((name, i) => (
-                  <button key={i} onClick={() => toggleDay(i)}
-                    className={`py-2 rounded-lg text-xs font-bold transition-all ${weekdays.includes(i) ? 'bg-purple-600 text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-                    {name}
-                  </button>
-                ))}
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div><p className="text-[11px] text-gray-400 mb-1">Começa</p><TimeSelect value={wStart} onChange={setWStart} /></div>
-                <div><p className="text-[11px] text-gray-400 mb-1">Termina</p><TimeSelect value={wEnd} onChange={setWEnd} /></div>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {custom.map((s, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <input type="date" value={s.date} min={today} onChange={e => updateCustom(i, { date: e.target.value })} className={`${input} flex-[1.4]`} />
-                  <div className="flex-1"><TimeSelect value={s.start} onChange={v => updateCustom(i, { start: v })} /></div>
-                  <div className="flex-1"><TimeSelect value={s.end} onChange={v => updateCustom(i, { end: v })} /></div>
-                  <button onClick={() => setCustom(custom.filter((_, j) => j !== i))} className="p-2 text-gray-400 hover:text-red-500" aria-label="Remover aula">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-              <button onClick={addCustom} className="flex items-center gap-1.5 text-sm font-semibold text-purple-600 hover:underline">
-                <Plus className="w-4 h-4" /> Adicionar aula
-              </button>
-            </div>
-          )}
-
-          {/* Prévia */}
+          {/* Resumo + lista das aulas */}
           {sessions.length > 0 && (
             <div className="bg-gray-50 rounded-xl p-4">
-              <p className="text-sm font-semibold text-gray-900 mb-2">
+              <p className="text-sm font-semibold text-gray-900 mb-3">
                 {sessions.length} {sessions.length === 1 ? 'aula' : 'aulas'}
-                {count > 0 && sessions.length !== count && <span className="text-red-600 font-normal"> (você informou {count})</span>}
+                <span className="font-normal text-gray-500">
+                  {sessions.length === 1 ? ` · ${fmtShort(startDate)}` : ` · de ${fmtShort(startDate)} a ${fmtShort(endDate)}`}
+                </span>
               </p>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="space-y-1.5">
                 {sessions.map((s, i) => (
-                  <span key={i} className="text-xs bg-white border border-gray-200 rounded-lg px-2 py-1 text-gray-700 tabular-nums">
-                    {formatSessionDate(s.date)} · {s.start}–{s.end}
-                  </span>
+                  <div key={s.date} className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5">
+                    <span className="text-xs text-gray-400 w-12">Aula {i + 1}</span>
+                    <span className="flex-1 text-sm font-medium text-gray-900 capitalize">{formatSessionDate(s.date)}</span>
+                    <TimeSelect small value={s.start} onChange={v => updateSession(s.date, { start: v })} />
+                    <span className="text-gray-400 text-xs">até</span>
+                    <TimeSelect small value={s.end} onChange={v => updateSession(s.date, { end: v })} />
+                    <button onClick={() => toggleDate(s.date)} className="p-1 text-gray-400 hover:text-red-500" aria-label="Remover aula">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 ))}
               </div>
             </div>
           )}
 
-          {showErrors && errors.length > 0 && (
+          {touched && errors.length > 0 && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-1">
               {errors.map(e => (
                 <p key={e} className="flex items-start gap-1.5 text-xs text-amber-800"><AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />{e}</p>
@@ -282,7 +299,7 @@ export function CreateClassModal({ venueId, onClose, onCreated }: Props) {
           <button onClick={save} disabled={saving || (touched && errors.length > 0)}
             className="flex-[2] py-3 rounded-xl bg-purple-600 text-white font-bold text-sm hover:bg-purple-700 disabled:opacity-50 flex items-center justify-center gap-2">
             <CheckCircle className="w-4 h-4" />
-            {saving ? 'Criando…' : 'Criar curso e bloquear agenda'}
+            {saving ? 'Criando…' : sessions.length ? `Criar curso com ${sessions.length} ${sessions.length === 1 ? 'aula' : 'aulas'}` : 'Criar curso e bloquear agenda'}
           </button>
         </div>
       </div>
