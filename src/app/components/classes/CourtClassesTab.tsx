@@ -14,7 +14,7 @@ export default function CourtClassesTab({ courtId }: { courtId: string }) {
     const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     supabase.from('classes')
       .select('id, title, coach_name, level, sport_type, capacity, enrolled_count, price, lesson_count, start_date, end_date, venues(name, city), courts(name)')
-      .eq('court_id', courtId).eq('status', 'active').gte('end_date', today).order('start_date')
+      .eq('court_id', courtId).eq('kind', 'course').eq('status', 'active').gte('end_date', today).order('start_date')
       .then(({ data }) => setClasses((data as unknown as ClassCard[]) ?? []));
   }, [courtId]);
 

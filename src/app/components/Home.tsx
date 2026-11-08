@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { CLASSES_ENABLED } from '../lib/features';
 import { UpcomingClassCard, useUpcomingClasses } from './classes/UpcomingClassCards';
+import { DayUseListCard, useOpenDayUses } from './dayuse/dayUse';
 import { wallDate, wallTime } from '@/app/lib/wallClock';
 import { PendingResultBanner } from './PendingResultBanner';
 
@@ -57,6 +58,7 @@ export default function Home() {
   const [upcomingGames, setUpcomingGames] = useState<UpcomingGame[]>([]);
   const [upcomingBookings, setUpcomingBookings] = useState<UpcomingBooking[]>([]);
   const upcomingClasses = useUpcomingClasses(user?.id);
+  const openDayUses = useOpenDayUses();
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
@@ -590,14 +592,17 @@ export default function Home() {
           <h2 className="text-lg font-semibold text-gray-900">Jogos abertos</h2>
           <button onClick={() => navigate('/find-games')} className="text-violet-600 text-sm font-semibold">Ver todos</button>
         </div>
-        {recentGames.length === 0 ? (
+        {recentGames.length === 0 && openDayUses.length === 0 ? (
           <div className="bg-white rounded-xl p-6 border border-gray-200 text-center text-gray-500 text-sm">
             Nenhum jogo aberto disponível no momento.
           </div>
         ) : (
           <div className="space-y-3">
-            {recentGames.map((game) => (
-              <div key={game.id} onClick={() => navigate(`/open-game/${game.id}`)} className="bg-white rounded-xl p-4 border border-gray-200 cursor-pointer hover:shadow-md transition-shadow">
+            {/* Partida aberta · Day use (do clube) junto com os jogos abertos, em ordem de data */}
+            {[
+              ...openDayUses.slice(0, 3).map(d => ({ at: d.startsAt, key: `du_${d.id}`, node: <DayUseListCard d={d} compact /> })),
+              ...recentGames.map(game => ({ at: game.scheduled_at ?? '', key: `g_${game.id}`, node: (
+              <div onClick={() => navigate(`/open-game/${game.id}`)} className="bg-white rounded-xl p-4 border border-gray-200 cursor-pointer hover:shadow-md transition-shadow">
                 <div className="flex items-start justify-between mb-2">
                   <div>
                     <div className="font-semibold text-gray-900">Jogo Aberto</div>
@@ -618,7 +623,10 @@ export default function Home() {
                   {game.skill_level && <span className="px-2 py-1 bg-violet-100 text-violet-700 rounded-full text-xs">{game.skill_level}</span>}
                 </div>
               </div>
-            ))}
+              ) })),
+            ]
+              .sort((a, b) => a.at.substring(0, 19).localeCompare(b.at.substring(0, 19)))
+              .map(item => <Fragment key={item.key}>{item.node}</Fragment>)}
           </div>
         )}
       </div>

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, MapPin, Users, Clock, Search, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { DayUseListCard, useOpenDayUses } from './dayuse/dayUse';
 
 interface GameCard {
   id: string;
@@ -25,6 +26,7 @@ const SPORT_LABELS: Record<string, string> = {
 export default function FindGames() {
   const navigate = useNavigate();
   const [games, setGames] = useState<GameCard[]>([]);
+  const openDayUses = useOpenDayUses();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -106,10 +108,12 @@ export default function FindGames() {
         <p className="text-sm font-semibold text-gray-500">
           {loading
             ? <span className="flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Carregando jogos...</span>
-            : `${games.length} ${games.length === 1 ? 'jogo encontrado' : 'jogos encontrados'}`}
+            : `${games.length + openDayUses.length} ${games.length + openDayUses.length === 1 ? 'jogo encontrado' : 'jogos encontrados'}`}
         </p>
 
-        {!loading && games.length === 0 && (
+        {openDayUses.map(d => <DayUseListCard key={d.id} d={d} />)}
+
+        {!loading && games.length === 0 && openDayUses.length === 0 && (
           <div className="text-center py-20 space-y-2">
             <p className="text-4xl">⚽</p>
             <p className="font-semibold text-gray-700">Nenhum jogo aberto</p>

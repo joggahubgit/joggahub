@@ -2,7 +2,7 @@
 // que o jogador está inscrito, mostrando a aula seguinte.
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GraduationCap } from 'lucide-react';
+import { GraduationCap, Sun } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { CLASSES_ENABLED } from '../../lib/features';
 import { wallDate, wallTime } from '../../lib/wallClock';
@@ -17,6 +17,7 @@ export interface UpcomingClass {
   endsAt: string;
   lessonNumber: number;
   lessonCount: number;
+  dayUse: boolean;
 }
 
 /** "Agora" em Brasília no formato gravado ("YYYY-MM-DDTHH:MM:SS"), para comparar com os horários. */
@@ -33,7 +34,7 @@ export function useUpcomingClasses(userId: string | undefined) {
     (async () => {
       const { data: enr } = await supabase
         .from('class_enrollments')
-        .select('class_id, classes(id, title, coach_name, lesson_count, status, venues(name), courts(name))')
+        .select('class_id, classes(id, kind, title, coach_name, lesson_count, status, venues(name), courts(name))')
         .eq('player_id', userId)
         .eq('status', 'active');
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -62,6 +63,7 @@ export function useUpcomingClasses(userId: string | undefined) {
           endsAt: list[idx].ends_at,
           lessonNumber: idx + 1,
           lessonCount: list.length,
+          dayUse: c.kind === 'day_use',
         });
       }
       if (!cancelled) setItems(out);
@@ -76,10 +78,10 @@ export function UpcomingClassCard({ item }: { item: UpcomingClass }) {
   const navigate = useNavigate();
   return (
     <div
-      onClick={() => navigate(`/aulas/${item.classId}`)}
+      onClick={() => navigate(item.dayUse ? `/day-use/${item.classId}` : `/aulas/${item.classId}`)}
       className="flex-shrink-0 w-72 bg-white rounded-2xl border border-gray-200 overflow-hidden cursor-pointer active:scale-[0.99] transition-transform"
     >
-      <div className="h-1.5 bg-amber-500 w-full" />
+      <div className={`h-1.5 w-full ${item.dayUse ? 'bg-sky-500' : 'bg-amber-500'}`} />
       <div className="p-4 flex flex-col gap-3">
         <div className="flex items-start justify-between">
           <div className="min-w-0">
@@ -89,14 +91,16 @@ export function UpcomingClassCard({ item }: { item: UpcomingClass }) {
             <p className="text-sm font-semibold text-gray-700 truncate">{item.title}</p>
             <p className="text-xs text-gray-400 truncate">{item.venueName} · {item.courtName}</p>
           </div>
-          <div className="px-2 py-1 rounded-full text-[10px] font-bold flex-shrink-0 ml-2 bg-amber-100 text-amber-700">
-            Aula {item.lessonNumber}/{item.lessonCount}
+          <div className={`px-2 py-1 rounded-full text-[10px] font-bold flex-shrink-0 ml-2 ${item.dayUse ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
+            {item.dayUse ? 'Day use' : `Aula ${item.lessonNumber}/${item.lessonCount}`}
           </div>
         </div>
         <div className="flex items-center justify-between pt-1 border-t border-gray-100">
           <div className="flex items-center gap-1.5 min-w-0">
-            <GraduationCap className="w-4 h-4 text-amber-500 flex-shrink-0" />
-            <span className="text-xs text-gray-500 truncate">Aula · Prof. {item.coach}</span>
+            {item.dayUse
+              ? <Sun className="w-4 h-4 flex-shrink-0 text-sky-500" />
+              : <GraduationCap className="w-4 h-4 flex-shrink-0 text-amber-500" />}
+            <span className="text-xs text-gray-500 truncate">{item.dayUse ? 'Partida aberta · Day use' : `Aula · Prof. ${item.coach}`}</span>
           </div>
           <span className="text-[11px] font-bold text-green-700 flex-shrink-0">Inscrito</span>
         </div>

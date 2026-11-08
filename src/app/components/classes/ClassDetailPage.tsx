@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, GraduationCap, MapPin, CalendarDays, Users, CheckCircle, AlertTriangle, Info } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -7,7 +7,7 @@ import BottomNav from '../BottomNav';
 import { CLASS_ENROLL_CUTOFF_HOURS, classLevelLabel, classServiceFee, formatBRL, formatSessionDate } from '../../lib/classSchedule';
 
 interface ClassFull {
-  id: string; title: string; coach_name: string; description: string | null; level: string;
+  id: string; kind?: string; title: string; coach_name: string; description: string | null; level: string;
   capacity: number; enrolled_count: number; price: number; lesson_count: number;
   start_date: string; end_date: string; status: string;
   venues: { name: string; city: string | null; address: string | null } | null;
@@ -50,7 +50,7 @@ export default function ClassDetailPage() {
     if (!id) return;
     const [{ data: c }, { data: s }, { data: e }] = await Promise.all([
       supabase.from('classes')
-        .select('id, title, coach_name, description, level, capacity, enrolled_count, price, lesson_count, start_date, end_date, status, venues(name, city, address), courts(name)')
+        .select('id, kind, title, coach_name, description, level, capacity, enrolled_count, price, lesson_count, start_date, end_date, status, venues(name, city, address), courts(name)')
         .eq('id', id).maybeSingle(),
       supabase.from('class_sessions').select('id, starts_at, ends_at').eq('class_id', id).order('starts_at'),
       user
@@ -104,6 +104,8 @@ export default function ClassDetailPage() {
       </div>
     );
   }
+
+  if (cls.kind === 'day_use') return <Navigate to={`/day-use/${cls.id}`} replace />;
 
   const enrolled = enrollment?.status === 'active';
   const firstStart = sessions[0]?.starts_at;

@@ -49,12 +49,26 @@ interface ClassEmailDetails {
   /** Uma linha por aula, ex.: "ter, 01/12 · 19:00–20:00" */
   sessions: string[];
   total: string;
+  /** Partida aberta · Day use (sem professor, 1 data) */
+  dayUse?: boolean;
 }
 
 export function classEnrolledEmail(d: ClassEmailDetails): string {
   const lessons = d.sessions
     .map((s, i) => `<p style="margin:0 0 4px; color:#4b5563;">Aula ${i + 1}: ${escapeHtml(s)}</p>`)
     .join('');
+  if (d.dayUse) {
+    return buildEmailHtml('Você está no day use — JoggaHub', `
+    <h1 style="margin:0 0 12px; font-size:20px; font-weight:700; color:#111827;">Você está no day use!</h1>
+    <p style="margin:0 0 24px; font-size:15px; line-height:1.6; color:#4b5563;">Sua vaga em <b>${escapeHtml(d.title)}</b> está garantida. Bom jogo!</p>
+    <div style="background-color:#f9fafb; border-radius:12px; padding:16px 18px; margin:0 0 24px; font-size:14px;">
+      <p style="margin:0 0 4px; font-weight:600; color:#111827;">${escapeHtml(d.venueName)} · ${escapeHtml(d.courtName)}</p>
+      <p style="margin:0 0 4px; color:#4b5563;">${escapeHtml(d.sessions[0] ?? '')}</p>
+      <p style="margin:8px 0 0; font-weight:700; color:#0284c7; padding-top:8px; border-top:1px solid #e5e7eb;">Pago: R$ ${escapeHtml(d.total)}</p>
+    </div>
+    <p style="margin:0; font-size:13px; line-height:1.6; color:#6b7280;">Desistência com reembolso total até 24h antes do início, pelo app.</p>
+  `);
+  }
   return buildEmailHtml('Inscrição confirmada — JoggaHub', `
     <h1 style="margin:0 0 12px; font-size:20px; font-weight:700; color:#111827;">Inscrição confirmada!</h1>
     <p style="margin:0 0 24px; font-size:15px; line-height:1.6; color:#4b5563;">Sua vaga está garantida em todas as aulas do curso <b>${escapeHtml(d.title)}</b>, com Prof. ${escapeHtml(d.coach)}.</p>

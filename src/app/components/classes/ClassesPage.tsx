@@ -43,6 +43,7 @@ export default function ClassesPage() {
         supabase.from('classes')
           .select('id, title, coach_name, level, sport_type, capacity, enrolled_count, price, lesson_count, start_date, end_date, venues(name, city), courts(name)')
           .eq('status', 'active')
+          .eq('kind', 'course')
           .gte('end_date', todayStr())
           .order('start_date'),
         user

@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { getMinPlayersForSport, getMaxPlayersForSport } from '@/app/lib/gameConfig';
 import { CLASSES_ENABLED } from '@/app/lib/features';
 import CourtClassesTab from './classes/CourtClassesTab';
+import { CourtDayUses } from './dayuse/dayUse';
 
 type TabType = 'home' | 'book' | 'open-games' | 'classes';
 
@@ -860,6 +861,9 @@ const CourtDetails: React.FC = () => {
                 })}
               </div>
             </div>
+
+            {/* Partida aberta · Day use do clube neste dia */}
+            {CLASSES_ENABLED && <CourtDayUses courtIds={venueCourts.map(c => c.id)} date={selectedDate} />}
 
             {/* Slot grid per court */}
             {loadingSlots ? (

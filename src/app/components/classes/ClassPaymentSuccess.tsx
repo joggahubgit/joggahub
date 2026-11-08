@@ -16,13 +16,15 @@ async function sendClassEmail(classId: string, sessionId: string) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user?.email) return;
     const [{ data: c }, { data: s }, { data: e }] = await Promise.all([
-      supabase.from('classes').select('title, coach_name, venues(name), courts(name)').eq('id', classId).maybeSingle(),
+      supabase.from('classes').select('kind, title, coach_name, venues(name), courts(name)').eq('id', classId).maybeSingle(),
       supabase.from('class_sessions').select('starts_at, ends_at').eq('class_id', classId).order('starts_at'),
       supabase.from('class_enrollments').select('amount_paid, service_fee').eq('stripe_session_id', sessionId).maybeSingle(),
     ]);
     if (!c) return;
     const cls = c as any;
-    await sendEmail(user.email, 'Inscrição confirmada no JoggaHub 🎓', classEnrolledEmail({
+    const isDayUse = cls.kind === 'day_use';
+    await sendEmail(user.email, isDayUse ? 'Você está no day use! 🏐' : 'Inscrição confirmada no JoggaHub 🎓', classEnrolledEmail({
+      dayUse: isDayUse,
       title: cls.title,
       coach: cls.coach_name,
       venueName: cls.venues?.name ?? '',
@@ -36,7 +38,7 @@ async function sendClassEmail(classId: string, sessionId: string) {
   }
 }
 
-type State = { kind: 'waiting' } | { kind: 'done'; classId: string } | { kind: 'failed'; error: string };
+type State = { kind: 'waiting' } | { kind: 'done'; classId: string; dayUse: boolean } | { kind: 'failed'; error: string };
 
 export default function ClassPaymentSuccess() {
   const [params] = useSearchParams();
@@ -54,7 +56,8 @@ export default function ClassPaymentSuccess() {
       const { data } = await supabase.functions.invoke('finalize-checkout', { body: { sessionId } });
       if (stop) return;
       if (data?.status === 'done' && data.classId) {
-        setState({ kind: 'done', classId: data.classId });
+        const { data: k } = await supabase.from('classes').select('kind').eq('id', data.classId).maybeSingle();
+        setState({ kind: 'done', classId: data.classId, dayUse: k?.kind === 'day_use' });
         // Sempre na primeira confirmação nesta tela (o webhook pode ter criado a inscrição antes)
         sendClassEmail(data.classId, sessionId!);
         return;
@@ -84,9 +87,9 @@ export default function ClassPaymentSuccess() {
           <>
             <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4"><CheckCircle className="w-9 h-9 text-green-600" /></div>
             <p className="font-bold text-gray-900 text-xl">Inscrição confirmada!</p>
-            <p className="text-sm text-gray-500 mt-1">Sua vaga está garantida em todas as aulas.</p>
-            <button onClick={() => navigate(`/aulas/${state.classId}`, { replace: true })}
-              className="mt-6 w-full bg-violet-600 text-white py-3 rounded-xl font-bold">Ver o curso</button>
+            <p className="text-sm text-gray-500 mt-1">{state.dayUse ? 'Você está dentro do day use. Bom jogo!' : 'Sua vaga está garantida em todas as aulas.'}</p>
+            <button onClick={() => navigate(state.dayUse ? `/day-use/${state.classId}` : `/aulas/${state.classId}`, { replace: true })}
+              className="mt-6 w-full bg-violet-600 text-white py-3 rounded-xl font-bold">{state.dayUse ? 'Ver o day use' : 'Ver o curso'}</button>
           </>
         )}
         {state.kind === 'failed' && (
