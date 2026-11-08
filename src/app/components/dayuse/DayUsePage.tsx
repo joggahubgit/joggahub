@@ -2,7 +2,7 @@
 // entrar pagando no app e sair com reembolso até 24h antes.
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Sun, MapPin, Clock, Users, CheckCircle, AlertTriangle, Info } from 'lucide-react';
+import { ArrowLeft, Sun, MapPin, Clock, Users, CheckCircle, AlertTriangle, Info, Share2, Copy } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import BottomNav from '../BottomNav';
@@ -43,6 +43,8 @@ export default function DayUsePage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [showShare, setShowShare] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -94,6 +96,40 @@ export default function DayUsePage() {
     load();
   }
 
+  function buildShareMessage() {
+    if (!du || !session) return '';
+    const remaining = du.capacity - du.enrolled_count;
+    const playerLines = players.map(p => `✅ ${p.name ?? 'Jogador'}`).join('\n');
+    return [
+      `☀️ Partida aberta · Day use no JoggaHub!`,
+      ``,
+      `🏟️ ${SPORT_LABELS[du.sport_type] ?? du.title}`,
+      `📅 ${formatSessionDate(session.starts_at.substring(0, 10))}`,
+      `🕐 ${session.starts_at.substring(11, 16)} – ${session.ends_at.substring(11, 16)}`,
+      `📍 ${du.courts?.name ?? ''} · ${du.venues?.name ?? ''}`,
+      `💰 ${formatBRL(Number(du.price))}/pessoa`,
+      ``,
+      `👥 Jogadores (${du.enrolled_count}/${du.capacity}):`,
+      ...(playerLines ? [playerLines] : []),
+      ``,
+      remaining > 0
+        ? `Ainda há ${remaining} ${remaining === 1 ? 'vaga' : 'vagas'}! Entre pelo JoggaHub para participar:`
+        : `Day use completo! Acompanhe pelo link:`,
+      `${window.location.origin}/day-use/${du.id}`,
+    ].join('\n');
+  }
+
+  function handleWhatsApp() {
+    window.open(`https://wa.me/?text=${encodeURIComponent(buildShareMessage())}`, '_blank');
+    setShowShare(false);
+  }
+
+  function handleCopy() {
+    navigator.clipboard.writeText(buildShareMessage());
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
   if (loading) return <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-400">Carregando...</div>;
   if (!du || du.kind !== 'day_use' || !session) {
     return (
@@ -119,7 +155,10 @@ export default function DayUsePage() {
   return (
     <div className={`min-h-screen bg-gray-50 ${showBar ? 'pb-56' : 'pb-24'}`}>
       <div className="bg-sky-600 text-white px-6 pt-6 pb-8 rounded-b-3xl">
-        <button onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/home'))} aria-label="Voltar" className="mb-4"><ArrowLeft className="w-6 h-6" /></button>
+        <div className="flex items-center justify-between mb-4">
+          <button onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/home'))} aria-label="Voltar"><ArrowLeft className="w-6 h-6" /></button>
+          <button onClick={() => setShowShare(true)} aria-label="Compartilhar" className="p-2 -m-2 rounded-full hover:bg-white/10"><Share2 className="w-6 h-6" /></button>
+        </div>
         <p className="text-xs font-semibold uppercase tracking-wide text-sky-100 flex items-center gap-1"><Sun className="w-3.5 h-3.5" />Partida aberta · Day use</p>
         <h1 className="text-2xl font-bold mt-1">{du.title}</h1>
         <p className="text-sky-100 mt-1">{SPORT_LABELS[du.sport_type] ?? ''}{SPORT_LABELS[du.sport_type] ? ' · ' : ''}organizado pelo clube</p>
@@ -181,6 +220,17 @@ export default function DayUsePage() {
           </div>
         </div>
 
+        {joined && !cancelled && left > 0 && (
+          <div className="bg-gradient-to-r from-sky-500 to-sky-600 rounded-2xl p-5">
+            <p className="font-bold text-white text-base mb-1">Divulgue o day use!</p>
+            <p className="text-sm text-sky-100 mb-4">Faltam {left} {left === 1 ? 'jogador' : 'jogadores'} para completar</p>
+            <button onClick={() => setShowShare(true)}
+              className="w-full bg-white text-sky-700 py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 hover:bg-sky-50 transition-colors">
+              <Share2 className="w-4 h-4" />Compartilhar day use
+            </button>
+          </div>
+        )}
+
         <div className="bg-white rounded-2xl border border-gray-200 p-5 text-sm space-y-2">
           <p className="flex items-center gap-2 font-semibold text-gray-900"><Info className="w-4 h-4 text-sky-600" />Como funciona</p>
           <p className="text-gray-600">Jogo livre organizado pelo clube. Cada jogador paga {formatBRL(Number(du.price))} + taxa, na hora, pelo app.</p>
@@ -225,6 +275,32 @@ export default function DayUsePage() {
               </button>
             </>
           )}
+        </div>
+      )}
+      {showShare && (
+        <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-50" onClick={() => setShowShare(false)}>
+          <div className="bg-white rounded-t-3xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-5" />
+            <h3 className="font-bold text-gray-900 text-lg mb-5">Compartilhar day use</h3>
+            <div className="bg-gray-50 rounded-xl p-4 mb-4 border border-gray-100 max-h-64 overflow-y-auto">
+              <p className="text-xs text-gray-400 mb-2 font-semibold uppercase tracking-wide">Mensagem gerada</p>
+              <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans leading-relaxed">{buildShareMessage()}</pre>
+            </div>
+            <div className="space-y-3">
+              <button onClick={handleWhatsApp}
+                className="w-full bg-green-500 text-white rounded-2xl py-4 font-semibold flex items-center justify-center gap-3 hover:bg-green-600 transition-colors">
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.121-.011-.241-.017-.361-.017-.407 0-.823.063-1.22.192l-.016.005a9.87 9.87 0 00-4.599 3.317 9.87 9.87 0 00-1.96 5.985c0 2.64 1.03 5.122 2.898 6.988a9.825 9.825 0 006.994 2.893c5.45-.003 9.884-4.437 9.884-9.885a9.86 9.86 0 00-2.893-6.994z"/>
+                </svg>
+                Compartilhar via WhatsApp
+              </button>
+              <button onClick={handleCopy}
+                className="w-full bg-gray-100 text-gray-800 rounded-2xl py-4 font-semibold flex items-center justify-center gap-3 hover:bg-gray-200 transition-colors">
+                {copied ? <><CheckCircle className="w-5 h-5 text-green-600" /> Copiado!</> : <><Copy className="w-5 h-5" /> Copiar mensagem</>}
+              </button>
+            </div>
+            <button onClick={() => setShowShare(false)} className="w-full mt-3 py-3 text-sm text-gray-500 font-semibold">Fechar</button>
+          </div>
         </div>
       )}
       <BottomNav />

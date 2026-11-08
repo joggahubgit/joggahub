@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { GraduationCap, Plus, Users, CalendarDays, MapPin, X, AlertTriangle, CheckCircle } from 'lucide-react';
+import { GraduationCap, Plus, Users, CalendarDays, MapPin, X, AlertTriangle, CheckCircle, Share2, Copy } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
 import { classLevelLabel, formatBRL, formatSessionDate } from '@/app/lib/classSchedule';
 import { CreateClassModal } from './CreateClassModal';
@@ -163,6 +163,8 @@ export function ClassDetailModal({ classId, onClose, onCancelled }: { classId: s
   const [sessions, setSessions] = useState<Session[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [confirming, setConfirming] = useState(false);
+  const [showShare, setShowShare] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState('');
 
@@ -170,7 +172,7 @@ export function ClassDetailModal({ classId, onClose, onCancelled }: { classId: s
     (async () => {
       const [{ data: c }, { data: s }, { data: e }] = await Promise.all([
         supabase.from('classes')
-          .select('id, kind, title, coach_name, description, level, court_id, capacity, enrolled_count, price, lesson_count, start_date, end_date, status, courts(name)')
+          .select('id, kind, title, coach_name, description, level, court_id, capacity, enrolled_count, price, lesson_count, start_date, end_date, status, sport_type, courts(name), venues(name)')
           .eq('id', classId).maybeSingle(),
         supabase.from('class_sessions').select('id, starts_at, ends_at').eq('class_id', classId).order('starts_at'),
         supabase.from('class_enrollments').select('id, player_id, amount_paid, status, refunded, created_at').eq('class_id', classId).order('created_at'),
@@ -210,6 +212,54 @@ export function ClassDetailModal({ classId, onClose, onCancelled }: { classId: s
   const active = enrollments.filter(e => e.status === 'active');
   const revenue = active.reduce((s, e) => s + Number(e.amount_paid), 0);
 
+  // Mesma mensagem que o jogador compartilha; o link abre a página do site do jogador.
+  function buildShareMessage() {
+    if (!cls) return '';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const c = cls as any;
+    const dayUse = cls.kind === 'day_use';
+    const remaining = cls.capacity - cls.enrolled_count;
+    const place = `📍 ${cls.courts?.name ?? ''}${c.venues?.name ? ` · ${c.venues.name}` : ''}`;
+    const link = `${window.location.origin}/${dayUse ? 'day-use' : 'aulas'}/${cls.id}`;
+    const first = sessions[0];
+    const lines = dayUse
+      ? [
+          `☀️ Partida aberta · Day use no JoggaHub!`, ``,
+          `🏟️ ${SPORT_NAMES[c.sport_type] ?? cls.title}`,
+          ...(first ? [`📅 ${formatSessionDate(first.starts_at.substring(0, 10))}`, `🕐 ${first.starts_at.substring(11, 16)} – ${first.ends_at.substring(11, 16)}`] : []),
+          place,
+          `💰 ${formatBRL(Number(cls.price))}/pessoa`, ``,
+          `👥 Jogadores (${cls.enrolled_count}/${cls.capacity}):`,
+          ...active.map(e => `✅ ${e.name ?? 'Jogador'}`),
+        ]
+      : [
+          `🎓 Curso no JoggaHub: ${cls.title}`, ``,
+          `👨‍🏫 Prof. ${cls.coach_name} · ${classLevelLabel(cls.level)}`,
+          `📅 ${cls.lesson_count} aulas: ${sessions.map(x => formatSessionDate(x.starts_at.substring(0, 10))).join(', ')}`,
+          ...(first ? [`🕐 ${first.starts_at.substring(11, 16)} – ${first.ends_at.substring(11, 16)}`] : []),
+          place,
+          `💰 ${formatBRL(Number(cls.price))} o curso todo`,
+        ];
+    return [
+      ...lines, ``,
+      remaining > 0
+        ? `Ainda há ${remaining} ${remaining === 1 ? 'vaga' : 'vagas'}! ${dayUse ? 'Entre' : 'Inscreva-se'} pelo JoggaHub:`
+        : `${dayUse ? 'Day use' : 'Curso'} completo! Acompanhe pelo link:`,
+      link,
+    ].join('\n');
+  }
+
+  function handleWhatsApp() {
+    window.open(`https://wa.me/?text=${encodeURIComponent(buildShareMessage())}`, '_blank');
+    setShowShare(false);
+  }
+
+  function handleCopy() {
+    navigator.clipboard.writeText(buildShareMessage());
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl w-full max-w-lg max-h-[92vh] flex flex-col shadow-2xl">
@@ -224,7 +274,7 @@ export function ClassDetailModal({ classId, onClose, onCancelled }: { classId: s
         {!cls ? <p className="text-gray-400 text-sm text-center py-10">Carregando...</p> : (
           <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
             {cls.status === 'cancelled' && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-3 py-2">Este curso foi cancelado.</div>
+              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-3 py-2">{cls.kind === 'day_use' ? 'Este day use foi cancelado.' : 'Este curso foi cancelado.'}</div>
             )}
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="bg-gray-50 rounded-xl py-3"><p className="text-lg font-bold text-gray-900">{cls.enrolled_count}/{cls.capacity}</p><p className="text-[11px] text-gray-500">{cls.kind === 'day_use' ? 'jogadores' : 'alunos'}</p></div>
@@ -267,7 +317,13 @@ export function ClassDetailModal({ classId, onClose, onCancelled }: { classId: s
         )}
 
         {cls?.status === 'active' && (
-          <div className="px-6 py-4 border-t border-gray-100">
+          <div className="px-6 py-4 border-t border-gray-100 space-y-2">
+            {!confirming && (
+              <button onClick={() => setShowShare(true)}
+                className="w-full py-3 rounded-xl bg-green-500 text-white font-semibold text-sm hover:bg-green-600 flex items-center justify-center gap-2">
+                <Share2 className="w-4 h-4" />{cls.kind === 'day_use' ? 'Compartilhar day use' : 'Compartilhar curso'}
+              </button>
+            )}
             {!confirming ? (
               <button onClick={() => setConfirming(true)} className="w-full py-3 rounded-xl border border-red-200 text-red-600 font-semibold text-sm hover:bg-red-50">
                 {cls.kind === 'day_use' ? 'Cancelar day use' : 'Cancelar curso'}
@@ -289,6 +345,31 @@ export function ClassDetailModal({ classId, onClose, onCancelled }: { classId: s
           </div>
         )}
       </div>
+
+      {showShare && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" onClick={() => setShowShare(false)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <h3 className="font-bold text-gray-900 text-lg mb-4">{cls?.kind === 'day_use' ? 'Compartilhar day use' : 'Compartilhar curso'}</h3>
+            <div className="bg-gray-50 rounded-xl p-4 mb-4 border border-gray-100 max-h-64 overflow-y-auto">
+              <p className="text-xs text-gray-400 mb-2 font-semibold uppercase tracking-wide">Mensagem gerada</p>
+              <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans leading-relaxed">{buildShareMessage()}</pre>
+            </div>
+            <div className="space-y-3">
+              <button onClick={handleWhatsApp}
+                className="w-full bg-green-500 text-white rounded-xl py-3.5 font-semibold flex items-center justify-center gap-3 hover:bg-green-600">
+                <Share2 className="w-5 h-5" />Compartilhar via WhatsApp
+              </button>
+              <button onClick={handleCopy}
+                className="w-full bg-gray-100 text-gray-800 rounded-xl py-3.5 font-semibold flex items-center justify-center gap-3 hover:bg-gray-200">
+                {copied ? <><CheckCircle className="w-5 h-5 text-green-600" /> Copiado!</> : <><Copy className="w-5 h-5" /> Copiar mensagem</>}
+              </button>
+            </div>
+            <button onClick={() => setShowShare(false)} className="w-full mt-3 py-2 text-sm text-gray-500 font-semibold">Fechar</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+const SPORT_NAMES: Record<string, string> = { football: 'Society', society: 'Society', futsal: 'Futsal', futevolei: 'Futevôlei' };
