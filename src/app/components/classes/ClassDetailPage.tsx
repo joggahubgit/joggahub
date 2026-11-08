@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, GraduationCap, MapPin, CalendarDays, Users, CheckCircle, AlertTriangle, Info } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import BottomNav from '../BottomNav';
 import { CLASS_ENROLL_CUTOFF_HOURS, classLevelLabel, classServiceFee, formatBRL, formatSessionDate } from '../../lib/classSchedule';
 
 interface ClassFull {
@@ -115,7 +116,7 @@ export default function ClassDetailPage() {
   const cancelled = cls.status !== 'active';
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-36">
+    <div className={`min-h-screen bg-gray-50 ${!enrolled && !cancelled ? 'pb-56' : 'pb-24'}`}>
       <div className="bg-violet-600 text-white px-6 pt-6 pb-8 rounded-b-3xl">
         <button onClick={() => navigate('/aulas')} aria-label="Voltar" className="mb-4"><ArrowLeft className="w-6 h-6" /></button>
         <p className="text-xs font-semibold uppercase tracking-wide text-violet-200">{classLevelLabel(cls.level)}</p>
@@ -193,7 +194,8 @@ export default function ClassDetailPage() {
       </div>
 
       {!enrolled && !cancelled && (
-        <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto z-40 bg-white border-t border-gray-200 px-6 py-4">
+        // Fica logo acima do menu de baixo (Início / Comunidade / Perfil)
+        <div className="fixed bottom-[69px] left-0 right-0 max-w-md mx-auto z-40 bg-white border-t border-gray-200 px-6 py-4 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
           <div>
             {left <= 0 ? (
               <p className="text-center text-sm font-semibold text-gray-500 py-2">Curso lotado</p>
@@ -214,6 +216,7 @@ export default function ClassDetailPage() {
           </div>
         </div>
       )}
+      <BottomNav />
     </div>
   );
 }

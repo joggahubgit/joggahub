@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle, Loader2, XCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import BottomNav from '../BottomNav';
 import { classEnrolledEmail, sendEmail } from '../../lib/emailTemplates';
 import { formatSessionDate } from '../../lib/classSchedule';
 
@@ -98,6 +99,7 @@ export default function ClassPaymentSuccess() {
           </>
         )}
       </div>
+      <BottomNav />
     </div>
   );
 }
