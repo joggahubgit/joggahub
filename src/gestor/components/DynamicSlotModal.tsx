@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   X, ChevronLeft, CalendarCheck, Ban, Search, Loader2,
-  CheckCircle,
+  CheckCircle, Users,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
 
@@ -19,6 +19,8 @@ interface Props {
   maxMinutes?: number;      // free time from `hour` until the next booking/block or closing
   onClose: () => void;
   onRefresh: () => void;
+  /** Abre o formulário de day use (partida aberta do clube) para este horário. */
+  onDayUse?: () => void;
 }
 
 type View = 'choose' | 'reserve' | 'block' | 'success';
@@ -50,7 +52,7 @@ function buildISO(date: Date, time: string): string {
   return `${isoDate(date)}T${time}:00`;
 }
 
-export function DynamicSlotModal({ courtId, courtName, date, hour, pricePerHour, slotTotalPrice, existingSlotId, existingEndHour, maxMinutes = 360, onClose, onRefresh }: Props) {
+export function DynamicSlotModal({ courtId, courtName, date, hour, pricePerHour, slotTotalPrice, existingSlotId, existingEndHour, maxMinutes = 360, onClose, onRefresh, onDayUse }: Props) {
   const [view, setView] = useState<View>('choose');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -193,6 +195,21 @@ export function DynamicSlotModal({ courtId, courtName, date, hour, pricePerHour,
                   <p className="text-sm opacity-80">Para um jogador cadastrado</p>
                 </div>
               </button>
+
+              {onDayUse && (
+                <button
+                  onClick={onDayUse}
+                  className="w-full flex items-center gap-4 p-4 rounded-2xl bg-sky-600 text-white hover:bg-sky-700 transition-colors text-left"
+                >
+                  <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <Users className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="font-bold">Partida aberta · Day use</p>
+                    <p className="text-sm opacity-80">Jogo livre, até 12 jogadores, preço por pessoa</p>
+                  </div>
+                </button>
+              )}
 
               <button
                 onClick={() => { setView('block'); setError(''); }}

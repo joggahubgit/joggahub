@@ -7,6 +7,7 @@ import { localDateStr } from './ScheduleGrid';
 
 interface ClassRow {
   id: string;
+  kind?: 'course' | 'day_use';
   title: string;
   coach_name: string;
   description: string | null;
@@ -47,6 +48,7 @@ export function ClassesPanel({ venueId, openClassId, onOpenedClass }: Props) {
       .from('classes')
       .select('id, title, coach_name, description, level, court_id, capacity, enrolled_count, price, lesson_count, start_date, end_date, status, courts(name)')
       .eq('venue_id', venueId)
+      .eq('kind', 'course') // day use fica na Agenda (partida aberta do clube)
       .order('start_date', { ascending: true });
     if (error) console.error('[Classes] load', error);
     setClasses((data as unknown as ClassRow[]) ?? []);
@@ -156,7 +158,7 @@ export function ClassesPanel({ venueId, openClassId, onOpenedClass }: Props) {
 interface Session { id: string; starts_at: string; ends_at: string }
 interface Enrollment { id: string; player_id: string; amount_paid: number; status: string; refunded: boolean; created_at: string; name?: string }
 
-function ClassDetailModal({ classId, onClose, onCancelled }: { classId: string; onClose: () => void; onCancelled: (msg: string) => void }) {
+export function ClassDetailModal({ classId, onClose, onCancelled }: { classId: string; onClose: () => void; onCancelled: (msg: string) => void }) {
   const [cls, setCls] = useState<ClassRow | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
@@ -168,7 +170,7 @@ function ClassDetailModal({ classId, onClose, onCancelled }: { classId: string; 
     (async () => {
       const [{ data: c }, { data: s }, { data: e }] = await Promise.all([
         supabase.from('classes')
-          .select('id, title, coach_name, description, level, court_id, capacity, enrolled_count, price, lesson_count, start_date, end_date, status, courts(name)')
+          .select('id, kind, title, coach_name, description, level, court_id, capacity, enrolled_count, price, lesson_count, start_date, end_date, status, courts(name)')
           .eq('id', classId).maybeSingle(),
         supabase.from('class_sessions').select('id, starts_at, ends_at').eq('class_id', classId).order('starts_at'),
         supabase.from('class_enrollments').select('id, player_id, amount_paid, status, refunded, created_at').eq('class_id', classId).order('created_at'),
@@ -200,8 +202,8 @@ function ClassDetailModal({ classId, onClose, onCancelled }: { classId: string; 
     const failed = (data as any)?.failed ?? 0;
     onCancelled(
       failed
-        ? `Curso cancelado. ${failed} reembolso(s) falharam. Entre em contato com o suporte.`
-        : `Curso cancelado e agenda liberada.${refunded ? ` ${refunded} aluno(s) reembolsado(s).` : ''}`,
+        ? `Cancelado. ${failed} reembolso(s) falharam. Entre em contato com o suporte.`
+        : `${cls?.kind === 'day_use' ? 'Day use' : 'Curso'} cancelado e agenda liberada.${refunded ? ` ${refunded} aluno(s) reembolsado(s).` : ''}`,
     );
   }
 
@@ -214,7 +216,7 @@ function ClassDetailModal({ classId, onClose, onCancelled }: { classId: string; 
         <div className="flex items-start justify-between px-6 py-4 border-b border-gray-100">
           <div className="min-w-0">
             <h2 className="text-xl font-bold text-gray-900 truncate">{cls?.title ?? 'Curso'}</h2>
-            {cls && <p className="text-xs text-gray-500 mt-0.5">{cls.coach_name} · {classLevelLabel(cls.level)} · {cls.courts?.name}</p>}
+            {cls && <p className="text-xs text-gray-500 mt-0.5">{cls.kind === 'day_use' ? `Partida aberta · Day use · ${cls.courts?.name}` : `${cls.coach_name} · ${classLevelLabel(cls.level)} · ${cls.courts?.name}`}</p>}
           </div>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5 text-gray-500" /></button>
         </div>
@@ -225,14 +227,14 @@ function ClassDetailModal({ classId, onClose, onCancelled }: { classId: string; 
               <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-3 py-2">Este curso foi cancelado.</div>
             )}
             <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="bg-gray-50 rounded-xl py-3"><p className="text-lg font-bold text-gray-900">{cls.enrolled_count}/{cls.capacity}</p><p className="text-[11px] text-gray-500">alunos</p></div>
-              <div className="bg-gray-50 rounded-xl py-3"><p className="text-lg font-bold text-gray-900">{cls.lesson_count}</p><p className="text-[11px] text-gray-500">aulas</p></div>
+              <div className="bg-gray-50 rounded-xl py-3"><p className="text-lg font-bold text-gray-900">{cls.enrolled_count}/{cls.capacity}</p><p className="text-[11px] text-gray-500">{cls.kind === 'day_use' ? 'jogadores' : 'alunos'}</p></div>
+              <div className="bg-gray-50 rounded-xl py-3"><p className="text-lg font-bold text-gray-900">{cls.kind === 'day_use' ? formatBRL(Number(cls.price)) : cls.lesson_count}</p><p className="text-[11px] text-gray-500">{cls.kind === 'day_use' ? 'por pessoa' : 'aulas'}</p></div>
               <div className="bg-gray-50 rounded-xl py-3"><p className="text-lg font-bold text-gray-900">{formatBRL(revenue)}</p><p className="text-[11px] text-gray-500">recebido</p></div>
             </div>
             {cls.description && <p className="text-sm text-gray-600 whitespace-pre-line">{cls.description}</p>}
 
             <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Aulas</p>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{cls.kind === 'day_use' ? 'Horário' : 'Aulas'}</p>
               <div className="flex flex-wrap gap-1.5">
                 {sessions.map(s => (
                   <span key={s.id} className="text-xs bg-white border border-gray-200 rounded-lg px-2 py-1 text-gray-700 tabular-nums">
@@ -243,7 +245,7 @@ function ClassDetailModal({ classId, onClose, onCancelled }: { classId: string; 
             </div>
 
             <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Alunos inscritos</p>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{cls.kind === 'day_use' ? 'Jogadores' : 'Alunos inscritos'}</p>
               {enrollments.length === 0 ? (
                 <p className="text-sm text-gray-400">Ninguém inscrito ainda.</p>
               ) : (
@@ -268,7 +270,7 @@ function ClassDetailModal({ classId, onClose, onCancelled }: { classId: string; 
           <div className="px-6 py-4 border-t border-gray-100">
             {!confirming ? (
               <button onClick={() => setConfirming(true)} className="w-full py-3 rounded-xl border border-red-200 text-red-600 font-semibold text-sm hover:bg-red-50">
-                Cancelar curso
+                {cls.kind === 'day_use' ? 'Cancelar day use' : 'Cancelar curso'}
               </button>
             ) : (
               <div className="space-y-3">

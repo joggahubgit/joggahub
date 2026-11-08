@@ -34,7 +34,7 @@ serve(async (req) => {
 
     const db = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
 
-    const { data: cls } = await db.from('classes').select('id, title, status, venue_id').eq('id', classId).maybeSingle();
+    const { data: cls } = await db.from('classes').select('id, kind, title, status, venue_id').eq('id', classId).maybeSingle();
     if (!cls) return json({ error: 'Curso não encontrado' }, 404);
     const { data: venue } = await db.from('venues').select('admin_id, name').eq('id', cls.venue_id).maybeSingle();
     if (venue?.admin_id !== user.id) return json({ error: 'Forbidden' }, 403);
@@ -71,8 +71,8 @@ serve(async (req) => {
       await db.from('notifications').insert({
         user_id: row.player_id,
         type: 'class_cancelled',
-        title: 'Curso cancelado',
-        message: `O curso "${cls.title}" foi cancelado pelo clube ${venue?.name ?? ''}. ${ok ? 'O valor total foi reembolsado no seu cartão.' : 'O clube vai providenciar o seu reembolso.'}`.trim(),
+        title: cls.kind === 'day_use' ? 'Day use cancelado' : 'Curso cancelado',
+        message: `${cls.kind === 'day_use' ? 'O day use' : 'O curso'} "${cls.title}" foi cancelado pelo clube ${venue?.name ?? ''}. ${ok ? 'O valor total foi reembolsado no seu cartão.' : 'O clube vai providenciar o seu reembolso.'}`.trim(),
       });
     }
 

@@ -48,7 +48,7 @@ serve(async (req) => {
       user_id: user.id,
       type: 'class_left',
       title: 'Inscrição cancelada',
-      message: `Você saiu do curso "${row?.class_title ?? ''}". ${refunded ? 'O valor total foi reembolsado no seu cartão.' : 'O reembolso será feito pelo suporte.'}`,
+      message: `Você saiu de "${row?.class_title ?? ''}". ${refunded ? 'O valor total foi reembolsado no seu cartão.' : 'O reembolso será feito pelo suporte.'}`,
     });
 
     return json({ ok: true, refunded });

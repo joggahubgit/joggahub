@@ -10,6 +10,8 @@ import { GestorBookingDetail } from './GestorBookingDetail';
 import { ArenaDayView, AgendaLegend } from './ArenaDayView';
 import { ScheduleGrid, freeMinutesFrom, type GridColumn } from './ScheduleGrid';
 import { CLASSES_ENABLED } from '@/app/lib/features';
+import { CreateDayUseModal } from './CreateDayUseModal';
+import { ClassDetailModal } from './ClassesPanel';
 
 interface Props {
   venueId: string;
@@ -42,7 +44,7 @@ interface Slot {
     max_players: number;
     scheduled_end_at?: string | null;
   } | null;
-  classInfo?: { classId: string; title: string; coach: string; start: string; end: string } | null;
+  classInfo?: { classId: string; title: string; coach: string; start: string; end: string; kind?: string } | null;
 }
 
 function addDays(date: Date, days: number) {
@@ -111,6 +113,8 @@ export function SmartBookingCalendar({ venueId, onNavigate, onOpenClass }: Props
     maxMinutes?: number;
   } | null>(null);
   const [collapsedCourts, setCollapsedCourts] = useState<Set<string>>(new Set());
+  const [dayUseDraft, setDayUseDraft] = useState<{ courtId: string; date: string; start: string } | null>(null);
+  const [dayUseOpen, setDayUseOpen] = useState<string | null>(null);
 
   function toggleCourt(courtId: string) {
     setCollapsedCourts(prev => {
@@ -226,7 +230,7 @@ export function SmartBookingCalendar({ venueId, onNavigate, onOpenClass }: Props
         // pelos slot ids da semana deixaria a URL longa demais.
         const { data: sessions } = await supabase
           .from('class_sessions')
-          .select('id, class_id, starts_at, ends_at, classes!inner(title, coach_name, status, venue_id)')
+          .select('id, class_id, starts_at, ends_at, classes!inner(title, coach_name, status, venue_id, kind)')
           .eq('classes.venue_id', venueId)
           .eq('classes.status', 'active')
           .gte('starts_at', `${fromDate}T00:00:00`)
@@ -239,7 +243,7 @@ export function SmartBookingCalendar({ venueId, onNavigate, onOpenClass }: Props
             .in('session_id', [...sessionById.keys()]);
           (links ?? []).forEach((l: any) => {
             const cs: any = sessionById.get(l.session_id);
-            if (cs) classBySlot[l.slot_id] = { classId: cs.class_id, title: cs.classes.title, coach: cs.classes.coach_name, start: cs.starts_at, end: cs.ends_at };
+            if (cs) classBySlot[l.slot_id] = { classId: cs.class_id, title: cs.classes.title, coach: cs.classes.coach_name, start: cs.starts_at, end: cs.ends_at, kind: cs.classes.kind };
           });
         }
       }
@@ -377,7 +381,11 @@ export function SmartBookingCalendar({ venueId, onNavigate, onOpenClass }: Props
 
   /** Booked / open game / blocked slot clicked: open its detail modal. */
   function openSlot(slot: Slot) {
-    if (slot.classInfo && !slot.booking && !slot.game) { onOpenClass?.(slot.classInfo.classId); return; }
+    if (slot.classInfo && !slot.booking && !slot.game) {
+      if (slot.classInfo.kind === 'day_use') setDayUseOpen(slot.classInfo.classId);
+      else onOpenClass?.(slot.classInfo.classId);
+      return;
+    }
     if (slot.game) setSelectedGameSlot(slot);
     else if (slot.booking) setSelectedBookingId(slot.booking.id);
     else setSelectedSlot(slot);
@@ -682,6 +690,30 @@ export function SmartBookingCalendar({ venueId, onNavigate, onOpenClass }: Props
           maxMinutes={selectedDynamic.maxMinutes}
           onClose={() => setSelectedDynamic(null)}
           onRefresh={() => { fetchAll(); setSelectedDynamic(null); }}
+          onDayUse={CLASSES_ENABLED ? () => {
+            const d = selectedDynamic;
+            setDayUseDraft({ courtId: d.courtId, date: isoDate(d.date), start: d.hour });
+            setSelectedDynamic(null);
+          } : undefined}
+        />
+      )}
+
+      {/* Partida aberta · Day use (criada pelo clube) */}
+      {dayUseDraft && (
+        <CreateDayUseModal
+          venueId={venueId}
+          initialCourtId={dayUseDraft.courtId}
+          initialDate={dayUseDraft.date}
+          initialStart={dayUseDraft.start}
+          onClose={() => setDayUseDraft(null)}
+          onCreated={id => { setDayUseDraft(null); fetchAll(); setDayUseOpen(id); }}
+        />
+      )}
+      {dayUseOpen && (
+        <ClassDetailModal
+          classId={dayUseOpen}
+          onClose={() => setDayUseOpen(null)}
+          onCancelled={() => { setDayUseOpen(null); fetchAll(); }}
         />
       )}
 

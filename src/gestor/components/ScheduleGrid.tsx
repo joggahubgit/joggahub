@@ -31,7 +31,7 @@ export interface GridSlot {
     scheduled_end_at?: string | null;
   } | null;
   /** Horário bloqueado por uma aula (curso). start/end = início e fim da aula. */
-  classInfo?: { classId: string; title: string; coach: string; start: string; end: string } | null;
+  classInfo?: { classId: string; title: string; coach: string; start: string; end: string; kind?: string } | null;
 }
 
 export interface GridSchedule { open_time: string; close_time: string }
@@ -348,6 +348,16 @@ export function ScheduleGrid({ columns, columnWidth, headerHeight, filter = 'all
 
                   if (b.kind === 'class') {
                     const ci = b.slot.classInfo!;
+                    if (ci.kind === 'day_use') {
+                      return (
+                        <button key={b.key} onClick={() => onSlotClick(b.slot)}
+                          className="absolute left-1.5 right-1.5 z-10 rounded-lg bg-sky-50 border-l-4 border-l-sky-500 text-left px-2.5 py-1.5 overflow-hidden shadow-sm hover:shadow-md hover:brightness-[0.98] transition-all"
+                          style={pos}>
+                          <span className="flex items-center gap-1 text-[11px] font-semibold text-sky-800 truncate"><Users className="w-3 h-3 flex-shrink-0" />Partida aberta · Day use</span>
+                          {!compact && <span className="block text-[10px] text-sky-700/80 truncate">{ci.title} · <span className="tabular-nums">{range}</span></span>}
+                        </button>
+                      );
+                    }
                     return (
                       <button key={b.key} onClick={() => onSlotClick(b.slot)}
                         className="absolute left-1.5 right-1.5 z-10 rounded-lg bg-amber-50 border-l-4 border-l-amber-500 text-left px-2.5 py-1.5 overflow-hidden shadow-sm hover:shadow-md hover:brightness-[0.98] transition-all"

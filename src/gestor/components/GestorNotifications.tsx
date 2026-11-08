@@ -50,7 +50,7 @@ async function loadClassItems(venueId: string, since: Date): Promise<NotifItem[]
   if (!CLASSES_ENABLED) return [];
   const { data } = await supabase
     .from('class_enrollments')
-    .select('id, class_id, player_id, status, created_at, cancelled_at, classes!inner(title, status, venue_id)')
+    .select('id, class_id, player_id, status, created_at, cancelled_at, classes!inner(title, status, venue_id, kind)')
     .eq('classes.venue_id', venueId)
     .gte('created_at', since.toISOString())
     .order('created_at', { ascending: false })
@@ -63,10 +63,11 @@ async function loadClassItems(venueId: string, since: Date): Promise<NotifItem[]
   const out: NotifItem[] = [];
   for (const r of rows) {
     const who = names[r.player_id] ?? 'Aluno';
-    out.push({ id: `class-in-${r.id}`, type: 'class_enrolled', title: 'Novo aluno no curso', message: `${who} · ${r.classes.title}`, timestamp: r.created_at, classId: r.class_id });
+    const du = r.classes.kind === 'day_use';
+    out.push({ id: `class-in-${r.id}`, type: 'class_enrolled', title: du ? 'Novo jogador no day use' : 'Novo aluno no curso', message: `${who} · ${r.classes.title}`, timestamp: r.created_at, classId: r.class_id });
     // Desistência do aluno (cancelamento do curso pelo clube não gera aviso aqui)
     if (r.status === 'cancelled' && r.cancelled_at && r.classes.status === 'active') {
-      out.push({ id: `class-out-${r.id}`, type: 'class_left', title: 'Aluno desistiu do curso', message: `${who} · ${r.classes.title}`, timestamp: r.cancelled_at, classId: r.class_id });
+      out.push({ id: `class-out-${r.id}`, type: 'class_left', title: du ? 'Jogador saiu do day use' : 'Aluno desistiu do curso', message: `${who} · ${r.classes.title}`, timestamp: r.cancelled_at, classId: r.class_id });
     }
   }
   return out;
