@@ -99,7 +99,7 @@ export function GestorBookingDetail({ bookingId, onClose, onChanged }: Props) {
 
     const { data: linkedGame } = await supabase
       .from('games')
-      .select('court_price')
+      .select('court_price, scheduled_end_at')
       .eq('booking_id', b.id)
       .maybeSingle();
     const court_price = linkedGame?.court_price ?? null;
@@ -113,7 +113,8 @@ export function GestorBookingDetail({ bookingId, onClose, onChanged }: Props) {
       status: b.status,
       created_at: b.created_at,
       start_time: slot?.start_time ?? '',
-      end_time: slot?.end_time ?? '',
+      // Fim real da partida (uma reserva de 1h30 ocupa vários blocos de 30 min)
+      end_time: linkedGame?.scheduled_end_at ?? slot?.end_time ?? '',
       court_name,
       venue_name,
       player_name,
@@ -155,6 +156,9 @@ export function GestorBookingDetail({ bookingId, onClose, onChanged }: Props) {
 
   const isCancelled = detail?.status === 'cancelled';
   const isPaid      = detail?.payment_status === 'paid';
+  // Partida já terminou? (horários gravados na hora local do clube — compara com Brasília)
+  const nowWall = new Date().toLocaleString('sv-SE', { timeZone: 'America/Sao_Paulo' }).replace(' ', 'T');
+  const isPast = !!detail?.end_time && detail.end_time.substring(0, 19) <= nowWall;
 
   const headerBg = isCancelled ? 'bg-gray-500' : isPaid ? 'bg-purple-600' : 'bg-orange-500';
 
@@ -271,7 +275,9 @@ export function GestorBookingDetail({ bookingId, onClose, onChanged }: Props) {
                     </button>
                   )}
 
-                  {!confirmingCancel ? (
+                  {isPast ? (
+                    <p className="text-center text-sm text-gray-400 py-2">Partida já realizada.</p>
+                  ) : !confirmingCancel ? (
                     <button
                       onClick={() => setConfirmingCancel(true)}
                       disabled={busy}
