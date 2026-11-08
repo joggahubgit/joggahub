@@ -72,7 +72,7 @@ export function PeriodPicker({ period, onChange }: { period: Period; onChange: (
 
 /** Cobranças do Stripe no período (função admin-transactions). */
 export function useTransactions(period: Period) {
-  const [data, setData] = useState<{ transactions: Tx[]; truncated: boolean } | null>(null);
+  const [data, setData] = useState<{ transactions: Tx[]; truncated: boolean; hidden?: number } | null>(null);
   const [error, setError] = useState('');
   useEffect(() => {
     let off = false;
@@ -86,7 +86,7 @@ export function useTransactions(period: Period) {
         setData({ transactions: [], truncated: false });
         return;
       }
-      setData(d as { transactions: Tx[]; truncated: boolean });
+      setData(d as { transactions: Tx[]; truncated: boolean; hidden?: number });
     });
     return () => { off = true; };
   }, [period.from, period.to]);

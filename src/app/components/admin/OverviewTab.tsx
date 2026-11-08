@@ -77,6 +77,7 @@ export default function OverviewTab() {
       ) : (
         <>
           {data.truncated && <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2">Período muito grande: mostrando as 1.000 cobranças mais recentes.</p>}
+          {!!data.hidden && <p className="text-[11px] text-gray-400">{data.hidden} cobrança(s) do Stripe sem registro no app (testes antigos ou feitas fora do app) não entram nestes números.</p>}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <Stat label="Volume cobrado (GMV)" value={k.gmv} hint="Tudo que foi cobrado no cartão (inclui o que depois foi reembolsado)" />
             <Stat label="Receita JoggaHub (taxas)" value={k.platformFee} tone="purple" hint="8% + R$ 2,50 por pagamento" />
