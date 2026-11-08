@@ -9,7 +9,8 @@
 --     aulas é dividido igualmente entre as aulas.
 --   * Partidas/reservas: valor do clube = games.court_price. Situação:
 --       recebido   → cobrança feita (games.stripe_split_captured)
---       garantido  → valor retido no cartão, cobrado 24h/2h antes
+--       reservado  → valor retido no cartão; o jogador ainda pode cancelar (falta > 24h)
+--       a_cobrar   → retido e o prazo de cancelamento (24h) já passou; será cobrado até 2h antes
 --       pendente   → reserva do gestor aguardando o jogador pagar
 --       aguardando → partida aberta que ainda não tem o mínimo de jogadores
 --   * Cursos e day use: cobrados na hora → recebido (amount_paid, sem a taxa).
@@ -67,7 +68,9 @@ language sql stable security definer set search_path = public as $$
       when g.is_open and g.status = 'scheduled' then 'aguardando'
       when g.status = 'completed' or g.status = 'pending_results' then
         case when g.b_pay = 'paid' or g.b_pay is null then 'recebido' else 'pendente' end
-      else 'garantido'
+      -- dinheiro retido no cartão: antes do prazo de cancelamento ainda pode voltar ao jogador
+      when g.scheduled_at - interval '24 hours' <= class_wall_now() then 'a_cobrar'
+      else 'reservado'
     end
   from g
   join courts_v c on c.id = g.court_id

@@ -4,14 +4,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   CheckCircle, ShieldCheck, Clock, TrendingUp, ChevronLeft, ChevronRight, Download, Banknote,
-  CalendarCheck, Users, Sun, GraduationCap,
+  CalendarCheck, Users, Sun, GraduationCap, Wallet,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
 
 interface SimpleRevenueProps { venueId: string | null }
 
 type Kind = 'reserva' | 'partida_aberta' | 'day_use' | 'aula';
-type Status = 'recebido' | 'garantido' | 'pendente' | 'aguardando' | 'cancelado';
+type Status = 'recebido' | 'a_cobrar' | 'reservado' | 'pendente' | 'aguardando' | 'cancelado';
 
 interface Entry {
   kind: Kind; ref_id: string; event_at: string; court_id: string; court_name: string;
@@ -38,7 +38,8 @@ const ENTRY_LABEL: Record<Kind, string> = { reserva: 'Reserva', partida_aberta: 
 
 const STATUS: Record<Status, { label: string; pill: string }> = {
   recebido:   { label: 'Recebido',              pill: 'bg-green-100 text-green-700' },
-  garantido:  { label: 'Garantido',             pill: 'bg-blue-100 text-blue-700' },
+  a_cobrar:   { label: 'A cobrar',              pill: 'bg-teal-100 text-teal-700' },
+  reservado:  { label: 'Reservado',             pill: 'bg-blue-100 text-blue-700' },
   pendente:   { label: 'Aguardando pagamento',  pill: 'bg-amber-100 text-amber-700' },
   aguardando: { label: 'Aguardando jogadores',  pill: 'bg-orange-100 text-orange-700' },
   cancelado:  { label: 'Cancelado',             pill: 'bg-gray-100 text-gray-500' },
@@ -90,7 +91,8 @@ export function SimpleRevenue({ venueId }: SimpleRevenueProps) {
   const sum = (st: Status[]) => entries.filter(e => st.includes(e.status)).reduce((s, e) => s + e.amount, 0);
   const count = (st: Status[]) => entries.filter(e => st.includes(e.status)).length;
   const received = sum(['recebido']);
-  const guaranteed = sum(['garantido']);
+  const toCharge = sum(['a_cobrar']);
+  const reserved = sum(['reservado']);
   const waiting = sum(['pendente', 'aguardando']);
   const potential = capacity.reduce((s, c) => s + Number(c.potential), 0);
   const balance = Math.max(0, Number(data?.received_to_date ?? 0) - Number(data?.paid_out ?? 0));
@@ -156,9 +158,10 @@ export function SimpleRevenue({ venueId }: SimpleRevenueProps) {
       ) : (
         <>
           {/* Indicadores do mês */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Kpi icon={CheckCircle} tone="green" label="Recebido" value={received} hint={`${count(['recebido'])} lançamentos já cobrados`} />
-            <Kpi icon={ShieldCheck} tone="blue" label="Garantido" value={guaranteed} hint="Retido no cartão, cobrado antes do jogo" />
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <Kpi icon={CheckCircle} tone="green" label="Recebido" value={received} hint={`Já cobrado no cartão · ${count(['recebido'])} lançamentos`} />
+            <Kpi icon={ShieldCheck} tone="teal" label="A cobrar" value={toCharge} hint="Prazo de cancelamento já passou; cobrado até 2h antes do jogo" />
+            <Kpi icon={Wallet} tone="blue" label="Reservado" value={reserved} hint="Retido no cartão; o jogador ainda pode cancelar até 24h antes" />
             <Kpi icon={Clock} tone="amber" label="Aguardando" value={waiting} hint="Pagamento do jogador ou mínimo de jogadores" />
             <Kpi icon={TrendingUp} tone="gray" label="Potencial" value={potential} hint="Horários livres que você criou, se forem vendidos" />
           </div>
@@ -294,9 +297,10 @@ export function SimpleRevenue({ venueId }: SimpleRevenueProps) {
   );
 }
 
-function Kpi({ icon: Icon, tone, label, value, hint }: { icon: typeof CheckCircle; tone: 'green' | 'blue' | 'amber' | 'gray'; label: string; value: number; hint: string }) {
+function Kpi({ icon: Icon, tone, label, value, hint }: { icon: typeof CheckCircle; tone: 'green' | 'teal' | 'blue' | 'amber' | 'gray'; label: string; value: number; hint: string }) {
   const t = {
     green: 'bg-green-100 text-green-600',
+    teal: 'bg-teal-100 text-teal-600',
     blue: 'bg-blue-100 text-blue-600',
     amber: 'bg-amber-100 text-amber-600',
     gray: 'bg-gray-100 text-gray-500',
