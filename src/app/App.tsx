@@ -82,6 +82,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AppRoutes() {
+  const location = useLocation();
+  // Administração: tela cheia, sessão própria, fora da moldura do app
+  if (location.pathname.startsWith('/admin')) return <AdminPage />;
   return (
     <div className="min-h-screen bg-gradient-to-br from-violet-700 via-violet-600 to-indigo-800">
       <div className="max-w-md mx-auto bg-white shadow-2xl min-h-screen">
@@ -126,7 +129,6 @@ function AppRoutes() {
         {CLASSES_ENABLED && <Route path="/aulas/pagamento" element={<ProtectedRoute><ClassPaymentSuccess /></ProtectedRoute>} />}
         {CLASSES_ENABLED && <Route path="/aulas/:id" element={<ProtectedRoute><ClassDetailPage /></ProtectedRoute>} />}
         {CLASSES_ENABLED && <Route path="/day-use/:id" element={<ProtectedRoute><DayUsePage /></ProtectedRoute>} />}
-        <Route path="/admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
         <Route path="/coach-details/:id" element={<ProtectedRoute><Coaching /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/profile/edit" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />

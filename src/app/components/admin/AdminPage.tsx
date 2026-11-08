@@ -1,9 +1,9 @@
 // Administração do JoggaHub: repasses aos clubes. A permissão é conferida no
 // servidor (is_platform_admin) em todas as chamadas; esta tela só mostra.
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Banknote, ChevronDown, ChevronUp, Loader2, ShieldAlert, CheckCircle } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { Banknote, ChevronDown, ChevronUp, Loader2, ShieldAlert, CheckCircle, LogOut, Lock } from 'lucide-react';
+import type { Session } from '@supabase/supabase-js';
+import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 
 interface Item { kind: string; ref_id: string; event_at: string; court_name: string; who: string; title: string; amount: number }
 interface Summary {
@@ -26,8 +26,73 @@ async function rpcError(e: { message: string }) {
   return e.message || 'Erro';
 }
 
+// ── Login da administração ───────────────────────────────────────────────────
+function AdminLogin() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    const { error: err } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    if (err) setError('Email ou senha incorretos.');
+    setBusy(false);
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+        <div className="bg-gray-900 text-white text-center px-8 pt-8 pb-6">
+          <img src="/logo.png" alt="JoggaHub" className="w-14 h-14 rounded-2xl object-contain mx-auto mb-3 brightness-0 invert" />
+          <p className="text-xs uppercase tracking-widest text-gray-400 font-semibold">Administração</p>
+          <h1 className="text-xl font-bold">JoggaHub</h1>
+        </div>
+        <form onSubmit={submit} className="p-8 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required autoComplete="username"
+              placeholder="admin@joggahub.com"
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Senha</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required autoComplete="current-password"
+              placeholder="••••••••"
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900" />
+          </div>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          <button type="submit" disabled={busy}
+            className="w-full py-3 rounded-xl bg-gray-900 text-white font-bold hover:bg-black disabled:opacity-60 flex items-center justify-center gap-2">
+            <Lock className="w-4 h-4" />{busy ? 'Entrando…' : 'Entrar'}
+          </button>
+          <p className="text-[11px] text-gray-400 text-center">Acesso exclusivo da equipe JoggaHub.</p>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Página: login → confere permissão → repasses ────────────────────────────
 export default function AdminPage() {
-  const navigate = useNavigate();
+  const [session, setSession] = useState<Session | null | undefined>(undefined);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (session === undefined) {
+    return <div className="min-h-screen bg-gray-950 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-gray-500" /></div>;
+  }
+  if (!session) return <AdminLogin />;
+  return <AdminPayouts email={session.user.email ?? ''} />;
+}
+
+function AdminPayouts({ email }: { email: string }) {
   const [rows, setRows] = useState<VenueRow[] | null>(null);
   const [denied, setDenied] = useState(false);
   const [error, setError] = useState('');
@@ -50,8 +115,9 @@ export default function AdminPage() {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center gap-3 p-6 text-center">
         <ShieldAlert className="w-12 h-12 text-gray-300" />
-        <p className="font-semibold text-gray-700">Acesso restrito à administração do JoggaHub.</p>
-        <button onClick={() => navigate('/home')} className="text-violet-600 font-semibold">Voltar</button>
+        <p className="font-semibold text-gray-700">Esta conta não tem acesso à administração.</p>
+        <p className="text-sm text-gray-400">{email}</p>
+        <button onClick={() => supabase.auth.signOut()} className="text-gray-900 font-semibold flex items-center gap-1.5"><LogOut className="w-4 h-4" />Sair e entrar com outra conta</button>
       </div>
     );
   }
@@ -62,11 +128,15 @@ export default function AdminPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="bg-gray-900 text-white px-6 py-5">
         <div className="max-w-4xl mx-auto flex items-center gap-4">
-          <button onClick={() => navigate('/home')} aria-label="Voltar"><ArrowLeft className="w-6 h-6" /></button>
-          <div>
+          <img src="/logo.png" alt="" className="w-9 h-9 rounded-xl object-contain brightness-0 invert" />
+          <div className="flex-1">
             <p className="text-xs uppercase tracking-wide text-gray-400 font-semibold">Administração JoggaHub</p>
             <h1 className="text-xl font-bold">Repasses aos clubes</h1>
           </div>
+          <span className="hidden sm:block text-xs text-gray-400">{email}</span>
+          <button onClick={() => supabase.auth.signOut()} className="flex items-center gap-1.5 text-sm text-gray-300 hover:text-white">
+            <LogOut className="w-4 h-4" />Sair
+          </button>
         </div>
       </div>
 
