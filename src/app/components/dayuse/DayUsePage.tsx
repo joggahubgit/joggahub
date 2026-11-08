@@ -159,12 +159,21 @@ export default function DayUsePage() {
           <div className="grid grid-cols-6 gap-3">
             {Array.from({ length: du.capacity }).map((_, i) => {
               const p = players[i];
+              // Vaga livre: "+" para entrar (igual à página de partida), quando dá para entrar
+              const canJoin = !p && showBar && open && left > 0 && !busy;
               return (
                 <div key={i} className="flex flex-col items-center gap-1 min-w-0">
-                  <div className={`w-11 h-11 rounded-full overflow-hidden flex items-center justify-center ${p ? 'bg-sky-100 border-2 border-sky-300' : 'border-2 border-dashed border-gray-200'}`}>
-                    {p?.avatar_url ? <img src={p.avatar_url} alt="" className="w-full h-full object-cover" />
-                      : p ? <span className="text-sky-700 font-bold">{(p.name ?? '?').charAt(0).toUpperCase()}</span> : null}
-                  </div>
+                  {canJoin ? (
+                    <button onClick={join} aria-label="Entrar no day use"
+                      className="w-11 h-11 rounded-full border-2 border-dashed border-sky-300 flex items-center justify-center transition-colors hover:border-sky-500 hover:bg-sky-50 active:bg-sky-100">
+                      <span className="text-xl font-light text-sky-500">+</span>
+                    </button>
+                  ) : (
+                    <div className={`w-11 h-11 rounded-full overflow-hidden flex items-center justify-center ${p ? 'bg-sky-100 border-2 border-sky-300' : 'border-2 border-dashed border-gray-200'}`}>
+                      {p?.avatar_url ? <img src={p.avatar_url} alt="" className="w-full h-full object-cover" />
+                        : p ? <span className="text-sky-700 font-bold">{(p.name ?? '?').charAt(0).toUpperCase()}</span> : null}
+                    </div>
+                  )}
                   <span className="text-[10px] text-gray-500 truncate w-full text-center">{p ? (p.name ?? 'Jogador').split(' ')[0] : ''}</span>
                 </div>
               );
