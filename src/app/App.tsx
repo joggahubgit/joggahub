@@ -21,6 +21,7 @@ import ClassesPage from './components/classes/ClassesPage';
 import ClassDetailPage from './components/classes/ClassDetailPage';
 import ClassPaymentSuccess from './components/classes/ClassPaymentSuccess';
 import DayUsePage from './components/dayuse/DayUsePage';
+import AdminPage from './components/admin/AdminPage';
 import { CLASSES_ENABLED } from './lib/features';
 import Profile from './components/Profile';
 import PublicProfile from './components/PublicProfile';
@@ -125,6 +126,7 @@ function AppRoutes() {
         {CLASSES_ENABLED && <Route path="/aulas/pagamento" element={<ProtectedRoute><ClassPaymentSuccess /></ProtectedRoute>} />}
         {CLASSES_ENABLED && <Route path="/aulas/:id" element={<ProtectedRoute><ClassDetailPage /></ProtectedRoute>} />}
         {CLASSES_ENABLED && <Route path="/day-use/:id" element={<ProtectedRoute><DayUsePage /></ProtectedRoute>} />}
+        <Route path="/admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
         <Route path="/coach-details/:id" element={<ProtectedRoute><Coaching /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/profile/edit" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />
