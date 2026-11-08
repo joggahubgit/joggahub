@@ -152,6 +152,10 @@ async function fulfillClassEnrollment(db: Db, session: Stripe.Checkout.Session, 
     if (error.hint === 'user') throw new UserError(error.message);
     throw new Error(`class_enroll: ${error.message}`);
   }
+  // Day use com valor retido (cobrado 2h antes pela capture-day-use)
+  if (pi.status === 'requires_capture') {
+    await db.from('class_enrollments').update({ payment_held: true }).eq('stripe_session_id', session.id);
+  }
   return { gameId: null, bookingId: null, slotId: null, classId: md.classId };
 }
 

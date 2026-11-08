@@ -93,7 +93,12 @@ language sql stable security definer set search_path = public as $$
   -- Day use: uma linha por jogador inscrito
   select 'day_use', e.id, cs.starts_at, cl.court_id, c.name, coalesce(p.name, 'Jogador'), cl.title,
     e.amount_paid,
-    case when e.status = 'active' then 'recebido' else 'cancelado' end
+    case
+      when e.status <> 'active' then 'cancelado'
+      when not e.payment_held then 'recebido'                                   -- já cobrado
+      when cs.starts_at - interval '24 hours' <= class_wall_now() then 'a_cobrar' -- retido, prazo de saída passou
+      else 'reservado'                                                          -- retido, ainda pode sair
+    end
   from class_enrollments e
   join classes cl on cl.id = e.class_id and cl.kind = 'day_use' and cl.venue_id = p_venue
   join class_sessions cs on cs.class_id = cl.id

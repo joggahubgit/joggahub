@@ -156,7 +156,7 @@ export function ClassesPanel({ venueId, openClassId, onOpenedClass }: Props) {
 // ── Detalhe do curso ─────────────────────────────────────────────────────────
 
 interface Session { id: string; starts_at: string; ends_at: string }
-interface Enrollment { id: string; player_id: string; amount_paid: number; status: string; refunded: boolean; created_at: string; name?: string }
+interface Enrollment { id: string; player_id: string; amount_paid: number; status: string; refunded: boolean; created_at: string; payment_held?: boolean; name?: string }
 
 export function ClassDetailModal({ classId, onClose, onCancelled }: { classId: string; onClose: () => void; onCancelled: (msg: string) => void }) {
   const [cls, setCls] = useState<ClassRow | null>(null);
@@ -175,7 +175,7 @@ export function ClassDetailModal({ classId, onClose, onCancelled }: { classId: s
           .select('id, kind, title, coach_name, description, level, court_id, capacity, enrolled_count, price, lesson_count, start_date, end_date, status, sport_type, courts(name), venues(name)')
           .eq('id', classId).maybeSingle(),
         supabase.from('class_sessions').select('id, starts_at, ends_at').eq('class_id', classId).order('starts_at'),
-        supabase.from('class_enrollments').select('id, player_id, amount_paid, status, refunded, created_at').eq('class_id', classId).order('created_at'),
+        supabase.from('class_enrollments').select('id, player_id, amount_paid, status, refunded, created_at, payment_held').eq('class_id', classId).order('created_at'),
       ]);
       setCls(c as unknown as ClassRow);
       setSessions(s ?? []);
@@ -210,7 +210,7 @@ export function ClassDetailModal({ classId, onClose, onCancelled }: { classId: s
   }
 
   const active = enrollments.filter(e => e.status === 'active');
-  const revenue = active.reduce((s, e) => s + Number(e.amount_paid), 0);
+  const revenue = active.filter(e => !e.payment_held).reduce((s, e) => s + Number(e.amount_paid), 0);
 
   // Mesma mensagem que o jogador compartilha; o link abre a página do site do jogador.
   function buildShareMessage() {
@@ -304,7 +304,7 @@ export function ClassDetailModal({ classId, onClose, onCancelled }: { classId: s
                     <div key={e.id} className="flex items-center justify-between px-3 py-2.5">
                       <span className="text-sm text-gray-900">{e.name}</span>
                       <span className={`text-xs font-semibold ${e.status === 'active' ? 'text-green-700' : 'text-gray-400'}`}>
-                        {e.status === 'active' ? `Pago · ${formatBRL(Number(e.amount_paid))}` : e.refunded ? 'Reembolsado' : 'Cancelado'}
+                        {e.status === 'active' ? `${e.payment_held ? 'Reservado' : 'Pago'} · ${formatBRL(Number(e.amount_paid))}` : e.refunded ? 'Reembolsado' : 'Cancelado'}
                       </span>
                     </div>
                   ))}

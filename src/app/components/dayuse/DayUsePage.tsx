@@ -20,7 +20,7 @@ interface DayUse {
   courts: { name: string } | null;
 }
 interface Player { player_id: string; name: string | null; avatar_url: string | null }
-interface Enrollment { id: string; status: string; amount_paid: number; service_fee: number }
+interface Enrollment { id: string; status: string; amount_paid: number; service_fee: number; payment_held: boolean }
 
 async function fnError(err: unknown, fallback: string) {
   try {
@@ -55,7 +55,7 @@ export default function DayUsePage() {
       supabase.from('class_sessions').select('starts_at, ends_at').eq('class_id', id).limit(1).maybeSingle(),
       supabase.rpc('day_use_players', { p_class_id: id }),
       user
-        ? supabase.from('class_enrollments').select('id, status, amount_paid, service_fee')
+        ? supabase.from('class_enrollments').select('id, status, amount_paid, service_fee, payment_held')
             .eq('class_id', id).eq('player_id', user.id).order('created_at', { ascending: false }).limit(1).maybeSingle()
         : Promise.resolve({ data: null }),
     ]);
@@ -92,7 +92,7 @@ export default function DayUsePage() {
     setBusy(false);
     setConfirmLeave(false);
     if (fnErr) { setError(await fnError(fnErr, 'Não foi possível sair.')); return; }
-    setNotice(data?.refunded ? 'Você saiu do day use. O valor total foi reembolsado no seu cartão.' : 'Você saiu do day use.');
+    setNotice(data?.refunded ? 'Você saiu do day use. O valor foi liberado/reembolsado no seu cartão.' : 'Você saiu do day use.');
     load();
   }
 
@@ -172,7 +172,11 @@ export default function DayUsePage() {
             <CheckCircle className="w-5 h-5 text-sky-600 flex-shrink-0" />
             <div>
               <p className="font-semibold text-sky-900">Você está dentro!</p>
-              <p className="text-sm text-sky-700">Pago {formatBRL(Number(enrollment!.amount_paid) + Number(enrollment!.service_fee))}. Bom jogo!</p>
+              <p className="text-sm text-sky-700">
+                {enrollment!.payment_held
+                  ? `${formatBRL(Number(enrollment!.amount_paid) + Number(enrollment!.service_fee))} reservado no seu cartão, cobrado 2h antes do início.`
+                  : `Pago ${formatBRL(Number(enrollment!.amount_paid) + Number(enrollment!.service_fee))}. Bom jogo!`}
+              </p>
             </div>
           </div>
         )}
@@ -233,8 +237,8 @@ export default function DayUsePage() {
 
         <div className="bg-white rounded-2xl border border-gray-200 p-5 text-sm space-y-2">
           <p className="flex items-center gap-2 font-semibold text-gray-900"><Info className="w-4 h-4 text-sky-600" />Como funciona</p>
-          <p className="text-gray-600">Jogo livre organizado pelo clube. Cada jogador paga {formatBRL(Number(du.price))} + taxa, na hora, pelo app.</p>
-          <p className="text-gray-600">Desistiu? Reembolso total até {DAY_USE_LEAVE_HOURS}h antes do início. Se o clube cancelar, você recebe tudo de volta.</p>
+          <p className="text-gray-600">Jogo livre organizado pelo clube. Cada jogador paga {formatBRL(Number(du.price))} + taxa pelo app, como nas partidas de futevôlei: o valor fica reservado no cartão e é cobrado 2h antes do início (se você entrar com mais de 6 dias de antecedência, é cobrado na hora).</p>
+          <p className="text-gray-600">Desistiu? Saindo até {DAY_USE_LEAVE_HOURS}h antes do início, o valor volta inteiro para você. Se o clube cancelar, você também recebe tudo de volta.</p>
           <p className="text-gray-600">As entradas fecham {CLASS_ENROLL_CUTOFF_HOURS}h antes do início. Não conta para o ranking.</p>
         </div>
 
@@ -245,7 +249,7 @@ export default function DayUsePage() {
             <button onClick={() => setConfirmLeave(true)} className="w-full py-3 text-sm font-semibold text-red-600">Sair do day use</button>
           ) : (
             <div className="bg-white border border-red-200 rounded-2xl p-4 space-y-3">
-              <p className="flex gap-2 text-sm text-gray-700"><AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />Você perde a vaga e recebe o valor total de volta no cartão.</p>
+              <p className="flex gap-2 text-sm text-gray-700"><AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />Você perde a vaga e o valor volta inteiro para o seu cartão.</p>
               <div className="flex gap-2">
                 <button onClick={() => setConfirmLeave(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700">Voltar</button>
                 <button onClick={leave} disabled={busy} className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-bold disabled:opacity-60">{busy ? 'Saindo…' : 'Confirmar'}</button>

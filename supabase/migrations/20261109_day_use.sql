@@ -141,3 +141,11 @@ $$;
 
 revoke all on function public.day_use_players(uuid) from public, anon;
 grant execute on function public.day_use_players(uuid) to authenticated;
+
+-- Day use segue o pagamento do futevôlei: valor RETIDO no cartão e cobrado 2h
+-- antes do início (função capture-day-use, a cada minuto). Com mais de 6 dias de
+-- antecedência o Stripe não segura a retenção, então cobra na hora.
+alter table public.class_enrollments add column if not exists payment_held boolean not null default false;
+alter table public.class_enrollments add column if not exists captured_at timestamptz;
+alter table public.class_enrollments add column if not exists capture_error text;
+create index if not exists class_enrollments_held_idx on public.class_enrollments (class_id) where payment_held and status = 'active';
