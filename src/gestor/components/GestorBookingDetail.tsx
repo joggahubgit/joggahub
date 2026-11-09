@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
 import { GESTOR_CAN_MARK_PAID } from '../features';
+import { AuthorizeLateCancel, inLateCancelWindow } from './AuthorizeLateCancel';
 
 interface Props {
   bookingId: string;
@@ -26,6 +27,7 @@ interface Detail {
   venue_name: string;
   player_name: string;
   player_phone: string;
+  game_id: string | null;
 }
 
 function fmt(iso: string, opts: Intl.DateTimeFormatOptions) {
@@ -43,6 +45,7 @@ export function GestorBookingDetail({ bookingId, onClose, onChanged }: Props) {
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [cancelDone, setCancelDone] = useState(false);
   const [stripeRefunded, setStripeRefunded] = useState(false);
+  const [lateMsg, setLateMsg] = useState('');
 
   useEffect(() => {
     load();
@@ -99,7 +102,7 @@ export function GestorBookingDetail({ bookingId, onClose, onChanged }: Props) {
 
     const { data: linkedGame } = await supabase
       .from('games')
-      .select('court_price, scheduled_end_at')
+      .select('id, court_price, scheduled_end_at')
       .eq('booking_id', b.id)
       .maybeSingle();
     const court_price = linkedGame?.court_price ?? null;
@@ -119,6 +122,7 @@ export function GestorBookingDetail({ bookingId, onClose, onChanged }: Props) {
       venue_name,
       player_name,
       player_phone,
+      game_id: linkedGame?.id ?? null,
     });
     setLoading(false);
   }
@@ -275,6 +279,12 @@ export function GestorBookingDetail({ bookingId, onClose, onChanged }: Props) {
                     </button>
                   )}
 
+                  {!isPast && detail.game_id && inLateCancelWindow(detail.start_time) && (
+                    <AuthorizeLateCancel who={detail.player_name} label="Autorizar cancelamento (a pedido do jogador)"
+                      body={{ gameId: detail.game_id, whole: true }}
+                      onDone={msg => { setLateMsg(msg); load(); onChanged(); }} />
+                  )}
+                  {lateMsg && <p className="text-sm text-green-800 bg-green-50 border border-green-200 rounded-xl px-4 py-3">{lateMsg}</p>}
                   {isPast ? (
                     <p className="text-center text-sm text-gray-400 py-2">Partida já realizada.</p>
                   ) : !confirmingCancel ? (

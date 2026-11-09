@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase-gestor';
 import { classLevelLabel, formatBRL, formatSessionDate } from '@/app/lib/classSchedule';
 import { CreateClassModal } from './CreateClassModal';
 import { localDateStr } from './ScheduleGrid';
+import { AuthorizeLateCancel, inLateCancelWindow } from './AuthorizeLateCancel';
 
 interface ClassRow {
   id: string;
@@ -167,6 +168,8 @@ export function ClassDetailModal({ classId, onClose, onCancelled }: { classId: s
   const [copied, setCopied] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -188,7 +191,7 @@ export function ClassDetailModal({ classId, onClose, onCancelled }: { classId: s
       }
       setEnrollments(rows);
     })();
-  }, [classId]);
+  }, [classId, reloadKey]);
 
   async function cancelClass() {
     setCancelling(true);
@@ -301,17 +304,24 @@ export function ClassDetailModal({ classId, onClose, onCancelled }: { classId: s
               ) : (
                 <div className="divide-y divide-gray-100 border border-gray-100 rounded-xl">
                   {enrollments.map(e => (
-                    <div key={e.id} className="flex items-center justify-between px-3 py-2.5">
-                      <span className="text-sm text-gray-900">{e.name}</span>
-                      <span className={`text-xs font-semibold ${e.status === 'active' ? 'text-green-700' : 'text-gray-400'}`}>
-                        {e.status === 'active' ? `${e.payment_held ? 'Reservado' : 'Pago'} · ${formatBRL(Number(e.amount_paid))}` : e.refunded ? 'Reembolsado' : 'Cancelado'}
-                      </span>
+                    <div key={e.id} className="px-3 py-2.5 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm text-gray-900">{e.name}</span>
+                        <span className={`text-xs font-semibold ${e.status === 'active' ? 'text-green-700' : 'text-gray-400'}`}>
+                          {e.status === 'active' ? `${e.payment_held ? 'Reservado' : 'Pago'} · ${formatBRL(Number(e.amount_paid))}` : e.refunded ? 'Reembolsado' : 'Cancelado'}
+                        </span>
+                      </div>
+                      {e.status === 'active' && cls.status === 'active' && inLateCancelWindow(sessions[0]?.starts_at) && (
+                        <AuthorizeLateCancel compact who={e.name ?? 'o jogador'} body={{ enrollmentId: e.id }}
+                          onDone={msg => { setNotice(msg); setReloadKey(k => k + 1); }} />
+                      )}
                     </div>
                   ))}
                 </div>
               )}
             </div>
 
+            {notice && <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-sm text-green-800">{notice}</div>}
             {error && <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700">{error}</div>}
           </div>
         )}

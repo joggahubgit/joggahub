@@ -198,7 +198,12 @@ export async function cancelTarget(stripe: Stripe, db: Db, sp: ScheduledPayment)
     const { data: players } = await db.from('game_players').select('player_id, stripe_payment_intent_id').eq('game_id', g.id);
     for (const p of players ?? []) {
       if (p.stripe_payment_intent_id) {
-        try { await stripe.paymentIntents.cancel(p.stripe_payment_intent_id); } catch (e) {
+        // Os outros jogadores não pediram para sair: recebem tudo de volta
+        try {
+          const pi = await stripe.paymentIntents.retrieve(p.stripe_payment_intent_id);
+          if (pi.status === 'requires_capture') await stripe.paymentIntents.cancel(pi.id);
+          else if (pi.status === 'succeeded') await stripe.refunds.create({ payment_intent: pi.id });
+        } catch (e) {
           console.error('[scheduled] RELEASE FAILED — liberar manualmente', p.stripe_payment_intent_id, e);
         }
       }

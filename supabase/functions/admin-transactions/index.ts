@@ -125,14 +125,20 @@ serve(async (req) => {
       const bt = (charge?.balance_transaction && typeof charge.balance_transaction === 'object' ? charge.balance_transaction : null) as Stripe.BalanceTransaction | null;
       const charged = brl(pi.amount_received);
       const held = pi.status === 'requires_capture' ? brl(pi.amount_capturable) : 0;
-      const refunded = brl(charge?.amount_refunded);
+      // Captura parcial: o Stripe conta a parte não capturada (liberada no cartão)
+      // como "amount_refunded". Isso não é reembolso: desconta.
+      const released = pi.status === 'succeeded' ? brl(pi.amount - pi.amount_received) : 0;
+      const refunded = Math.max(0, Math.round((brl(charge?.amount_refunded) - released) * 100) / 100);
       const effective = Math.max(0, (charged || held) - refunded);
-      const club = clubFromGross(effective);
+      // Saída autorizada pelo clube fora do prazo: só a taxa JoggaHub fica (clube não recebe)
+      const lateCancel = pi.metadata?.saida_autorizada === '1';
+      const club = lateCancel ? 0 : clubFromGross(effective);
       const platformFee = effective > 0 ? Math.round((effective - club) * 100) / 100 : 0;
       const stripeFee = bt ? brl(bt.fee) : 0;
 
       let status: string;
-      if (refunded > 0 && refunded >= (charged || brl(pi.amount))) status = 'reembolsado';
+      if (lateCancel) status = 'saida_autorizada';
+      else if (refunded > 0 && refunded >= (charged || brl(pi.amount))) status = 'reembolsado';
       else if (refunded > 0) status = 'reembolsado_parcial';
       else if (pi.status === 'succeeded') status = 'pago';
       else if (pi.status === 'requires_capture') status = 'retido';

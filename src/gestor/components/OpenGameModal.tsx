@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Users, MapPin, Clock, DollarSign, CheckCircle, AlertCircle, Loader2, ChevronLeft, Trophy, XCircle, ShieldCheck, Hourglass, Star } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
 import { getMinPlayersForSport } from '@/app/lib/gameConfig';
+import { AuthorizeLateCancel, inLateCancelWindow } from './AuthorizeLateCancel';
 
 interface Props {
   gameId: string;
@@ -66,6 +67,7 @@ export function OpenGameModal({ gameId, slotId, courtName, onClose, onRefresh }:
   const [cancelConfirmed, setCancelConfirmed] = useState(false);
   const [refundResults, setRefundResults] = useState<{ name: string; status: string }[]>([]);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
   useEffect(() => {
     load();
@@ -283,7 +285,10 @@ export function OpenGameModal({ gameId, slotId, courtName, onClose, onRefresh }:
                           </p>
                           {p.profile?.phone && <p className="text-xs text-gray-500">{p.profile.phone}</p>}
                         </div>
-                        <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                        {game.is_open && inLateCancelWindow(game.scheduled_at)
+                          ? <AuthorizeLateCancel compact who={p.player_name} body={{ gameId, playerId: p.player_id }}
+                              onDone={msg => { setNotice(msg); load(); onRefresh(); }} />
+                          : <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />}
                       </div>
                     ))}
                   </div>
@@ -316,6 +321,13 @@ export function OpenGameModal({ gameId, slotId, courtName, onClose, onRefresh }:
 
               {players.length === 0 && (
                 <p className="text-sm text-gray-400 text-center py-4">Nenhum jogador registrado ainda.</p>
+              )}
+
+              {notice && <div className="p-3 bg-green-50 border border-green-200 rounded-xl text-sm text-green-800">{notice}</div>}
+              {!game.is_open && inLateCancelWindow(game.scheduled_at) && (resolvedStatus === 'scheduled' || resolvedStatus === 'confirmed_booking') && (
+                <AuthorizeLateCancel who={paidPlayers.find(p => p.is_organizer)?.player_name ?? 'o organizador'}
+                  label="Autorizar cancelamento (a pedido do jogador)" body={{ gameId, whole: true }}
+                  onDone={msg => { setNotice(msg); load(); onRefresh(); }} />
               )}
 
               {/* Summary */}

@@ -21,6 +21,7 @@ export const TX_STATUS: Record<string, { label: string; color: string; stripe: s
   retido:              { label: 'Retido',               color: 'bg-blue-100 text-blue-700',   stripe: 'Não capturado' },
   reembolsado:         { label: 'Reembolsado',          color: 'bg-gray-100 text-gray-600',   stripe: 'Reembolsado' },
   reembolsado_parcial: { label: 'Reembolso parcial',    color: 'bg-gray-100 text-gray-600',   stripe: 'Reembolsado parcialmente' },
+  saida_autorizada:    { label: 'Saída autorizada · só taxa', color: 'bg-amber-100 text-amber-700', stripe: 'Capturado parcialmente / reembolsado parcialmente' },
   liberado:            { label: 'Liberado (cancelado)', color: 'bg-gray-100 text-gray-500',   stripe: 'Cancelado' },
   incompleto:          { label: 'Incompleto',           color: 'bg-amber-100 text-amber-700', stripe: 'Incompleto' },
 };
