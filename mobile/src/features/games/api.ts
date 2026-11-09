@@ -5,7 +5,7 @@
  * the backend (cron / edge functions).
  */
 import { supabase } from '@/lib/supabase';
-import { CAPTURE_CUTOFF_HOURS, getMinPlayersForSport, PLAYER_CANCEL_CUTOFF_HOURS, wallMs, wallNowMs } from '@/lib/shared';
+import { CAPTURE_CUTOFF_HOURS, getMinPlayersForSport, PLAYER_CANCEL_CUTOFF_HOURS, wallMs, wallNowMs, wallNowIso } from '@/lib/shared';
 
 const ACTIVE = ['scheduled', 'confirmed_booking'];
 
@@ -49,7 +49,7 @@ export interface UpcomingGame {
 
 /** Games the user organizes or plays in, starting from now (mirrors Home.fetchUpcomingGames). */
 export async function fetchUpcomingGames(userId: string): Promise<UpcomingGame[]> {
-  const now = new Date().toISOString();
+  const now = wallNowIso();
   const cols = 'id, court_id, scheduled_at, scheduled_end_at, current_players, max_players, organizer_id, is_open, booking_id, status';
 
   const [org, mine] = await Promise.all([
@@ -137,7 +137,7 @@ export async function fetchOpenGames(limit?: number): Promise<OpenGame[]> {
     .select('id, court_id, scheduled_at, current_players, max_players, price_per_player, skill_level')
     .eq('is_open', true)
     .in('status', ACTIVE)
-    .gte('scheduled_at', new Date().toISOString())
+    .gte('scheduled_at', wallNowIso())
     .order('scheduled_at', { ascending: true });
   // Fetch extra: full games are filtered client-side (PostgREST can't compare two columns).
   if (limit) q = q.limit(limit * 3);

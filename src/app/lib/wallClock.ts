@@ -21,6 +21,9 @@ export function realToWallMs(ms: number) {
   return Date.parse(`${s}Z`);
 }
 
+/** "Agora" de Brasília no formato dos horários gravados, para filtros .gte('scheduled_at', …). */
+export const wallNowIso = () => new Date(wallNowMs()).toISOString();
+
 /** Horário gravado (wall clock) em ms, sem conversão de fuso. */
 export const wallMs = (iso: string) => Date.parse(`${iso.substring(0, 19)}Z`);
 

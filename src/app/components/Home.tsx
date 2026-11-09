@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { CLASSES_ENABLED } from '../lib/features';
 import { UpcomingClassCard, useUpcomingClasses } from './classes/UpcomingClassCards';
 import { DayUseListCard, useOpenDayUses } from './dayuse/dayUse';
-import { wallDate, wallTime } from '@/app/lib/wallClock';
+import { wallDate, wallTime, wallNowIso } from '@/app/lib/wallClock';
 import { PendingResultBanner } from './PendingResultBanner';
 
 interface VenueCard {
@@ -102,7 +102,7 @@ export default function Home() {
 
       // Upcoming games — extracted so it can be re-run on realtime changes
       async function fetchUpcomingGames() {
-        const now = new Date().toISOString();
+        const now = wallNowIso();
 
         const activeStatuses = ['scheduled', 'confirmed_booking'];
         const [{ data: asOrganizer }, { data: asPlayer }] = await Promise.all([
@@ -213,7 +213,7 @@ export default function Home() {
 
       // Upcoming slot bookings — extracted for realtime re-fetch
       async function fetchUpcomingBookings() {
-        const now = new Date().toISOString();
+        const now = wallNowIso();
         const { data: rawBookingRows } = await supabase
           .from('bookings')
           .select('id, slot_id, total_price, payment_status')
@@ -302,7 +302,7 @@ export default function Home() {
         .subscribe();
 
     // Games — flat query only (exclude full and already-started games)
-    const nowIso = new Date().toISOString();
+    const nowIso = wallNowIso();
     supabase
       .from('games')
       .select('id, court_id, price_per_player, max_players, current_players, skill_level, is_open, scheduled_at, status')

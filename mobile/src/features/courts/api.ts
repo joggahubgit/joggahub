@@ -1,6 +1,7 @@
 /** Read-only court/venue queries, ported from FindCourts, Home and CourtDetails (web). */
 import { supabase } from '@/lib/supabase';
 import { buildSlotGrid, type RawSlot, type SlotItem } from './schedule';
+import { wallNowIso, wallNowMs } from '@/lib/shared';
 
 export interface CourtListItem {
   id: string;
@@ -33,8 +34,8 @@ export async function fetchCourts(): Promise<CourtListItem[]> {
   if (vErr) throw vErr;
   const venueById = Object.fromEntries((venues ?? []).map(v => [v.id, v]));
 
-  const today = new Date().toISOString().substring(0, 10);
-  const until = new Date(Date.now() + 14 * 86_400_000).toISOString().substring(0, 10);
+  const today = wallNowIso().substring(0, 10);
+  const until = new Date(wallNowMs() + 14 * 86_400_000).toISOString().substring(0, 10);
   const { data: slots } = await supabase
     .from('slots')
     .select('court_id, price_override')

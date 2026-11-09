@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, MapPin, Users, Clock, Search, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { DayUseListCard, useOpenDayUses } from './dayuse/dayUse';
+import { wallNowIso } from '@/app/lib/wallClock';
 
 interface GameCard {
   id: string;
@@ -37,7 +38,7 @@ export default function FindGames() {
         .select('id, court_id, scheduled_at, current_players, max_players, price_per_player, status')
         .eq('is_open', true)
         .in('status', ['scheduled', 'confirmed_booking'])
-        .gte('scheduled_at', new Date().toISOString())
+        .gte('scheduled_at', wallNowIso())
         .order('scheduled_at', { ascending: true });
 
       // Filter out full games client-side (PostgREST can't compare two columns)

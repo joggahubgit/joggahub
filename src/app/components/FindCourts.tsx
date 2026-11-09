@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, MapPin, Star, SlidersHorizontal, Search, Loader2, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { wallNowIso, wallNowMs } from '@/app/lib/wallClock';
 
 interface CourtRow {
   id: string;
@@ -75,8 +76,8 @@ export default function FindCourts() {
         setAllCourts(courts);
 
         // Fetch upcoming slots (next 14 days) to compute real min price per court
-        const today = new Date().toISOString().substring(0, 10);
-        const future = new Date(Date.now() + 14 * 86400000).toISOString().substring(0, 10);
+        const today = wallNowIso().substring(0, 10);
+        const future = new Date(wallNowMs() + 14 * 86400000).toISOString().substring(0, 10);
         const courtIds = courts.map(c => c.id);
         const { data: slotRows } = await supabase
           .from('slots')

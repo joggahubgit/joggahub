@@ -1,5 +1,6 @@
 /** Home-screen queries not covered by games/api.ts, ported from Home.tsx (web). */
 import { supabase } from '@/lib/supabase';
+import { wallNowIso } from '@/lib/shared';
 
 export interface UpcomingBooking {
   id: string;
@@ -13,7 +14,7 @@ export interface UpcomingBooking {
 
 /** Plain slot bookings (no private game attached), mirrors Home.fetchUpcomingBookings. */
 export async function fetchUpcomingBookings(userId: string): Promise<UpcomingBooking[]> {
-  const now = new Date().toISOString();
+  const now = wallNowIso();
   const { data: rows, error } = await supabase
     .from('bookings')
     .select('id, slot_id, total_price, payment_status')
