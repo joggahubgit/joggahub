@@ -105,7 +105,7 @@ export default function PrivacyPage() {
 
         <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
           <h3 className="font-semibold text-purple-900 mb-2">Encarregado de Dados (DPO)</h3>
-          <div className="space-y-1 text-sm text-purple-800"><p><strong>E-mail:</strong> privacidade@joggahub.com</p><p><strong>Telefone:</strong> (11) 4002-8922</p></div>
+          <div className="space-y-1 text-sm text-purple-800"><p><strong>E-mail:</strong> privacidade@joggahub.com</p><p><strong>Telefone:</strong> +353 83 085 9505</p></div>
         </div>
 
         <div className="space-y-3">

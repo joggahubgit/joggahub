@@ -138,7 +138,7 @@ export default function Privacy() {
             <Text className="text-sm font-bold text-purple-800">E-mail:</Text> privacidade@joggahub.com
           </Text>
           <Text className="text-sm text-purple-800">
-            <Text className="text-sm font-bold text-purple-800">Telefone:</Text> (11) 4002-8922
+            <Text className="text-sm font-bold text-purple-800">Telefone:</Text> +353 83 085 9505
           </Text>
         </View>
 
