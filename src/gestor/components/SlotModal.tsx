@@ -7,6 +7,7 @@ import {
 import { supabase } from '@/lib/supabase-gestor';
 import { GESTOR_CAN_MARK_PAID } from '../features';
 import { getMaxPlayersForSport } from '@/app/lib/gameConfig';
+import { formatBRL } from '@/app/lib/classSchedule';
 
 interface Booking {
   id: string;
@@ -429,12 +430,12 @@ export function SlotModal({ slot, courtName, onClose, onRefresh }: Props) {
                           <div className="flex justify-between text-xs text-gray-500">
                             <span>Receita confirmada</span>
                             <span className="font-bold text-gray-800">
-                              R$ {(gamePlayers.filter(p => p.paid).length * linkedGame.price_per_player).toFixed(2)}
+                              {formatBRL((gamePlayers.filter(p => p.paid).length * linkedGame.price_per_player))}
                             </span>
                           </div>
                           <div className="flex justify-between text-xs text-gray-400">
                             <span>Receita potencial</span>
-                            <span>R$ {(linkedGame.max_players * linkedGame.price_per_player).toFixed(2)}</span>
+                            <span>{formatBRL((linkedGame.max_players * linkedGame.price_per_player))}</span>
                           </div>
                         </div>
                       )}

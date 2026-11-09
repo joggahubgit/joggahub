@@ -4,6 +4,7 @@ import { X, Clock, Users, MapPin, ShieldCheck, ChevronDown, ChevronUp, Loader2, 
 import { redirectToCheckout, calcFees } from '@/app/lib/checkout';
 import ScheduledHoldNotice from './payments/ScheduledHoldNotice';
 import { supabase } from '@/lib/supabase';
+import { formatBRL } from '@/app/lib/classSchedule';
 
 interface JoinState {
   gameId: string;
@@ -191,11 +192,11 @@ export default function JoinGameReview() {
             <div className="space-y-2 mb-3">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Valor da vaga</span>
-                <span className="font-semibold text-gray-900">R$ {state.pricePerPlayer.toFixed(2)}</span>
+                <span className="font-semibold text-gray-900">{formatBRL(state.pricePerPlayer)}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Taxa de serviço (8% + R$ 2,50)</span>
-                <span className="font-semibold text-gray-900">R$ {fee.toFixed(2)}</span>
+                <span className="font-semibold text-gray-900">{formatBRL(fee)}</span>
               </div>
             </div>
           )}
@@ -208,7 +209,7 @@ export default function JoinGameReview() {
             </div>
             {isFree
               ? <p className="text-2xl font-bold text-green-600">Grátis</p>
-              : <p className="text-2xl font-bold text-violet-600">R$ {priceTotal.toFixed(2)}</p>
+              : <p className="text-2xl font-bold text-violet-600">{formatBRL(priceTotal)}</p>
             }
           </div>
         </div>
@@ -255,8 +256,8 @@ export default function JoinGameReview() {
             : isFree
               ? <><CheckCircle className="w-5 h-5" /> Confirmar entrada · Grátis</>
               : isSelf
-                ? <><CheckCircle className="w-5 h-5" /> Pagar minha parte · R$ {priceTotal.toFixed(2)}</>
-                : <><CheckCircle className="w-5 h-5" /> Pagar vaga de {state.playerName.split(' ')[0]} · R$ {priceTotal.toFixed(2)}</>}
+                ? <><CheckCircle className="w-5 h-5" /> Pagar minha parte · {formatBRL(priceTotal)}</>
+                : <><CheckCircle className="w-5 h-5" /> Pagar vaga de {state.playerName.split(' ')[0]} · {formatBRL(priceTotal)}</>}
         </button>
       </div>
     </div>

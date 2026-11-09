@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { formatBRL } from '@/app/lib/classSchedule';
 
 const SERVICE_FEE_PERCENT = 0.15;
 
@@ -143,15 +144,15 @@ export default function BookCourt() {
             <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">Resumo de valores</p>
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Valor da quadra</span>
-              <span className="font-semibold text-gray-900">R$ {base.toFixed(2)}</span>
+              <span className="font-semibold text-gray-900">{formatBRL(base)}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Taxa de serviço (15%)</span>
-              <span className="font-semibold text-gray-900">R$ {fee.toFixed(2)}</span>
+              <span className="font-semibold text-gray-900">{formatBRL(fee)}</span>
             </div>
             <div className="flex justify-between pt-3 mt-1 border-t border-gray-100">
               <span className="font-bold text-gray-900">Total</span>
-              <span className="text-xl font-black text-violet-600">R$ {total.toFixed(2)}</span>
+              <span className="text-xl font-black text-violet-600">{formatBRL(total)}</span>
             </div>
           </div>
         </div>
@@ -172,7 +173,7 @@ export default function BookCourt() {
         {/* Stripe badge */}
         <div className="flex items-center justify-center gap-2 text-gray-400">
           <CreditCard className="w-4 h-4" />
-          <span className="text-xs font-medium">Cartão de crédito · Débito · Pix</span>
+          <span className="text-xs font-medium">Cartão de crédito ou débito</span>
         </div>
 
         {error && (
@@ -189,7 +190,7 @@ export default function BookCourt() {
         >
           {loading
             ? <><Loader2 className="w-5 h-5 animate-spin" /> Aguarde...</>
-            : <><CreditCard className="w-5 h-5" /> Pagar R$ {total.toFixed(2)} <ChevronRight className="w-5 h-5" /></>}
+            : <><CreditCard className="w-5 h-5" /> Pagar {formatBRL(total)} <ChevronRight className="w-5 h-5" /></>}
         </button>
 
         <p className="text-center text-xs text-gray-400">

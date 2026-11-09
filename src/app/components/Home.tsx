@@ -9,6 +9,7 @@ import { UpcomingClassCard, useUpcomingClasses } from './classes/UpcomingClassCa
 import { DayUseListCard, useOpenDayUses } from './dayuse/dayUse';
 import { wallDate, wallTime, wallNowIso } from '@/app/lib/wallClock';
 import { PendingResultBanner } from './PendingResultBanner';
+import { formatBRL } from '@/app/lib/classSchedule';
 
 interface VenueCard {
   id: string;
@@ -470,7 +471,7 @@ export default function Home() {
                         <Calendar className="w-4 h-4 text-violet-500" />
                         <span className="text-xs text-gray-500">Reserva de quadra</span>
                       </div>
-                      <span className="text-sm font-bold text-violet-600">R$ {booking.totalPrice.toFixed(2)}</span>
+                      <span className="text-sm font-bold text-violet-600">{formatBRL(booking.totalPrice)}</span>
                     </div>
                   </div>
                 </div>
@@ -614,7 +615,7 @@ export default function Home() {
                     )}
                   </div>
                   <div className="text-right">
-                    <div className="font-semibold text-violet-600">R$ {Number(game.price_per_player).toFixed(2)}</div>
+                    <div className="font-semibold text-violet-600">{formatBRL(Number(game.price_per_player))}</div>
                     <div className="text-xs text-gray-500">por pessoa</div>
                   </div>
                 </div>

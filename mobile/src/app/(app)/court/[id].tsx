@@ -13,7 +13,7 @@ import { Text } from '@/components/ui/Text';
 import { fetchCourtPage, fetchOpenGamesBySlot, fetchSlotGrid, type VenueCourt } from '@/features/courts/api';
 import { nextDays, type Duration, type SlotItem } from '@/features/courts/schedule';
 import { getEnv } from '@/lib/env';
-import { getMaxPlayersForSport, getMinPlayersForSport } from '@/lib/shared';
+import { formatBRL, getMaxPlayersForSport, getMinPlayersForSport } from '@/lib/shared';
 import { useRealtimeRefetch } from '@/lib/useRealtimeRefetch';
 import { CLASSES_ENABLED } from '@/lib/features';
 import { CourtClassesTab } from '@/features/classes/CourtClassesTab';
@@ -455,7 +455,7 @@ export default function CourtDetails() {
                       <Text className="text-sm text-gray-500">{selectedSlot.courtName}</Text>
                     </View>
                     <View className="items-end">
-                      <Text className="text-2xl font-bold text-gray-900">R$ {selectedSlot.price.toFixed(0)}</Text>
+                      <Text className="text-2xl font-bold text-gray-900">{formatBRL(selectedSlot.price)}</Text>
                       <Text className="text-xs text-gray-400">quadra · {duration === 90 ? '1h30' : '2h'}</Text>
                     </View>
                   </View>
@@ -479,10 +479,10 @@ export default function CourtDetails() {
                               <Text className="text-xs text-gray-500">{mode === 'full' ? 'Você cobre o valor completo da quadra' : 'Cada jogador paga sua parte'}</Text>
                             </View>
                             {mode === 'full' ? (
-                              <Text className="text-sm font-bold text-gray-900">R$ {selectedSlot.price.toFixed(0)}</Text>
+                              <Text className="text-sm font-bold text-gray-900">{formatBRL(selectedSlot.price)}</Text>
                             ) : (
                               <Text className="text-sm font-bold text-gray-900">
-                                R$ {(selectedSlot.price / privateMin).toFixed(2)}
+                                {formatBRL((selectedSlot.price / privateMin))}
                                 <Text className="text-xs text-gray-500">/pessoa</Text>
                               </Text>
                             )}
@@ -494,7 +494,7 @@ export default function CourtDetails() {
                           <Text className="text-sm text-blue-900 leading-relaxed">
                             {privateMin === privateMax ? 'A quadra fecha com ' : 'A quadra abre para até '}
                             <Text className="text-sm font-bold text-blue-900">{privateMax} jogadores</Text>. Cada um autoriza{' '}
-                            <Text className="text-sm font-bold text-blue-900">R$ {((selectedSlot.price / privateMin) * 1.08 + 2.5).toFixed(2)}</Text> no cartão — quanto mais jogadores entrarem, menos cada um paga.
+                            <Text className="text-sm font-bold text-blue-900">{formatBRL(((selectedSlot.price / privateMin) * 1.08 + 2.5))}</Text> no cartão — quanto mais jogadores entrarem, menos cada um paga.
                           </Text>
                           <Text className="text-sm text-blue-900 leading-relaxed">2 horas antes do jogo o valor é ajustado e cobrado automaticamente.</Text>
                         </View>
@@ -645,7 +645,7 @@ export default function CourtDetails() {
                         </Text>
                       </View>
                       <View className="items-end">
-                        <Text className="text-2xl font-bold text-white">R$ {(selectedOpenSlot.price / openMin).toFixed(2)}</Text>
+                        <Text className="text-2xl font-bold text-white">{formatBRL((selectedOpenSlot.price / openMin))}</Text>
                         <Text className="text-xs text-white opacity-60">por jogador</Text>
                       </View>
                     </View>
@@ -658,11 +658,11 @@ export default function CourtDetails() {
                       </View>
                       <View className="flex-row justify-between">
                         <Text className="text-sm text-gray-600">Dividido por {openMin} jogadores (mínimo)</Text>
-                        <Text className="text-sm font-semibold text-gray-900">= R$ {(selectedOpenSlot.price / openMin).toFixed(2)}/pessoa</Text>
+                        <Text className="text-sm font-semibold text-gray-900">= {formatBRL((selectedOpenSlot.price / openMin))}/pessoa</Text>
                       </View>
                       <View className="border-t border-gray-100 pt-2 flex-row justify-between">
                         <Text className="text-sm font-bold text-gray-900">Você paga agora</Text>
-                        <Text className="text-sm font-bold text-violet-600">R$ {(selectedOpenSlot.price / openMin).toFixed(2)}</Text>
+                        <Text className="text-sm font-bold text-violet-600">{formatBRL((selectedOpenSlot.price / openMin))}</Text>
                       </View>
                     </View>
                     <View>

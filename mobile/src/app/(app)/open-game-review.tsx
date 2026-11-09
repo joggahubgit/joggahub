@@ -8,6 +8,7 @@ import { Text } from '@/components/ui/Text';
 import { calcFees, startCheckout } from '@/features/payments/checkout';
 import { ScheduledHoldNotice } from '@/features/payments/scheduled';
 import palette from '../../../tailwind.palette';
+import { formatBRL } from '@/lib/shared';
 
 type Params = {
   slotId: string;
@@ -131,18 +132,18 @@ export default function OpenGameReview() {
           </View>
           <View className="flex-row justify-between">
             <Text className="text-sm text-gray-600">Dividido por {minPlayers} jogadores (mínimo)</Text>
-            <Text className="text-sm font-semibold text-gray-900">R$ {pricePerPlayer.toFixed(2)}/pessoa</Text>
+            <Text className="text-sm font-semibold text-gray-900">{formatBRL(pricePerPlayer)}/pessoa</Text>
           </View>
           <View className="flex-row justify-between">
             <Text className="text-sm text-gray-600">Taxa de serviço (8% + R$ 2,50)</Text>
-            <Text className="text-sm font-semibold text-gray-900">R$ {serviceFee.toFixed(2)}</Text>
+            <Text className="text-sm font-semibold text-gray-900">{formatBRL(serviceFee)}</Text>
           </View>
           <View className="border-t border-gray-100 pt-3 flex-row items-center justify-between gap-3">
             <View className="flex-1">
               <Text className="font-bold text-gray-900 text-base">Bloqueio no cartão</Text>
               <Text className="text-xs text-gray-400 mt-0.5">O valor cobrado será proporcional aos jogadores confirmados</Text>
             </View>
-            <Text className="text-2xl font-bold text-violet-600">R$ {total.toFixed(2)}</Text>
+            <Text className="text-2xl font-bold text-violet-600">{formatBRL(total)}</Text>
           </View>
         </View>
 

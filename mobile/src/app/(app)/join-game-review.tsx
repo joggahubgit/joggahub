@@ -11,6 +11,7 @@ import { calcFees, startCheckout } from '@/features/payments/checkout';
 import { ScheduledHoldNotice } from '@/features/payments/scheduled';
 import { supabase } from '@/lib/supabase';
 import palette from '../../../tailwind.palette';
+import { formatBRL } from '@/lib/shared';
 
 type Params = {
   gameId: string;
@@ -191,11 +192,11 @@ export default function JoinGameReview() {
             <View className="gap-2 mb-3">
               <View className="flex-row justify-between">
                 <Text className="text-sm text-gray-600">Valor da vaga</Text>
-                <Text className="text-sm font-semibold text-gray-900">R$ {price.toFixed(2)}</Text>
+                <Text className="text-sm font-semibold text-gray-900">{formatBRL(price)}</Text>
               </View>
               <View className="flex-row justify-between">
                 <Text className="text-sm text-gray-600">Taxa de serviço (8% + R$ 2,50)</Text>
-                <Text className="text-sm font-semibold text-gray-900">R$ {fee.toFixed(2)}</Text>
+                <Text className="text-sm font-semibold text-gray-900">{formatBRL(fee)}</Text>
               </View>
             </View>
           )}
@@ -207,7 +208,7 @@ export default function JoinGameReview() {
             {isFree ? (
               <Text className="text-2xl font-bold text-green-600">Grátis</Text>
             ) : (
-              <Text className="text-2xl font-bold text-violet-600">R$ {total.toFixed(2)}</Text>
+              <Text className="text-2xl font-bold text-violet-600">{formatBRL(total)}</Text>
             )}
           </View>
         </View>

@@ -20,7 +20,7 @@ import { ScheduledHoldNotice, ScheduledStatusBanner, useMyScheduledPayment } fro
 import { getEnv } from '@/lib/env';
 import { supabase } from '@/lib/supabase';
 import { confirmAction } from '@/lib/confirm';
-import { PLAYER_CANCEL_CUTOFF_HOURS } from '@/lib/shared';
+import { formatBRL, PLAYER_CANCEL_CUTOFF_HOURS } from '@/lib/shared';
 import palette from '../../../../tailwind.palette';
 
 const SPORT_LABELS: Record<string, string> = {
@@ -750,15 +750,15 @@ export default function OpenGamePage() {
           <View className="border-t border-gray-200 pt-3 gap-2">
             <View className="flex-row justify-between">
               <Text className="text-sm text-gray-500">Valor da vaga</Text>
-              <Text className="text-sm font-semibold text-gray-900">R$ {g.pricePerPlayer.toFixed(2)}</Text>
+              <Text className="text-sm font-semibold text-gray-900">{formatBRL(g.pricePerPlayer)}</Text>
             </View>
             <View className="flex-row justify-between">
               <Text className="text-sm text-gray-500">Taxa de serviço (8% + R$ 2,50)</Text>
-              <Text className="text-sm font-semibold text-gray-900">R$ {joinFees.fee.toFixed(2)}</Text>
+              <Text className="text-sm font-semibold text-gray-900">{formatBRL(joinFees.fee)}</Text>
             </View>
             <View className="flex-row justify-between pt-1 border-t border-gray-100">
               <Text className="font-bold text-gray-900 text-base">Total</Text>
-              <Text className="text-xl font-bold text-violet-600">R$ {joinFees.total.toFixed(2)}</Text>
+              <Text className="text-xl font-bold text-violet-600">{formatBRL(joinFees.total)}</Text>
             </View>
           </View>
         </View>

@@ -10,7 +10,7 @@ import { ArrowLeft, Calendar, Clock, CreditCard, MapPin, ShieldCheck, Users } fr
 import { Text } from '@/components/ui/Text';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { supabase } from '@/lib/supabase';
-import { wallDate, wallTime } from '@/lib/shared';
+import { formatBRL, wallDate, wallTime } from '@/lib/shared';
 import palette from '../../../tailwind.palette';
 
 type GameRow = {
@@ -107,7 +107,7 @@ export default function Payments() {
                 <ActivityIndicator color="#ffffff" style={{ alignSelf: 'flex-start', marginVertical: 8 }} />
               ) : (
                 <>
-                  <Text className="text-3xl font-bold mb-4 text-white">R$ {total.toFixed(2)}</Text>
+                  <Text className="text-3xl font-bold mb-4 text-white">{formatBRL(total)}</Text>
                   <View className="flex-row gap-6">
                     <View>
                       <Text className="text-sm text-violet-100">Partidas</Text>
@@ -116,7 +116,7 @@ export default function Payments() {
                     {committed.length > 0 && (
                       <View>
                         <Text className="text-sm text-violet-100">Média por partida</Text>
-                        <Text className="text-sm font-semibold text-white">R$ {avg.toFixed(2)}</Text>
+                        <Text className="text-sm font-semibold text-white">{formatBRL(avg)}</Text>
                       </View>
                     )}
                   </View>
@@ -174,7 +174,7 @@ export default function Payments() {
                         </View>
                         <View className="items-end">
                           <Text className={`text-lg font-bold ${s === 'refunded' ? 'text-orange-600' : s === 'released' ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-                            {s === 'refunded' ? '–' : ''}R$ {calcAmount(g).toFixed(2)}
+                            {s === 'refunded' ? '–' : ''}{formatBRL(calcAmount(g))}
                           </Text>
                           <Text className="text-xs text-gray-500">{typeLabel(g)}</Text>
                         </View>

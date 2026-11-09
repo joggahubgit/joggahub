@@ -501,7 +501,7 @@ export default function PaymentSuccess() {
               {time && <p className="text-gray-600">{time}</p>}
               {price && (
                 <p className="font-bold text-violet-600 pt-1 border-t border-gray-200">
-                  R$ {parseFloat(price).toFixed(2)} pago
+                  {formatBRL(parseFloat(price))} pago
                 </p>
               )}
             </div>
@@ -559,7 +559,7 @@ export default function PaymentSuccess() {
               <p className="text-gray-500 pt-1 border-t border-gray-200">{maxPlayers} jogadores · {payMode === 'split' ? 'Divisão' : 'Você pagou tudo'}</p>
               {price && !scheduled && (
                 <p className="font-bold text-violet-600">
-                  R$ {parseFloat(price).toFixed(2)} pago
+                  {formatBRL(parseFloat(price))} pago
                 </p>
               )}
             </div>

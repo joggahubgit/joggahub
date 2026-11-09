@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, CreditCard, Calendar, MapPin, Users, Loader2, ShieldCheck, Clock } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { formatBRL } from '@/app/lib/classSchedule';
 
 type GameRow = {
   scheduled_at: string | null;
@@ -150,11 +151,11 @@ export default function PaymentsPage() {
               <Loader2 className="w-6 h-6 animate-spin my-2" />
             ) : (
               <>
-                <h2 className="text-3xl font-bold mb-4">R$ {thisMonthTotal.toFixed(2)}</h2>
+                <h2 className="text-3xl font-bold mb-4">{formatBRL(thisMonthTotal)}</h2>
                 <div className="flex gap-6 text-sm">
                   <div><p className="text-violet-100">Partidas</p><p className="font-semibold">{committedThisMonth.length}</p></div>
                   {committedThisMonth.length > 0 && (
-                    <div><p className="text-violet-100">Média por partida</p><p className="font-semibold">R$ {avgPerGame.toFixed(2)}</p></div>
+                    <div><p className="text-violet-100">Média por partida</p><p className="font-semibold">{formatBRL(avgPerGame)}</p></div>
                   )}
                 </div>
               </>
@@ -198,7 +199,7 @@ export default function PaymentsPage() {
                       </div>
                       <div className="text-right flex-shrink-0">
                         <p className={`text-lg font-bold ${status === 'refunded' ? 'text-orange-600' : status === 'released' ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-                          {status === 'refunded' ? '–' : ''}R$ {amount.toFixed(2)}
+                          {status === 'refunded' ? '–' : ''}{formatBRL(amount)}
                         </p>
                         <p className="text-xs text-gray-500">{gameTypeLabel(g)}</p>
                       </div>

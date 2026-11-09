@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check, Users, Zap, Shield, ChevronRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/app/contexts/AuthContext';
+import { formatBRL } from '@/app/lib/classSchedule';
 
 type GameType = 'casual' | 'competitive';
 
@@ -277,7 +278,7 @@ export default function CreateGame() {
                 <div className="flex justify-between">
                   <span className="text-gray-500">Preço/jogador</span>
                   <span className="font-bold text-violet-600">
-                    R$ {parseFloat(gameData.price || '0').toFixed(2)}
+                    {formatBRL(parseFloat(gameData.price || '0'))}
                   </span>
                 </div>
               </div>

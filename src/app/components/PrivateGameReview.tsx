@@ -10,6 +10,8 @@ import { calcFees } from '@/app/lib/checkout';
 import { getMinPlayersForSport, getMaxPlayersForSport } from '@/app/lib/gameConfig';
 import ScheduledHoldNotice from './payments/ScheduledHoldNotice';
 import { scheduledHold } from '../lib/classSchedule';
+import { wallMs, wallNowMs } from '../lib/wallClock';
+import { formatBRL } from '@/app/lib/classSchedule';
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('pt-BR', {
@@ -61,6 +63,10 @@ export default function PrivateGameReview() {
   const cutoffHours = payMode === 'full' ? 24 : 2;
   const deadlineLabel = (() => {
     if (!date || !time) return '';
+    // Prazo já passou (reserva em cima da hora): a cobrança é feita logo após reservar
+    if (wallMs(`${date}T${time}:00`) - cutoffHours * 3600_000 <= wallNowMs()) {
+      return `logo após a reserva (faltam menos de ${cutoffHours}h)`;
+    }
     const start = new Date(date + 'T' + time + ':00');
     start.setHours(start.getHours() - cutoffHours);
     const dayMonth = start.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' });
@@ -226,22 +232,22 @@ export default function PrivateGameReview() {
               <>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Valor da quadra</span>
-                  <span className="font-semibold text-gray-900">R$ {courtPrice.toFixed(2)}</span>
+                  <span className="font-semibold text-gray-900">{formatBRL(courtPrice)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Sua parte mínima (÷ {minSplitPlayers})</span>
-                  <span className="font-semibold text-gray-900">R$ {base.toFixed(2)}</span>
+                  <span className="font-semibold text-gray-900">{formatBRL(base)}</span>
                 </div>
               </>
             ) : (
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Valor da quadra</span>
-                <span className="font-semibold text-gray-900">R$ {base.toFixed(2)}</span>
+                <span className="font-semibold text-gray-900">{formatBRL(base)}</span>
               </div>
             )}
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Taxa de serviço (8% + R$ 2,50)</span>
-              <span className="font-semibold text-gray-900">R$ {fee.toFixed(2)}</span>
+              <span className="font-semibold text-gray-900">{formatBRL(fee)}</span>
             </div>
             <div className="flex justify-between pt-3 mt-1 border-t border-gray-100">
               <div>
@@ -251,9 +257,9 @@ export default function PrivateGameReview() {
                 )}
               </div>
               <div className="text-right">
-                <span className="text-xl font-black text-violet-600">R$ {(payMode === 'split' ? total : holdTotal).toFixed(2)}</span>
+                <span className="text-xl font-black text-violet-600">{formatBRL((payMode === 'split' ? total : holdTotal))}</span>
                 {payMode === 'split' && (
-                  <p className="text-xs text-gray-400 mt-0.5">R$ {holdTotal.toFixed(2)} retidos como garantia</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{formatBRL(holdTotal)} retidos como garantia</p>
                 )}
               </div>
             </div>
@@ -265,7 +271,7 @@ export default function PrivateGameReview() {
         {payMode === 'full' && (
           <div className="bg-blue-50 rounded-2xl p-3.5 border border-blue-100 space-y-1.5">
             <p className="text-xs text-blue-900 leading-relaxed">
-              Retemos <strong>R$ {holdTotal.toFixed(2)}</strong> no seu cartão como garantia. A cobrança acontece apenas 24h antes da partida.
+              Retemos <strong>{formatBRL(holdTotal)}</strong> no seu cartão como garantia. A cobrança acontece apenas 24h antes da partida.
             </p>
             {deadlineLabel && (
               <p className="text-xs text-blue-700 leading-relaxed">
@@ -277,7 +283,7 @@ export default function PrivateGameReview() {
         {payMode === 'split' && (
           <div className="bg-blue-50 rounded-2xl p-3.5 border border-blue-100 space-y-1.5">
             <p className="text-xs text-blue-900 leading-relaxed">
-              Retemos <strong>R$ {holdTotal.toFixed(2)}</strong> no seu cartão como garantia. Outros jogadores entram via link e cada um autoriza sua parte mínima.
+              Retemos <strong>{formatBRL(holdTotal)}</strong> no seu cartão como garantia. Outros jogadores entram via link e cada um autoriza sua parte mínima.
             </p>
             {deadlineLabel && (
               <p className="text-xs text-blue-700 leading-relaxed">
@@ -306,7 +312,7 @@ export default function PrivateGameReview() {
         {/* Payment methods */}
         <div className="flex items-center justify-center gap-2 text-gray-400">
           <CreditCard className="w-4 h-4" />
-          <span className="text-xs font-medium">Cartão de crédito · Débito · Pix</span>
+          <span className="text-xs font-medium">Cartão de crédito ou débito</span>
         </div>
 
         {error && (
@@ -323,7 +329,7 @@ export default function PrivateGameReview() {
         >
           {loading
             ? <><Loader2 className="w-5 h-5 animate-spin" /> Aguarde...</>
-            : <><CreditCard className="w-5 h-5" /> Garantir reserva · R$ {holdTotal.toFixed(2)} <ChevronRight className="w-5 h-5" /></>}
+            : <><CreditCard className="w-5 h-5" /> Garantir reserva · {formatBRL(holdTotal)} <ChevronRight className="w-5 h-5" /></>}
         </button>
 
         <p className="text-center text-xs text-gray-400">
@@ -331,8 +337,8 @@ export default function PrivateGameReview() {
         </p>
         <p className="text-center text-xs text-gray-400 -mt-1">
           {scheduledHold(`${date}T${time}`).scheduled
-            ? <>Cartão salvo agora · R$ {holdTotal.toFixed(2)} reservados em {scheduledHold(`${date}T${time}`).holdOn}</>
-            : <>R$ {holdTotal.toFixed(2)} retidos agora · cobrança real {payMode === 'full' ? '24h antes' : '2h antes'}</>}
+            ? <>Cartão salvo agora · {formatBRL(holdTotal)} reservados em {scheduledHold(`${date}T${time}`).holdOn}</>
+            : <>{formatBRL(holdTotal)} retidos agora · cobrança real {payMode === 'full' ? '24h antes' : '2h antes'}</>}
         </p>
 
       </div>

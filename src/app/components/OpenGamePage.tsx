@@ -9,6 +9,7 @@ import { PLAYER_CANCEL_CUTOFF_HOURS, CAPTURE_CUTOFF_HOURS, getMinPlayersForSport
 import GameResultSubmit from './GameResultSubmit';
 import BottomNav from './BottomNav';
 import { wallMs, wallNowMs } from '@/app/lib/wallClock';
+import { formatBRL } from '@/app/lib/classSchedule';
 
 const SPORT_LABELS: Record<string, string> = {
   football: 'Society', society: 'Society', futsal: 'Futsal',
@@ -611,7 +612,7 @@ export default function OpenGamePage() {
             >
               {payingReservation
                 ? <><Loader2 className="w-4 h-4 animate-spin" /> Aguarde...</>
-                : <>Pagar R$ {calcFees(pricePerPlayer).total.toFixed(2)} e confirmar vaga</>}
+                : <>Pagar {formatBRL(calcFees(pricePerPlayer).total)} e confirmar vaga</>}
             </button>
           </div>
         )}
@@ -1178,15 +1179,15 @@ export default function OpenGamePage() {
               <div className="border-t border-gray-200 pt-3 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Valor da vaga</span>
-                  <span className="font-semibold text-gray-900">R$ {pricePerPlayer.toFixed(2)}</span>
+                  <span className="font-semibold text-gray-900">{formatBRL(pricePerPlayer)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Taxa de serviço (8% + R$ 2,50)</span>
-                  <span className="font-semibold text-gray-900">R$ {calcFees(pricePerPlayer).fee.toFixed(2)}</span>
+                  <span className="font-semibold text-gray-900">{formatBRL(calcFees(pricePerPlayer).fee)}</span>
                 </div>
                 <div className="flex justify-between pt-1 border-t border-gray-100">
                   <span className="font-bold text-gray-900">Total</span>
-                  <span className="text-xl font-bold text-violet-600">R$ {calcFees(pricePerPlayer).total.toFixed(2)}</span>
+                  <span className="text-xl font-bold text-violet-600">{formatBRL(calcFees(pricePerPlayer).total)}</span>
                 </div>
               </div>
             </div>
@@ -1213,7 +1214,7 @@ export default function OpenGamePage() {
               >
                 {joining
                   ? <><Loader2 className="w-5 h-5 animate-spin" /> Entrando...</>
-                  : <><CheckCircle className="w-5 h-5" /> Pagar minha parte · R$ {calcFees(pricePerPlayer).total.toFixed(2)}</>}
+                  : <><CheckCircle className="w-5 h-5" /> Pagar minha parte · {formatBRL(calcFees(pricePerPlayer).total)}</>}
               </button>
             )}
             <button onClick={() => setShowJoin(false)} className="w-full mt-3 py-3 text-sm text-gray-500 font-semibold">

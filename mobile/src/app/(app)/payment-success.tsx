@@ -139,7 +139,7 @@ export default function PaymentSuccess() {
                     {p.maxPlayers ? `${p.maxPlayers} jogadores · ` : ''}{split ? 'Divisão' : 'Você pagou tudo'}
                   </Text>
                 </View>
-                {!!p.price && !result.scheduled && <Text className="font-bold text-violet-600 text-sm">R$ {Number(p.price).toFixed(2)} retidos no cartão</Text>}
+                {!!p.price && !result.scheduled && <Text className="font-bold text-violet-600 text-sm">{formatBRL(Number(p.price))} retidos no cartão</Text>}
               </View>
             )}
             {!!result.scheduled && (

@@ -4,6 +4,7 @@ import { X, Clock, Users, MapPin, ShieldCheck, ChevronDown, ChevronUp, Loader2, 
 import { supabase } from '@/lib/supabase';
 import { redirectToCheckout, calcFees } from '@/app/lib/checkout';
 import ScheduledHoldNotice from './payments/ScheduledHoldNotice';
+import { formatBRL } from '@/app/lib/classSchedule';
 
 interface GameState {
   slotId: string;
@@ -181,18 +182,18 @@ export default function OpenGameReview() {
             </div>
             <div className="flex justify-between text-sm text-gray-600">
               <span>Dividido por {state.minPlayers} jogadores (mínimo)</span>
-              <span className="font-semibold text-gray-900">R$ {state.pricePerPlayer.toFixed(2)}/pessoa</span>
+              <span className="font-semibold text-gray-900">{formatBRL(state.pricePerPlayer)}/pessoa</span>
             </div>
             <div className="flex justify-between text-sm text-gray-600">
               <span>Taxa de serviço (8% + R$ 2,50)</span>
-              <span className="font-semibold text-gray-900">R$ {serviceFee.toFixed(2)}</span>
+              <span className="font-semibold text-gray-900">{formatBRL(serviceFee)}</span>
             </div>
             <div className="border-t border-gray-100 pt-3 flex items-center justify-between">
               <div>
                 <p className="font-bold text-gray-900">Bloqueio no cartão</p>
                 <p className="text-xs text-gray-400 mt-0.5">O valor cobrado será proporcional aos jogadores confirmados</p>
               </div>
-              <p className="text-2xl font-bold text-violet-600">R$ {total.toFixed(2)}</p>
+              <p className="text-2xl font-bold text-violet-600">{formatBRL(total)}</p>
             </div>
           </div>
         </div>
@@ -249,7 +250,7 @@ export default function OpenGameReview() {
         >
           {creating
             ? <><Loader2 className="w-5 h-5 animate-spin" /> Processando...</>
-            : <><CheckCircle className="w-5 h-5" /> Garantir minha vaga · R$ {total.toFixed(2)}</>}
+            : <><CheckCircle className="w-5 h-5" /> Garantir minha vaga · {formatBRL(total)}</>}
         </button>
       </div>
     </div>

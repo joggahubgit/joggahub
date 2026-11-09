@@ -12,7 +12,7 @@ import { MyClassesSection } from '@/features/classes/components';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { fetchMyBookings, type BookingItem } from '@/features/bookings/api';
-import { realToWallMs, wallDate, wallMs, wallTime } from '@/lib/shared';
+import { formatBRL, realToWallMs, wallDate, wallMs, wallTime } from '@/lib/shared';
 import palette from '../../../tailwind.palette';
 
 const PAGE = 10;
@@ -153,7 +153,7 @@ export default function MyBookings() {
           </View>
 
           <View className="flex-row items-center justify-between pt-1 border-t border-gray-100">
-            <Text className="text-sm font-bold text-violet-600">R$ {item.price.toFixed(2)}</Text>
+            <Text className="text-sm font-bold text-violet-600">{formatBRL(item.price)}</Text>
             {canCancel(item) ? (
               <Pressable onPress={() => setCancelTarget(item)} className="flex-row items-center gap-1.5" hitSlop={8}>
                 <XCircle size={16} color={palette.red['500']} />
@@ -263,7 +263,7 @@ export default function MyBookings() {
               <View className="flex-row items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-3">
                 <AlertCircle size={16} color={palette.amber['500']} />
                 <Text className="text-sm text-amber-800 flex-1">
-                  Esta reserva foi <Text className="text-sm font-bold text-amber-800">paga</Text>. O reembolso de R$ {cancelTarget.price.toFixed(2)} será processado automaticamente via Stripe.
+                  Esta reserva foi <Text className="text-sm font-bold text-amber-800">paga</Text>. O reembolso de {formatBRL(cancelTarget.price)} será processado automaticamente via Stripe.
                 </Text>
               </View>
             )}

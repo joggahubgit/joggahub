@@ -3,6 +3,7 @@ import { X, Users, MapPin, Clock, DollarSign, CheckCircle, AlertCircle, Loader2,
 import { supabase } from '@/lib/supabase-gestor';
 import { getMinPlayersForSport } from '@/app/lib/gameConfig';
 import { AuthorizeLateCancel, inLateCancelWindow } from './AuthorizeLateCancel';
+import { formatBRL } from '@/app/lib/classSchedule';
 
 interface Props {
   gameId: string;
@@ -201,7 +202,7 @@ export function OpenGameModal({ gameId, slotId, courtName, onClose, onRefresh }:
                   <Clock className="w-3.5 h-3.5" />{time}
                 </span>
                 <span className="bg-white/20 rounded-lg px-3 py-1 text-sm font-semibold flex items-center gap-1.5">
-                  <DollarSign className="w-3.5 h-3.5" />R$ {game.price_per_player?.toFixed(2)}/vaga
+                  <DollarSign className="w-3.5 h-3.5" />{formatBRL(game.price_per_player ?? 0)}/vaga
                 </span>
               </div>
             </div>
@@ -335,13 +336,13 @@ export function OpenGameModal({ gameId, slotId, courtName, onClose, onRefresh }:
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Receita confirmada</span>
                   <span className="font-bold text-gray-900">
-                    R$ {(paidPlayers.length * (game.price_per_player ?? 0)).toFixed(2)}
+                    {formatBRL((paidPlayers.length * (game.price_per_player ?? 0)))}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Receita potencial</span>
                   <span className="font-semibold text-gray-700">
-                    R$ {(game.max_players * (game.price_per_player ?? 0)).toFixed(2)}
+                    {formatBRL((game.max_players * (game.price_per_player ?? 0)))}
                   </span>
                 </div>
               </div>
@@ -409,7 +410,7 @@ export function OpenGameModal({ gameId, slotId, courtName, onClose, onRefresh }:
                             </div>
                             <span className="text-sm text-red-700">{p.player_name}</span>
                             <span className="ml-auto text-sm font-semibold text-red-800">
-                              R$ {game!.price_per_player?.toFixed(2)}
+                              {formatBRL(game!.price_per_player ?? 0)}
                             </span>
                           </div>
                         ))}

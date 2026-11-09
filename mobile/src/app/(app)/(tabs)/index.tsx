@@ -21,7 +21,7 @@ import { Text } from '@/components/ui/Text';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { fetchOpenGames, fetchUpcomingGames, type UpcomingGame } from '@/features/games/api';
 import { fetchUnreadCount, fetchUpcomingBookings, fetchVenueCards, type UpcomingBooking } from '@/features/home/api';
-import { wallDate, wallTime } from '@/lib/shared';
+import { formatBRL, wallDate, wallTime } from '@/lib/shared';
 import { useRealtimeRefetch } from '@/lib/useRealtimeRefetch';
 import { PendingResultBanner } from '@/features/results/PendingResultBanner';
 import { fetchUpcomingClasses } from '@/features/classes/api';
@@ -55,7 +55,7 @@ function BookingCard({ b }: { b: UpcomingBooking }) {
             <Calendar size={16} color={palette.violet['500']} />
             <Text className="text-xs text-gray-500">Reserva de quadra</Text>
           </View>
-          <Text className="text-sm font-bold text-violet-600">R$ {b.totalPrice.toFixed(2)}</Text>
+          <Text className="text-sm font-bold text-violet-600">{formatBRL(b.totalPrice)}</Text>
         </View>
       </View>
     </Pressable>
@@ -386,7 +386,7 @@ export default function Home() {
                       </View>
                     </View>
                     <View className="items-end">
-                      <Text className="font-semibold text-violet-600 text-base">R$ {Number(game.pricePerPlayer).toFixed(2)}</Text>
+                      <Text className="font-semibold text-violet-600 text-base">{formatBRL(Number(game.pricePerPlayer))}</Text>
                       <Text className="text-xs text-gray-500">por pessoa</Text>
                     </View>
                   </View>

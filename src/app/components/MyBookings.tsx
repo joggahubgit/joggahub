@@ -9,6 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { getMinPlayersForSport, PLAYER_CANCEL_CUTOFF_HOURS } from '@/app/lib/gameConfig';
 import MyClassesSection from './classes/MyClassesSection';
 import { wallMs, wallNowMs } from '@/app/lib/wallClock';
+import { formatBRL } from '@/app/lib/classSchedule';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -436,7 +437,7 @@ export default function MyBookings() {
           </div>
 
           <div className="flex items-center justify-between pt-1 border-t border-gray-100">
-            <span className="text-sm font-bold text-violet-600">R$ {item.price.toFixed(2)}</span>
+            <span className="text-sm font-bold text-violet-600">{formatBRL(item.price)}</span>
             {canCancel(item) ? (
               <button
                 onClick={e => { e.stopPropagation(); openCancel(item); }}
@@ -574,7 +575,7 @@ export default function MyBookings() {
                     <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-3">
                       <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
                       <p className="text-sm text-amber-800">
-                        Esta reserva foi <strong>paga</strong>. O reembolso de R$ {cancelTarget.price.toFixed(2)} será processado automaticamente via Stripe.
+                        Esta reserva foi <strong>paga</strong>. O reembolso de {formatBRL(cancelTarget.price)} será processado automaticamente via Stripe.
                       </p>
                     </div>
                   )}

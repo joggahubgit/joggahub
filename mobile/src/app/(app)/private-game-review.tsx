@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@/components/ui/Text';
 import { calcFees, startCheckout } from '@/features/payments/checkout';
 import { ScheduledHoldNotice } from '@/features/payments/scheduled';
-import { getMaxPlayersForSport, getMinPlayersForSport } from '@/lib/shared';
+import { formatBRL, getMaxPlayersForSport, getMinPlayersForSport, wallMs, wallNowMs } from '@/lib/shared';
 import palette from '../../../tailwind.palette';
 
 type Params = {
@@ -61,6 +61,10 @@ export default function PrivateGameReview() {
   const cutoffHours = split ? 2 : 24;
   const deadlineLabel = (() => {
     if (!p.date || !p.time) return '';
+    // Prazo já passou (reserva em cima da hora): a cobrança é feita logo após reservar
+    if (wallMs(`${p.date}T${p.time}:00`) - cutoffHours * 3600_000 <= wallNowMs()) {
+      return `logo após a reserva (faltam menos de ${cutoffHours}h)`;
+    }
     const start = new Date(`${p.date}T${p.time}:00`);
     start.setHours(start.getHours() - cutoffHours);
     const dayMonth = start.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' });
@@ -150,22 +154,22 @@ export default function PrivateGameReview() {
                 <>
                   <View className="flex-row justify-between">
                     <Text className="text-sm text-gray-600">Valor da quadra</Text>
-                    <Text className="text-sm font-semibold text-gray-900">R$ {courtPrice.toFixed(2)}</Text>
+                    <Text className="text-sm font-semibold text-gray-900">{formatBRL(courtPrice)}</Text>
                   </View>
                   <View className="flex-row justify-between">
                     <Text className="text-sm text-gray-600">Sua parte mínima (÷ {minSplit})</Text>
-                    <Text className="text-sm font-semibold text-gray-900">R$ {base.toFixed(2)}</Text>
+                    <Text className="text-sm font-semibold text-gray-900">{formatBRL(base)}</Text>
                   </View>
                 </>
               ) : (
                 <View className="flex-row justify-between">
                   <Text className="text-sm text-gray-600">Valor da quadra</Text>
-                  <Text className="text-sm font-semibold text-gray-900">R$ {base.toFixed(2)}</Text>
+                  <Text className="text-sm font-semibold text-gray-900">{formatBRL(base)}</Text>
                 </View>
               )}
               <View className="flex-row justify-between">
                 <Text className="text-sm text-gray-600">Taxa de serviço (8% + R$ 2,50)</Text>
-                <Text className="text-sm font-semibold text-gray-900">R$ {fee.toFixed(2)}</Text>
+                <Text className="text-sm font-semibold text-gray-900">{formatBRL(fee)}</Text>
               </View>
               <View className="flex-row justify-between pt-3 mt-1 border-t border-gray-100">
                 <View>
@@ -173,8 +177,8 @@ export default function PrivateGameReview() {
                   {!split && <Text className="text-xs text-gray-400 mt-0.5">Cobrado 24h antes da partida</Text>}
                 </View>
                 <View className="items-end">
-                  <Text className="text-xl font-black text-violet-600">R$ {(split ? total : holdTotal).toFixed(2)}</Text>
-                  {split && <Text className="text-xs text-gray-400 mt-0.5">R$ {holdTotal.toFixed(2)} retidos como garantia</Text>}
+                  <Text className="text-xl font-black text-violet-600">{formatBRL((split ? total : holdTotal))}</Text>
+                  {split && <Text className="text-xs text-gray-400 mt-0.5">{formatBRL(holdTotal)} retidos como garantia</Text>}
                 </View>
               </View>
             </View>
@@ -183,7 +187,7 @@ export default function PrivateGameReview() {
           {/* Hold info */}
           <View className="bg-blue-50 rounded-2xl p-3.5 border border-blue-100 gap-1.5">
             <Text className="text-xs text-blue-900 leading-relaxed">
-              Retemos <Text className="text-xs font-bold text-blue-900">R$ {holdTotal.toFixed(2)}</Text> no seu cartão como garantia.{' '}
+              Retemos <Text className="text-xs font-bold text-blue-900">{formatBRL(holdTotal)}</Text> no seu cartão como garantia.{' '}
               {split
                 ? 'Outros jogadores entram via link e cada um autoriza sua parte mínima.'
                 : 'A cobrança acontece apenas 24h antes da partida.'}
@@ -236,7 +240,7 @@ export default function PrivateGameReview() {
             ) : (
               <>
                 <CreditCard size={20} color="#ffffff" />
-                <Text className="text-white font-bold text-lg">Garantir reserva · R$ {holdTotal.toFixed(2)}</Text>
+                <Text className="text-white font-bold text-lg">Garantir reserva · {formatBRL(holdTotal)}</Text>
                 <ChevronRight size={20} color="#ffffff" />
               </>
             )}
@@ -244,7 +248,7 @@ export default function PrivateGameReview() {
 
           <Text className="text-center text-xs text-gray-400">Você será levado à página segura do Stripe</Text>
           <Text className="text-center text-xs text-gray-400 -mt-2">
-            R$ {holdTotal.toFixed(2)} retidos agora · cobrança real {split ? '2h antes' : '24h antes'}
+            {formatBRL(holdTotal)} retidos agora · cobrança real {split ? '2h antes' : '24h antes'}
           </Text>
         </View>
       </ScrollView>

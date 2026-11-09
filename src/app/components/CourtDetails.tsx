@@ -7,6 +7,7 @@ import { getMinPlayersForSport, getMaxPlayersForSport } from '@/app/lib/gameConf
 import { CLASSES_ENABLED } from '@/app/lib/features';
 import CourtClassesTab from './classes/CourtClassesTab';
 import { CourtDayUses } from './dayuse/dayUse';
+import { formatBRL } from '@/app/lib/classSchedule';
 
 type TabType = 'home' | 'book' | 'open-games' | 'classes';
 
@@ -752,7 +753,7 @@ const CourtDetails: React.FC = () => {
                     <p className="text-sm text-gray-500">{selectedSlot.courtName}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-2xl font-bold text-gray-900">R$ {selectedSlot.price.toFixed(0)}</p>
+                    <p className="text-2xl font-bold text-gray-900">{formatBRL(selectedSlot.price)}</p>
                     <p className="text-xs text-gray-400">quadra · {selectedDuration === 90 ? '1h30' : '2h'}</p>
                   </div>
                 </div>
@@ -770,7 +771,7 @@ const CourtDetails: React.FC = () => {
                         <p className="font-semibold text-sm text-gray-900">Pagar tudo</p>
                         <p className="text-xs text-gray-500">Você cobre o valor completo da quadra</p>
                       </div>
-                      <span className="text-sm font-bold text-gray-900 flex-shrink-0">R$ {selectedSlot.price.toFixed(0)}</span>
+                      <span className="text-sm font-bold text-gray-900 flex-shrink-0">{formatBRL(selectedSlot.price)}</span>
                     </button>
                     <button
                       onClick={() => setPrivatePayMode('split')}
@@ -782,7 +783,7 @@ const CourtDetails: React.FC = () => {
                         <p className="text-xs text-gray-500">Cada jogador paga sua parte</p>
                       </div>
                       <span className="text-sm font-bold text-gray-900 flex-shrink-0">
-                        R$ {(selectedSlot.price / privateMinPlayers).toFixed(2)}<span className="text-xs font-normal text-gray-500">/pessoa</span>
+                        {formatBRL((selectedSlot.price / privateMinPlayers))}<span className="text-xs font-normal text-gray-500">/pessoa</span>
                       </span>
                     </button>
 
@@ -792,7 +793,7 @@ const CourtDetails: React.FC = () => {
                           {privateMinPlayers === privateMaxPlayers
                             ? <>A quadra fecha com <strong>{privateMaxPlayers} jogadores</strong>. Cada um autoriza{' '}</>
                             : <>A quadra abre para até <strong>{privateMaxPlayers} jogadores</strong>. Cada um autoriza{' '}</>}
-                          <strong>R$ {((selectedSlot.price / privateMinPlayers) * 1.08 + 2.50).toFixed(2)}</strong> no cartão — quanto mais jogadores entrarem, menos cada um paga.
+                          <strong>{formatBRL(((selectedSlot.price / privateMinPlayers) * 1.08 + 2.50))}</strong> no cartão — quanto mais jogadores entrarem, menos cada um paga.
                         </p>
                         <p className="text-sm text-blue-900 leading-relaxed">
                           2 horas antes do jogo o valor é ajustado e cobrado automaticamente.
@@ -971,7 +972,7 @@ const CourtDetails: React.FC = () => {
                       <p className="text-sm opacity-70 mt-0.5">{selectedOpenSlot.courtName} · {new Date(selectedDate).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-2xl font-bold">R$ {(selectedOpenSlot.price / openMinPlayers).toFixed(2)}</p>
+                      <p className="text-2xl font-bold">{formatBRL((selectedOpenSlot.price / openMinPlayers))}</p>
                       <p className="text-xs opacity-60">por jogador</p>
                     </div>
                   </div>
@@ -986,11 +987,11 @@ const CourtDetails: React.FC = () => {
                     </div>
                     <div className="flex justify-between text-gray-600">
                       <span>Dividido por {openMinPlayers} jogadores (mínimo)</span>
-                      <span className="font-semibold text-gray-900">= R$ {(selectedOpenSlot.price / openMinPlayers).toFixed(2)}/pessoa</span>
+                      <span className="font-semibold text-gray-900">= {formatBRL((selectedOpenSlot.price / openMinPlayers))}/pessoa</span>
                     </div>
                     <div className="border-t border-gray-100 pt-2 flex justify-between font-bold text-gray-900">
                       <span>Você paga agora</span>
-                      <span className="text-violet-600">R$ {(selectedOpenSlot.price / openMinPlayers).toFixed(2)}</span>
+                      <span className="text-violet-600">{formatBRL((selectedOpenSlot.price / openMinPlayers))}</span>
                     </div>
                   </div>
 

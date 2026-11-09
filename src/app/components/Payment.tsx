@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, CreditCard, Smartphone, Check, Calendar, Clock, MapPin, Users, Loader2 } from 'lucide-react';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { stripePromise } from '@/lib/stripe';
+import { formatBRL } from '@/app/lib/classSchedule';
 
 function StripePaymentForm({ onSuccess }: { onSuccess: () => void }) {
   const stripe = useStripe();
@@ -101,16 +102,16 @@ export default function Payment() {
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">{bookingData?.court || 'Reserva de quadra'}</span>
-              <span className="font-semibold">R$ {baseAmount.toFixed(2)}</span>
+              <span className="font-semibold">{formatBRL(baseAmount)}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Taxa de serviço (10%)</span>
-              <span className="font-semibold">R$ {serviceFee.toFixed(2)}</span>
+              <span className="font-semibold">{formatBRL(serviceFee)}</span>
             </div>
             <div className="border-t border-gray-200 pt-2 mt-2">
               <div className="flex justify-between">
                 <span className="font-semibold text-gray-900">Total</span>
-                <span className="font-bold text-violet-600 text-lg">R$ {finalTotal.toFixed(2)}</span>
+                <span className="font-bold text-violet-600 text-lg">{formatBRL(finalTotal)}</span>
               </div>
             </div>
           </div>
