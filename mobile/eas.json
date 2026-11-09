@@ -7,29 +7,46 @@
     "preview": {
       "distribution": "internal",
       "environment": "preview",
-      "env": { "EXPO_PUBLIC_APP_ENV": "preview" },
-      "ios": { "simulator": false },
-      "android": { "buildType": "apk" }
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "preview"
+      },
+      "ios": {
+        "simulator": false
+      },
+      "android": {
+        "buildType": "apk"
+      }
     },
     "testflight": {
       "distribution": "store",
       "environment": "preview",
       "autoIncrement": true,
-      "env": { "EXPO_PUBLIC_APP_ENV": "preview" }
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "preview"
+      }
     },
     "production": {
       "distribution": "store",
       "environment": "production",
       "autoIncrement": true,
-      "env": { "EXPO_PUBLIC_APP_ENV": "production" }
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "production"
+      }
     }
   },
   "submit": {
     "testflight": {
-      "ios": { "bundleIdentifier": "br.com.joggahub.app.preview", "appName": "JoggaHub (preview)" }
+      "ios": {
+        "bundleIdentifier": "br.com.joggahub.app.preview",
+        "appName": "JoggaHub (preview)",
+        "ascAppId": "6832059731"
+      }
     },
     "production": {
-      "ios": { "bundleIdentifier": "br.com.joggahub.app", "appName": "JoggaHub" }
+      "ios": {
+        "bundleIdentifier": "br.com.joggahub.app",
+        "appName": "JoggaHub"
+      }
     }
   }
 }
