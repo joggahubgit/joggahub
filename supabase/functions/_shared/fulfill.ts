@@ -15,6 +15,7 @@ import Stripe from 'https://esm.sh/stripe@14.21.0';
 import {
   METADATA_VERSION, UserError, playerRule, wallAddMinutes, wallStart,
 } from './checkout.ts';
+import { attachHold, targetAlive } from './scheduled.ts';
 
 // deno-lint-ignore no-explicit-any
 type Db = any;
@@ -27,7 +28,11 @@ export type FulfillResult =
   | { status: 'legacy' };
 
 type Md = Record<string, string>;
-type Done = { gameId: string | null; bookingId: string | null; slotId: string | null; classId?: string | null };
+type Done = {
+  gameId: string | null; bookingId: string | null; slotId: string | null; classId?: string | null;
+  /** Cartão salvo: o valor é retido em holdAt (wall clock) */
+  scheduled?: { holdAt: string; amount: number; startsAt: string };
+};
 
 const STALE_CLAIM_MS = 2 * 60 * 1000;
 
@@ -40,12 +45,27 @@ export async function fulfillSession(
   if (md.v !== METADATA_VERSION) return { status: 'legacy' };
 
   // ── 1. Was it really paid (or authorized, for holds)? ──
-  const piId = typeof session.payment_intent === 'string'
-    ? session.payment_intent
-    : session.payment_intent?.id ?? null;
-  if (session.status !== 'complete' || !piId) return { status: 'unpaid' };
-  const pi = await stripe.paymentIntents.retrieve(piId);
-  if (pi.status !== 'requires_capture' && pi.status !== 'succeeded') return { status: 'unpaid' };
+  // Cartão salvo (modo setup, reserva com mais de 6 dias): nada pago ainda, a
+  // retenção é feita depois por process-scheduled-payments.
+  let pi: Stripe.PaymentIntent | null = null;
+  let saved: { customerId: string; paymentMethodId: string } | null = null;
+  if (session.mode === 'setup') {
+    if (md.scheduled !== '1') return { status: 'unpaid' };
+    const siId = typeof session.setup_intent === 'string' ? session.setup_intent : session.setup_intent?.id ?? null;
+    const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id ?? null;
+    if (session.status !== 'complete' || !siId || !customerId) return { status: 'unpaid' };
+    const si = await stripe.setupIntents.retrieve(siId);
+    const pmId = typeof si.payment_method === 'string' ? si.payment_method : si.payment_method?.id ?? null;
+    if (si.status !== 'succeeded' || !pmId) return { status: 'unpaid' };
+    saved = { customerId, paymentMethodId: pmId };
+  } else {
+    const piId = typeof session.payment_intent === 'string'
+      ? session.payment_intent
+      : session.payment_intent?.id ?? null;
+    if (session.status !== 'complete' || !piId) return { status: 'unpaid' };
+    pi = await stripe.paymentIntents.retrieve(piId);
+    if (pi.status !== 'requires_capture' && pi.status !== 'succeeded') return { status: 'unpaid' };
+  }
 
   // ── 2. Claim the session ──
   const claim = await claimSession(db, session.id, md);
@@ -57,12 +77,21 @@ export async function fulfillSession(
   try {
     let done: Done;
     switch (md.kind) {
-      case 'private_game': done = await fulfillPrivateGame(db, session, md); break;
-      case 'organizer': done = await fulfillOrganizer(db, session, md); break;
-      case 'join': done = await fulfillJoin(db, pi, md); break;
-      case 'pay_reservation': done = await fulfillPayReservation(db, pi, md); break;
+      case 'private_game': done = await fulfillPrivateGame(db, session, md, pi?.id ?? null); break;
+      case 'organizer': done = await fulfillOrganizer(db, session, md, pi?.id ?? null); break;
+      case 'join': done = await fulfillJoin(db, pi && pi.capture_method === 'manual' ? pi.id : null, md); break;
+      case 'pay_reservation':
+        if (!pi) throw new UserError('Pagamento não encontrado.');
+        done = await fulfillPayReservation(db, pi, md); break;
       case 'class_enrollment': done = await fulfillClassEnrollment(db, session, pi, md); break;
+      case 'scheduled_retry':
+        if (!pi) throw new UserError('Pagamento não encontrado.');
+        done = await fulfillScheduledRetry(db, pi, md); break;
       default: throw new UserError(`Tipo de pagamento desconhecido: ${md.kind}`);
+    }
+    if (saved) {
+      await recordScheduled(db, session, md, done, saved);
+      done = { ...done, scheduled: { holdAt: md.holdAt, amount: Number(md.amount), startsAt: md.startsAt } };
     }
     await db.from('checkout_fulfillments')
       .update({ status: 'done', result: done, error: null, updated_at: new Date().toISOString() })
@@ -70,7 +99,7 @@ export async function fulfillSession(
     return { status: 'done', kind: md.kind, ...done, created: true };
   } catch (err) {
     if (err instanceof UserError) {
-      await releasePayment(stripe, pi);
+      if (pi) await releasePayment(stripe, pi);
       await db.from('checkout_fulfillments')
         .update({ status: 'failed', error: err.message, updated_at: new Date().toISOString() })
         .eq('session_id', session.id);
@@ -78,7 +107,7 @@ export async function fulfillSession(
         user_id: md.userId,
         type: 'payment_released',
         title: 'Pagamento não concluído',
-        message: `${err.message} O valor foi liberado no seu cartão.`,
+        message: `${err.message} ${pi ? 'O valor foi liberado no seu cartão.' : 'Nada foi cobrado.'}`,
         game_id: md.gameId || null,
       });
       return { status: 'failed', error: err.message };
@@ -138,12 +167,12 @@ async function releasePayment(stripe: Stripe, pi: Stripe.PaymentIntent) {
 // Inscrição criada por class_enroll no banco: trava o curso, confere status,
 // prazo (2h antes da 1ª aula), vagas e duplicidade, e é idempotente pela sessão.
 
-async function fulfillClassEnrollment(db: Db, session: Stripe.Checkout.Session, pi: Stripe.PaymentIntent, md: Md): Promise<Done> {
+async function fulfillClassEnrollment(db: Db, session: Stripe.Checkout.Session, pi: Stripe.PaymentIntent | null, md: Md): Promise<Done> {
   const { error } = await db.rpc('class_enroll', {
     p_class_id: md.classId,
     p_player_id: md.userId,
     p_stripe_session_id: session.id,
-    p_payment_intent_id: pi.id,
+    p_payment_intent_id: pi?.id ?? null,
     p_amount: Number(md.price),
     p_fee: Number(md.fee),
   });
@@ -153,7 +182,7 @@ async function fulfillClassEnrollment(db: Db, session: Stripe.Checkout.Session, 
     throw new Error(`class_enroll: ${error.message}`);
   }
   // Day use com valor retido (cobrado 2h antes pela capture-day-use)
-  if (pi.status === 'requires_capture') {
+  if (pi?.status === 'requires_capture') {
     await db.from('class_enrollments').update({ payment_held: true }).eq('stripe_session_id', session.id);
   }
   return { gameId: null, bookingId: null, slotId: null, classId: md.classId };
@@ -199,7 +228,7 @@ async function blockSessionSlots(db: Db, courtId: string, startWall: string, dur
 
 // ── Private game (organizer books the whole court; split or full) ───────────
 
-async function fulfillPrivateGame(db: Db, session: Stripe.Checkout.Session, md: Md): Promise<Done> {
+async function fulfillPrivateGame(db: Db, session: Stripe.Checkout.Session, md: Md, orgPiId: string | null): Promise<Done> {
   const userId = md.userId;
   const courtId = md.courtId;
   const durationMins = Number(md.durationMins);
@@ -265,7 +294,7 @@ async function fulfillPrivateGame(db: Db, session: Stripe.Checkout.Session, md: 
       slot_id: slotId,
       court_id: courtId,
       created_by: userId,
-      total_price: (session.amount_total ?? 0) / 100,
+      total_price: session.amount_total != null && session.mode !== 'setup' ? session.amount_total / 100 : Number(md.amount ?? 0),
       max_players: Number(md.maxPlayers),
       payment_type: payMode,
       payment_status: 'paid',
@@ -298,6 +327,7 @@ async function fulfillPrivateGame(db: Db, session: Stripe.Checkout.Session, md: 
     status: 'confirmed_booking',
     game_type: 'casual',
     stripe_session_id: session.id,
+    organizer_payment_intent_id: orgPiId,
   }).select('id').single();
   if (gameErr) throw new Error(`games: ${gameErr.message}`);
 
@@ -311,7 +341,7 @@ async function fulfillPrivateGame(db: Db, session: Stripe.Checkout.Session, md: 
 
 // ── Organizer creates an open game (pays only their own spot, held) ─────────
 
-async function fulfillOrganizer(db: Db, session: Stripe.Checkout.Session, md: Md): Promise<Done> {
+async function fulfillOrganizer(db: Db, session: Stripe.Checkout.Session, md: Md, orgPiId: string | null): Promise<Done> {
   const userId = md.userId;
   const sport = md.sport;
 
@@ -347,6 +377,7 @@ async function fulfillOrganizer(db: Db, session: Stripe.Checkout.Session, md: Md
     game_type: 'casual',
     status: 'scheduled',
     stripe_session_id: session.id,
+    organizer_payment_intent_id: orgPiId,
   }).select('id').single();
   if (error) throw new Error(`games: ${error.message}`);
 
@@ -363,11 +394,10 @@ async function fulfillOrganizer(db: Db, session: Stripe.Checkout.Session, md: Md
 
 // ── A player joins an existing game (self, or paid by someone else) ─────────
 
-async function fulfillJoin(db: Db, pi: Stripe.PaymentIntent, md: Md): Promise<Done> {
+async function fulfillJoin(db: Db, holdId: string | null, md: Md): Promise<Done> {
   const gameId = md.gameId;
   const playerId = md.playerId;
   const team = md.team === 'a' || md.team === 'b' ? md.team : null;
-  const holdId = pi.capture_method === 'manual' ? pi.id : null;
 
   const { data: game } = await db.from('games')
     .select('id, status, max_players, organizer_id, sport_type, slot_id')
@@ -453,4 +483,64 @@ async function fulfillPayReservation(db: Db, pi: Stripe.PaymentIntent, md: Md): 
     await db.from('bookings').update({ payment_status: 'paid' }).eq('id', game.booking_id);
   }
   return { gameId: md.gameId, bookingId: game?.booking_id ?? null, slotId: game?.slot_id ?? null };
+}
+
+// ── Cartão salvo: agenda a retenção ──────────────────────────────────────────
+
+async function recordScheduled(
+  db: Db, session: Stripe.Checkout.Session, md: Md, done: Done,
+  saved: { customerId: string; paymentMethodId: string },
+) {
+  let enrollmentId: string | null = null;
+  let venueId: string | null = null;
+  if (md.kind === 'class_enrollment') {
+    const { data: e } = await db.from('class_enrollments').select('id, classes(venue_id)')
+      .eq('stripe_session_id', session.id).maybeSingle();
+    enrollmentId = e?.id ?? null;
+    venueId = e?.classes?.venue_id ?? null;
+  } else if (done.gameId) {
+    const { data: g } = await db.from('games').select('courts(venue_id)').eq('id', done.gameId).maybeSingle();
+    venueId = g?.courts?.venue_id ?? null;
+  }
+  let piMeta: Record<string, string> = {};
+  try { piMeta = JSON.parse(md.piMeta || '{}'); } catch { /* vazio */ }
+  if (done.gameId) piMeta.gameId = done.gameId;
+
+  const { error } = await db.from('scheduled_payments').insert({
+    session_id: session.id,
+    kind: md.kind,
+    user_id: md.userId,
+    player_id: md.kind === 'join' ? md.playerId : md.userId,
+    game_id: done.gameId,
+    class_enrollment_id: enrollmentId,
+    venue_id: venueId,
+    customer_id: saved.customerId,
+    payment_method_id: saved.paymentMethodId,
+    amount: Number(md.amount),
+    description: md.description || 'JoggaHub',
+    pi_metadata: piMeta,
+    starts_at: md.startsAt,
+    hold_at: md.holdAt,
+  });
+  if (error && error.code !== '23505') throw new Error(`scheduled_payments: ${error.message}`);
+}
+
+// ── "Pagar agora": o banco recusou a retenção automática e o jogador pagou ──
+
+async function fulfillScheduledRetry(db: Db, pi: Stripe.PaymentIntent, md: Md): Promise<Done> {
+  const { data: sp } = await db.from('scheduled_payments').select('*').eq('id', md.scheduledPaymentId).maybeSingle();
+  if (!sp || sp.user_id !== md.userId) throw new UserError('Pagamento não encontrado.');
+  if (sp.status === 'held' && sp.payment_intent_id === pi.id) {
+    // Repetição (webhook + tela): já registrado
+  } else {
+    if (sp.status !== 'failed') throw new UserError('Este pagamento não está mais pendente.');
+    if (!(await targetAlive(db, sp))) throw new UserError('Esta reserva já foi cancelada.');
+    if (!(await attachHold(db, sp, pi.id, 'failed'))) throw new UserError('Este pagamento não está mais pendente.');
+  }
+  let classId: string | null = null;
+  if (sp.class_enrollment_id) {
+    const { data: e } = await db.from('class_enrollments').select('class_id').eq('id', sp.class_enrollment_id).maybeSingle();
+    classId = e?.class_id ?? null;
+  }
+  return { gameId: sp.game_id ?? null, bookingId: null, slotId: null, classId };
 }

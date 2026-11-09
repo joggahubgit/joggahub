@@ -33,7 +33,9 @@ async function releasePi(stripe: Stripe, piId: string): Promise<boolean> {
   }
 }
 
-async function piFromSession(stripe: Stripe, sessionId: string | null) {
+async function organizerPi(stripe: Stripe, game: { organizer_payment_intent_id?: string | null; stripe_session_id: string | null }) {
+  if (game.organizer_payment_intent_id) return game.organizer_payment_intent_id;
+  const sessionId = game.stripe_session_id;
   if (!sessionId) return null;
   try {
     const s = await stripe.checkout.sessions.retrieve(sessionId);
@@ -85,7 +87,7 @@ serve(async (req) => {
     const db = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
 
     const { data: game } = await db.from('games')
-      .select('id, organizer_id, slot_id, status, is_open, booking_id, pay_mode, sport_type, court_id, stripe_session_id, scheduled_at')
+      .select('id, organizer_id, slot_id, status, is_open, booking_id, pay_mode, sport_type, court_id, stripe_session_id, organizer_payment_intent_id, scheduled_at')
       .eq('id', gameId).maybeSingle();
     if (!game) throw new UserError('Partida não encontrada');
     if (!['scheduled', 'confirmed_booking'].includes(game.status)) throw new UserError('Partida não está ativa');
@@ -119,13 +121,13 @@ serve(async (req) => {
       const next = (roster ?? []).find((p: { player_id: string | null }) => !!p.player_id);
       if (!next) throw new UserError('Você é o único jogador. Para sair, cancele a partida.');
 
-      const orgPi = await piFromSession(stripe, game.stripe_session_id);
+      const orgPi = await organizerPi(stripe, game);
       const refunded = orgPi ? await releasePi(stripe, orgPi) : false;
 
       await db.from('game_players').delete().eq('game_id', gameId).eq('player_id', callerId);
       // The organizer's hold lives on the game (not on game_players): clear it so
       // the 2h capture doesn't try to charge someone who left.
-      await db.from('games').update({ organizer_id: next.player_id, stripe_session_id: null }).eq('id', gameId);
+      await db.from('games').update({ organizer_id: next.player_id, stripe_session_id: null, organizer_payment_intent_id: null }).eq('id', gameId);
       const total = await recount(db, game);
 
       await db.from('notifications').insert([

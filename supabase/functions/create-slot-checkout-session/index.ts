@@ -11,6 +11,7 @@ import {
   METADATA_VERSION, UserError, assertReturnUrl, checkoutExpiresAt, corsHeaders, durationOrNull, json,
   playerRule, round2, serviceFeeFor, wallAddMinutes, wallLabel, wallStart, withSessionId,
 } from '../_shared/checkout.ts';
+import { customerFor, scheduledCheckoutParams, shouldSchedule } from '../_shared/scheduled.ts';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -93,6 +94,40 @@ serve(async (req) => {
     const endTime = wallAddMinutes(startWall, durationMins).substring(11, 16);
     const isSplit = payMode === 'split';
 
+    const description = `Partida fechada — ${court.name} · ${date} ${time}`;
+    const piMetadata = { tipo: 'partida_fechada', courtId: court.id };
+    const md: Record<string, string> = {
+      kind: 'private_game',
+      courtId: court.id,
+      ...slotMeta,
+      durationMins: String(durationMins),
+      payMode,
+      sport: court.sport_type,
+      maxPlayers: String(maxPlayers),
+      pricePerHour: String(pricePerHour),
+      courtPrice: String(courtPrice),
+    };
+
+    // Mais de 6 dias até a partida: só salva o cartão; a retenção é feita 6 dias antes.
+    if (shouldSchedule(startTime)) {
+      const scheduled = await stripe.checkout.sessions.create(scheduledCheckoutParams({
+        userId,
+        customer: await customerFor(stripe, db, userId),
+        amount: round2(courtPrice + serviceFee),
+        startIso: startTime,
+        chargeText: isSplit
+          ? 'o valor final é cobrado 2h antes da partida e diminui conforme os jogadores entram'
+          : 'cobrado 24h antes da partida',
+        leaveHours: 24,
+        description,
+        piMetadata,
+        metadata: md,
+        successUrl,
+        cancelUrl,
+      }));
+      return json({ url: scheduled.url, sessionId: scheduled.id, scheduled: true });
+    }
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       mode: 'payment',
@@ -101,8 +136,8 @@ serve(async (req) => {
       // Nome/descrição iguais aos do app (Financeiro do gestor) para bater com o Stripe
       payment_intent_data: {
         capture_method: 'manual',
-        description: `Partida fechada — ${court.name} · ${date} ${time}`,
-        metadata: { tipo: 'partida_fechada', courtId: court.id },
+        description,
+        metadata: piMetadata,
       },
       line_items: [
         {
@@ -127,19 +162,7 @@ serve(async (req) => {
           quantity: 1,
         },
       ],
-      metadata: {
-        v: METADATA_VERSION,
-        kind: 'private_game',
-        userId,
-        courtId: court.id,
-        ...slotMeta,
-        durationMins: String(durationMins),
-        payMode,
-        sport: court.sport_type,
-        maxPlayers: String(maxPlayers),
-        pricePerHour: String(pricePerHour),
-        courtPrice: String(courtPrice),
-      },
+      metadata: { v: METADATA_VERSION, userId, ...md },
       success_url: successUrl,
       cancel_url: cancelUrl,
     });

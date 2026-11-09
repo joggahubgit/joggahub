@@ -1,5 +1,5 @@
 // Checkout da inscrição num curso (aulas): o aluno paga o curso inteiro.
-// Cobrança imediata (sem retenção). Preço, vagas e prazo vêm do banco; a
+// Valor retido e cobrado 2h antes (ou cartão salvo, se faltar mais de 6 dias). Preço, vagas e prazo vêm do banco; a
 // inscrição é criada depois pelo servidor (_shared/fulfill.ts → class_enroll),
 // nunca pelo navegador.
 import Stripe from 'https://esm.sh/stripe@14.21.0';
@@ -9,6 +9,7 @@ import {
   METADATA_VERSION, UserError, assertReturnUrl, checkoutExpiresAt, corsHeaders, json,
   round2, serviceFeeFor, withSessionId,
 } from '../_shared/checkout.ts';
+import { customerFor, scheduledCheckoutParams, shouldSchedule } from '../_shared/scheduled.ts';
 
 /** Mesma regra de class_wall_now() no banco: hora de Brasília como "wall clock". */
 function wallNowMs() {
@@ -67,8 +68,29 @@ serve(async (req) => {
     const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', { apiVersion: '2023-10-16' });
     // Curso e day use seguem as partidas: valor retido no cartão e cobrado 2h antes
     // do início / da 1ª aula (função capture-day-use). Com mais de 6 dias de
-    // antecedência a retenção do Stripe não dura, então cobra na hora (até o cartão salvo).
+    // antecedência só salva o cartão e retém 6 dias antes (process-scheduled-payments).
     const hold = firstMs - wallNowMs() <= HOLD_MAX_DAYS * 24 * 3600_000;
+    const isDayUse = cls.kind === 'day_use';
+    const description = `${isDayUse ? 'Day use' : 'Curso'} — ${cls.title} · ${d(cls.start_date)}`;
+    const piMetadata = { tipo: isDayUse ? 'day_use' : 'aula', classId: cls.id };
+    const md = { kind: 'class_enrollment', classId: cls.id, price: String(price), fee: String(fee) };
+
+    if (!hold || shouldSchedule(first.starts_at)) {
+      const scheduled = await stripe.checkout.sessions.create(scheduledCheckoutParams({
+        userId,
+        customer: await customerFor(stripe, db, userId),
+        amount: round2(price + fee),
+        startIso: first.starts_at,
+        chargeText: isDayUse ? 'cobrado 2h antes do início' : 'cobrado 2h antes da primeira aula',
+        leaveHours: 24,
+        description,
+        piMetadata,
+        metadata: md,
+        successUrl,
+        cancelUrl,
+      }));
+      return json({ url: scheduled.url, sessionId: scheduled.id, scheduled: true });
+    }
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -76,9 +98,9 @@ serve(async (req) => {
       expires_at: checkoutExpiresAt(),
       client_reference_id: userId,
       payment_intent_data: {
-        ...(hold ? { capture_method: 'manual' as const } : {}),
-        description: `${cls.kind === 'day_use' ? 'Day use' : 'Curso'} — ${cls.title} · ${d(cls.start_date)}`,
-        metadata: { tipo: cls.kind === 'day_use' ? 'day_use' : 'aula', classId: cls.id },
+        capture_method: 'manual' as const,
+        description,
+        metadata: piMetadata,
       },
       line_items: [
         {
@@ -106,14 +128,7 @@ serve(async (req) => {
           quantity: 1,
         },
       ],
-      metadata: {
-        v: METADATA_VERSION,
-        kind: 'class_enrollment',
-        userId,
-        classId: cls.id,
-        price: String(price),
-        fee: String(fee),
-      },
+      metadata: { v: METADATA_VERSION, userId, ...md },
       success_url: successUrl,
       cancel_url: cancelUrl,
     });

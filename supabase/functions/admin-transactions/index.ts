@@ -62,7 +62,14 @@ serve(async (req) => {
       for (const r of gp ?? []) link.set(r.stripe_payment_intent_id, { kind: 'game', refId: r.game_id, playerId: r.player_id });
       for (const r of en ?? []) link.set(r.stripe_payment_intent_id, { kind: 'class', refId: r.class_id, playerId: r.player_id });
     }
-    // Organizador/reserva: pagamento ligado à partida pela sessão de checkout
+    // Organizador: retenção gravada na partida (novas) ou pela sessão de checkout (antigas)
+    {
+      const ids0 = pis.filter(p => !link.has(p.id)).map(p => p.id);
+      if (ids0.length) {
+        const { data: og } = await db.from('games').select('id, organizer_id, organizer_payment_intent_id').in('organizer_payment_intent_id', ids0);
+        for (const g of og ?? []) link.set(g.organizer_payment_intent_id, { kind: 'game', refId: g.id, playerId: g.organizer_id });
+      }
+    }
     const unlinked = pis.filter(p => !link.has(p.id));
     if (unlinked.length) {
       const sessionByPi = new Map<string, Stripe.Checkout.Session>();

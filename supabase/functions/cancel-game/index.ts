@@ -104,7 +104,7 @@ serve(async (req) => {
     // Fetch game — need slot_id, booking_id, organizer_id, is_open, and stripe_session_id for hold release
     const { data: game } = await supabase
       .from('games')
-      .select('slot_id, booking_id, scheduled_end_at, organizer_id, is_open, stripe_session_id, status')
+      .select('slot_id, booking_id, scheduled_end_at, organizer_id, is_open, stripe_session_id, organizer_payment_intent_id, status')
       .eq('id', gameId)
       .single();
 
@@ -177,9 +177,9 @@ serve(async (req) => {
 
     if (isPrivateGame && slotId) {
       // Private game: resolve PI from stripe_session_id (if stored) or search by slotId
-      let paymentIntentId: string | null = null;
+      let paymentIntentId: string | null = game?.organizer_payment_intent_id ?? null;
 
-      if (game?.stripe_session_id) {
+      if (!paymentIntentId && game?.stripe_session_id) {
         try {
           const orgSession = await stripe.checkout.sessions.retrieve(game.stripe_session_id);
           paymentIntentId = typeof orgSession.payment_intent === 'string'
@@ -213,7 +213,10 @@ serve(async (req) => {
           refunds.push({ name: 'Organizador', status: e.message ?? 'error' });
         }
       } else {
-        refunds.push({ name: 'Organizador', status: 'manual_required' });
+        // Cartão salvo ainda sem retenção (reserva com mais de 6 dias): nada a devolver
+        const { data: sched } = await supabase.from('scheduled_payments').select('id')
+          .eq('game_id', gameId).in('status', ['scheduled', 'failed']).limit(1);
+        refunds.push({ name: 'Organizador', status: sched?.length ? 'released' : 'manual_required' });
       }
     }
 
@@ -239,12 +242,15 @@ serve(async (req) => {
 
     if (!isPrivateGame) {
       // Organizer's hold is via games.stripe_session_id (gameId was '' at checkout time)
-      if (game?.stripe_session_id) {
+      if (game?.organizer_payment_intent_id || game?.stripe_session_id) {
         try {
-          const orgSession = await stripe.checkout.sessions.retrieve(game.stripe_session_id);
-          const orgPI = typeof orgSession.payment_intent === 'string'
-            ? orgSession.payment_intent
-            : orgSession.payment_intent?.id;
+          let orgPI: string | null | undefined = game.organizer_payment_intent_id;
+          if (!orgPI) {
+            const orgSession = await stripe.checkout.sessions.retrieve(game.stripe_session_id!);
+            orgPI = typeof orgSession.payment_intent === 'string'
+              ? orgSession.payment_intent
+              : orgSession.payment_intent?.id;
+          }
           if (orgPI) {
             await cancelOrReleasePi(stripe, orgPI);
             refunds.push({ name: 'Organizador', status: 'released' });
@@ -254,6 +260,11 @@ serve(async (req) => {
         }
       }
     }
+
+    // Pagamentos agendados (cartão salvo) desta partida não devem mais ser retidos
+    await supabase.from('scheduled_payments')
+      .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+      .eq('game_id', gameId).in('status', ['scheduled', 'failed']);
 
     // Cancel game
     await supabase

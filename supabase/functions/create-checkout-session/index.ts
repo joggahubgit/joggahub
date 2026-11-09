@@ -14,6 +14,7 @@ import {
   CAPTURE_CUTOFF_HOURS, METADATA_VERSION, SPORT_LABELS, UserError, assertReturnUrl, checkoutExpiresAt,
   corsHeaders, durationOrNull, json, playerRule, round2, serviceFeeFor, wallLabel, withSessionId,
 } from '../_shared/checkout.ts';
+import { customerFor, scheduledCheckoutParams, shouldSchedule } from '../_shared/scheduled.ts';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -44,6 +45,7 @@ serve(async (req) => {
     let label: { sport: string; court: string; venue: string; date: string; time: string };
     let metadata: Record<string, string>;
     let tipo: 'partida_aberta' | 'partida_fechada' = 'partida_aberta';
+    let startIso = '';
 
     if (mode === 'organizer') {
       // ── New open game: price comes from slot/court ──
@@ -69,6 +71,7 @@ serve(async (req) => {
       const maxPlayers = requested >= rule.min && requested <= rule.max ? requested : rule.max;
 
       captureManual = true;
+      startIso = slot.start_time;
       label = { sport: court.sport_type, court: court.name, venue: court.venueName, ...wallLabel(slot.start_time) };
       metadata = {
         kind: 'organizer', slotId: slot.id, courtId: slot.court_id, durationMins: String(durationMins),
@@ -83,6 +86,7 @@ serve(async (req) => {
 
       const court = await loadCourt(db, game.court_id);
       const startTime = await gameStart(db, game);
+      startIso = startTime;
       label = { sport: game.sport_type ?? court.sport_type, court: court.name, venue: court.venueName, ...wallLabel(startTime) };
       tipo = mode === 'pay_reservation' || game.is_open === false ? 'partida_fechada' : 'partida_aberta';
       vagaPrice = Number(game.price_per_player) || 0;
@@ -126,6 +130,27 @@ serve(async (req) => {
     }
 
     const serviceFee = serviceFeeFor(vagaPrice);
+    const description = `${tipo === 'partida_aberta' ? 'Partida aberta' : 'Partida fechada'} — ${label.court} · ${label.date} ${label.time}`;
+    const piMetadata: Record<string, string> = { tipo, ...(metadata.gameId ? { gameId: metadata.gameId } : {}) };
+
+    // Retenção com mais de 6 dias até a partida: só salva o cartão; retém 6 dias antes.
+    if (captureManual && startIso && shouldSchedule(startIso)) {
+      const scheduled = await stripe.checkout.sessions.create(scheduledCheckoutParams({
+        userId,
+        customer: await customerFor(stripe, db, userId),
+        amount: round2(vagaPrice + serviceFee),
+        startIso,
+        chargeText: 'cobrado 2h antes da partida; pode ficar menor se mais jogadores entrarem',
+        leaveHours: 24,
+        description,
+        piMetadata,
+        metadata,
+        successUrl,
+        cancelUrl,
+      }));
+      return json({ url: scheduled.url, sessionId: scheduled.id, scheduled: true });
+    }
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       mode: 'payment',
@@ -134,8 +159,8 @@ serve(async (req) => {
       // Nome/descrição iguais aos do app (Financeiro do gestor) para bater com o Stripe
       payment_intent_data: {
         ...(captureManual ? { capture_method: 'manual' as const } : {}),
-        description: `${tipo === 'partida_aberta' ? 'Partida aberta' : 'Partida fechada'} — ${label.court} · ${label.date} ${label.time}`,
-        metadata: { tipo, ...(metadata.gameId ? { gameId: metadata.gameId } : {}) },
+        description,
+        metadata: piMetadata,
       },
       line_items: [
         {

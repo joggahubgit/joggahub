@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Bell, Users, Calendar, CheckCircle, X, Loader2, Crown, UserMinus, Trophy, MessageCircle } from 'lucide-react';
+import { ArrowLeft, Bell, Users, Calendar, CheckCircle, X, Loader2, Crown, UserMinus, Trophy, MessageCircle, CreditCard } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 type NotificationType =
   | 'game_joined' | 'game_removed' | 'game_cancelled' | 'game_left' | 'organizer_transferred'
-  | 'pending_results' | 'result_pending_confirmation' | 'rating_updated' | 'chat_message';
+  | 'pending_results' | 'result_pending_confirmation' | 'rating_updated' | 'chat_message'
+  | 'payment_failed' | 'payment_held' | 'payment_expired';
 
 interface Notification {
   id: string;
@@ -39,6 +40,7 @@ function getIcon(type: NotificationType) {
     case 'result_pending_confirmation': return CheckCircle;
     case 'rating_updated': return Trophy;
     case 'chat_message': return MessageCircle;
+    case 'payment_failed': case 'payment_held': return CreditCard;
     default: return Calendar;
   }
 }
@@ -53,6 +55,8 @@ function getColor(type: NotificationType) {
     case 'result_pending_confirmation': return 'bg-blue-100 text-blue-600';
     case 'rating_updated': return 'bg-amber-100 text-amber-600';
     case 'chat_message': return 'bg-violet-100 text-violet-600';
+    case 'payment_failed': return 'bg-amber-100 text-amber-600';
+    case 'payment_held': return 'bg-green-100 text-green-600';
     default: return 'bg-violet-100 text-violet-600';
   }
 }
@@ -202,6 +206,8 @@ export default function Notifications() {
               key={n.id}
               onClick={() => {
                 markAsRead(n.id);
+                // Banco recusou a retenção automática: abre o "Pagar agora"
+                if (n.type === 'payment_failed') { navigate('/pagamento-pendente'); return; }
                 if (!n.game_id) return;
                 navigate(n.type === 'chat_message' ? `/game-chat/${n.game_id}` : `/open-game/${n.game_id}`);
               }}
