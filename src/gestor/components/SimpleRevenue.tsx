@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   CheckCircle, ShieldCheck, Clock, TrendingUp, ChevronLeft, ChevronRight, Download, Banknote,
-  CalendarCheck, Users, Sun, GraduationCap, Wallet, X, Loader2, ExternalLink,
+  CalendarCheck, Users, Sun, GraduationCap, Wallet, X, Loader2, ExternalLink, MinusCircle,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
 import { GestorBookingDetail } from './GestorBookingDetail';
@@ -18,7 +18,7 @@ interface SimpleRevenueProps {
   onOpenAgenda?: (date: string) => void;
 }
 
-type Kind = 'partida_fechada' | 'partida_aberta' | 'day_use' | 'aula' | 'reserva';
+type Kind = 'partida_fechada' | 'partida_aberta' | 'day_use' | 'aula' | 'reserva' | 'ajuste';
 type ShownKind = Exclude<Kind, 'reserva'>;
 /** Reserva antiga (sem partida ligada) aparece como partida fechada. */
 const shownKind = (k: Kind): ShownKind => (k === 'reserva' ? 'partida_fechada' : k);
@@ -53,9 +53,11 @@ const KIND: Record<ShownKind, { label: string; icon: typeof CalendarCheck; color
   partida_aberta: { label: 'Partidas abertas', icon: Users,        color: 'text-blue-600 bg-blue-50' },
   day_use:        { label: 'Day use',          icon: Sun,          color: 'text-sky-600 bg-sky-50' },
   aula:           { label: 'Aulas',            icon: GraduationCap, color: 'text-amber-600 bg-amber-50' },
+  // Desconto no repasse (ex.: taxa do Stripe de reembolso quando o clube cancela depois da cobrança)
+  ajuste:         { label: 'Ajustes',          icon: MinusCircle,  color: 'text-red-600 bg-red-50' },
 };
 
-const ENTRY_LABEL: Record<ShownKind, string> = { partida_fechada: 'Partida fechada', partida_aberta: 'Partida aberta', day_use: 'Day use', aula: 'Aula' };
+const ENTRY_LABEL: Record<ShownKind, string> = { partida_fechada: 'Partida fechada', partida_aberta: 'Partida aberta', day_use: 'Day use', aula: 'Aula', ajuste: 'Ajuste no repasse' };
 
 // Situações com o termo equivalente do Stripe (painel em português)
 const STATUS: Record<Status, { label: string; pill: string; stripe: string }> = {
@@ -304,7 +306,7 @@ export function SimpleRevenue({ venueId, onOpenAgenda }: SimpleRevenueProps) {
                 {listed.map(e => {
                   const K = KIND[shownKind(e.kind)];
                   return (
-                    <button key={`${e.kind}-${e.ref_id}-${e.event_at}`} onClick={() => setStatement(e)}
+                    <button key={`${e.kind}-${e.ref_id}-${e.event_at}`} onClick={() => e.kind !== 'ajuste' && setStatement(e)}
                       className="w-full text-left flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors">
                       <span className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${K.color}`}><K.icon className="w-4 h-4" /></span>
                       <div className="w-16 flex-shrink-0 text-sm">
@@ -313,9 +315,9 @@ export function SimpleRevenue({ venueId, onOpenAgenda }: SimpleRevenueProps) {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className={`text-sm font-medium truncate ${e.status === 'cancelado' ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{e.who}</p>
-                        <p className="text-xs text-gray-500 truncate">{ENTRY_LABEL[shownKind(e.kind)]}{e.kind === 'aula' || e.kind === 'day_use' ? ` · ${e.title}` : ''} · {e.court_name}</p>
+                        <p className="text-xs text-gray-500 truncate">{e.kind === 'ajuste' ? e.title : <>{ENTRY_LABEL[shownKind(e.kind)]}{e.kind === 'aula' || e.kind === 'day_use' ? ` · ${e.title}` : ''} · {e.court_name}</>}</p>
                       </div>
-                      <span className={`hidden sm:inline text-[11px] font-semibold px-2 py-0.5 rounded-full ${STATUS[e.status].pill}`}>{STATUS[e.status].label}</span>
+                      <span className={`hidden sm:inline text-[11px] font-semibold px-2 py-0.5 rounded-full ${e.kind === 'ajuste' ? 'bg-red-100 text-red-700' : STATUS[e.status].pill}`}>{e.kind === 'ajuste' ? 'Desconto' : STATUS[e.status].label}</span>
                       <span className={`w-24 text-right text-sm font-bold tabular-nums ${e.status === 'cancelado' ? 'text-gray-300' : 'text-gray-900'}`}>{brl(e.amount)}</span>
                     </button>
                   );
@@ -424,10 +426,10 @@ function PayoutCard({ payout, onOpen }: { payout: Payout; onOpen: (e: Entry) => 
       {showItems && (
         <div className="border-t border-gray-100 divide-y divide-gray-100">
           {payout.due_items.map(e => (
-            <button key={`${e.kind}-${e.ref_id}-${e.event_at}`} onClick={() => onOpen(e)}
+            <button key={`${e.kind}-${e.ref_id}-${e.event_at}`} onClick={() => e.kind !== 'ajuste' && onOpen(e)}
               className="w-full text-left flex items-center gap-3 px-5 py-2.5 hover:bg-gray-50 text-sm">
               <span className="w-14 text-gray-500 tabular-nums">{wallDay(e.event_at)}</span>
-              <span className="flex-1 truncate text-gray-900">{e.who} <span className="text-gray-400">· {ENTRY_LABEL[shownKind(e.kind)]} · {e.court_name}</span></span>
+              <span className="flex-1 truncate text-gray-900">{e.who} <span className="text-gray-400">· {e.kind === 'ajuste' ? e.title : `${ENTRY_LABEL[shownKind(e.kind)]} · ${e.court_name}`}</span></span>
               <span className="font-semibold tabular-nums">{brl(Number(e.amount))}</span>
             </button>
           ))}

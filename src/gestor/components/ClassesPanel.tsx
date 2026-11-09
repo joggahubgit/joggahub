@@ -345,6 +345,9 @@ export function ClassDetailModal({ classId, onClose, onCancelled }: { classId: s
                   <AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
                   Os horários voltam a ficar livres na agenda{active.length ? ` e os ${active.length} aluno(s) recebem o valor total de volta` : ''}. Não dá para desfazer.
                 </p>
+                {active.length > 0 && (
+                  <p className="text-xs text-gray-500">Quem ainda está só com o valor reservado é liberado sem custo. Se alguém já foi cobrado, a taxa do Stripe desse pagamento (cerca de 4% do valor), que o Stripe não devolve, é descontada do seu próximo repasse.</p>
+                )}
                 <div className="flex gap-2">
                   <button onClick={() => setConfirming(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-semibold text-sm">Voltar</button>
                   <button onClick={cancelClass} disabled={cancelling} className="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-bold text-sm disabled:opacity-60">

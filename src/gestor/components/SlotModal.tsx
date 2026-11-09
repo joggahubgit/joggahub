@@ -550,7 +550,7 @@ export function SlotModal({ slot, courtName, onClose, onRefresh }: Props) {
                     <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-3">
                       <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
                       <p className="text-sm text-amber-800">
-                        Esta reserva foi <strong>paga</strong>. O sistema tentará processar o reembolso de R$ {slot.booking.total_price} automaticamente via Stripe. Caso não seja possível, o reembolso deverá ser feito manualmente.
+                        Esta reserva foi <strong>paga</strong>. O jogador recebe R$ {slot.booking.total_price} de volta. Se o valor já tinha sido cobrado, a taxa do Stripe desse pagamento (cerca de 4%), que o Stripe não devolve, é descontada do seu próximo repasse. Se ainda estava só reservado no cartão, é liberado sem custo.
                       </p>
                     </div>
                   )}

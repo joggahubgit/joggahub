@@ -396,6 +396,7 @@ export function OpenGameModal({ gameId, slotId, courtName, onClose, onRefresh }:
                     <p className="text-sm text-red-700">
                       Esta ação é irreversível. Todos os jogadores serão removidos da partida.
                     </p>
+                    <p className="text-xs text-red-700 mt-2">Os jogadores recebem tudo de volta. Quem ainda está só com o valor reservado no cartão é liberado sem custo. Se alguém já foi cobrado, a taxa do Stripe desse pagamento (cerca de 4% do valor), que o Stripe não devolve, é descontada do seu próximo repasse.</p>
                     {paidPlayers.length > 0 && (
                       <div className="mt-3 pt-3 border-t border-red-200">
                         <p className="text-sm font-semibold text-red-800 mb-2">

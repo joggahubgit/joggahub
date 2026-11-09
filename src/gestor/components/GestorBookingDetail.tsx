@@ -301,7 +301,7 @@ export function GestorBookingDetail({ bookingId, onClose, onChanged }: Props) {
                       {isPaid && (
                         <div className="flex items-start gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                           <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                          Reserva paga — o sistema tentará reembolso automático via Stripe.
+                          O jogador recebe tudo de volta. Se o valor ainda está só reservado no cartão, é liberado sem custo. Se já foi cobrado, a taxa do Stripe desse pagamento (cerca de 4% do valor), que o Stripe não devolve, é descontada do seu próximo repasse.
                         </div>
                       )}
                       <p className="text-xs text-red-600">O horário será liberado e o jogador notificado.</p>

@@ -1,3 +1,4 @@
+import { recordClubRefundFee } from '../_shared/clubFee.ts';
 import { wallMs, wallNowMs } from '../_shared/checkout.ts';
 import Stripe from 'https://esm.sh/stripe@14.21.0';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
@@ -164,7 +165,14 @@ serve(async (req) => {
       if (paymentIntentId) {
         try {
           const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
-          if (pi.status === 'succeeded') await stripe.refunds.create({ payment_intent: paymentIntentId });
+          if (pi.status === 'succeeded') {
+            await stripe.refunds.create({ payment_intent: paymentIntentId });
+            if (!byOwner) {
+              const { data: s1 } = await supabase.from('slots').select('courts(venue_id)').eq('id', booking.slot_id).maybeSingle();
+              // deno-lint-ignore no-explicit-any
+              await recordClubRefundFee(stripe, supabase, { piId: paymentIntentId, venueId: (s1 as any)?.courts?.venue_id, refKind: 'booking', refId: booking.id, what: 'reserva' });
+            }
+          }
           else if (pi.status !== 'canceled') await stripe.paymentIntents.cancel(paymentIntentId);
           stripeRefunded = true;
         } catch (e) {

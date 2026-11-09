@@ -12,8 +12,8 @@ const SECTIONS = [
   { title: '1. Aceitação dos Termos', content: 'Ao acessar e usar o JoggaHub, você concorda em cumprir e estar vinculado aos seguintes termos e condições de uso.' },
   { title: '2. Descrição do Serviço', content: 'O JoggaHub é uma plataforma digital que conecta jogadores amadores de futebol e facilita a reserva de quadras esportivas.' },
   { title: '3. Cadastro e Conta de Usuário', content: 'Para utilizar nossos serviços, você deve criar uma conta fornecendo informações precisas e completas. É obrigatório ter pelo menos 16 anos de idade.' },
-  { title: '4. Reservas e Pagamentos', content: 'Todas as reservas estão sujeitas à disponibilidade e confirmação. Os pagamentos são processados via Stripe com tecnologia de bloqueio temporário (hold): o valor é reservado no cartão no momento da inscrição e cobrado efetivamente apenas quando a partida for confirmada, conforme as regras de cada modalidade. A taxa de serviço JoggaHub (8% + R$ 2,50 por transação) é aplicada sobre o valor de cada jogador.' },
-  { title: '5. Política de Cancelamento', content: 'As regras de cancelamento variam por tipo de partida:\n\n• Partida Aberta: cancelamento com reembolso integral permitido até 24h antes do início. Após 24h, cancelamentos não são aceitos. Se o número mínimo de jogadores não for atingido até 2h antes do início, a partida é cancelada automaticamente e todos os bloqueios são liberados sem custo.\n\n• Partida Privada (Pagamento Total): o organizador pode cancelar com reembolso integral até 24h antes. Após 24h, o cancelamento é bloqueado e o valor é capturado automaticamente. Jogadores adicionados via link não têm custo e podem sair até 24h antes.\n\n• Partida Privada (Divisão): cancelamento com reembolso integral até 24h antes para todos os participantes. Após 24h, cancelamentos são bloqueados. A cobrança final ocorre 2h antes do início, proporcional ao número de jogadores confirmados — se o mínimo não for atingido, o organizador cobre a diferença.' },
+  { title: '4. Reservas e Pagamentos', content: 'Todas as reservas estão sujeitas à disponibilidade. Os pagamentos são processados pelo Stripe. Na maioria dos casos o valor fica apenas reservado (pré-autorizado) no seu cartão e só é cobrado perto do horário:\n\n• Partida aberta, partida fechada com divisão, day use e curso: cobrança 2h antes do início (no curso, da primeira aula). Na partida aberta e na divisão, o valor cobrado pode ser menor que o reservado, conforme o número de jogadores confirmados.\n\n• Partida fechada com pagamento total: cobrança 24h antes do início.\n\n• Reservas feitas com mais de 6 dias de antecedência: nada é cobrado na hora. Seu cartão fica salvo e o valor é reservado automaticamente 6 dias antes do início. Se o banco recusar, você é avisado e tem 24h para pagar pelo app ("Pagar agora"); sem o pagamento, a vaga é cancelada.\n\n• A taxa de serviço JoggaHub (8% + R$ 2,50 por transação) é somada ao valor de cada jogador e aparece antes do pagamento. Todos os horários e prazos seguem o horário de Brasília.' },
+  { title: '5. Política de Cancelamento', content: '• Desistência pelo jogador: sem custo até 24h antes do início (no curso, da primeira aula). Se o valor estava só reservado, ele é liberado; se já tinha sido cobrado, é reembolsado integralmente.\n\n• Depois desse prazo, não é possível desistir pelo app. O clube pode autorizar a saída: nesse caso você recebe tudo de volta, menos a taxa de serviço JoggaHub.\n\n• Partida aberta que não atingir o mínimo de jogadores até 2h antes do início é cancelada automaticamente, e os valores reservados são liberados sem custo.\n\n• Partida fechada com divisão: se o mínimo de jogadores não for atingido até a cobrança, o organizador cobre a diferença. Na partida fechada com pagamento total, os jogadores adicionados pelo link não pagam nada.\n\n• Cancelamento pelo clube: você recebe o valor integral de volta, inclusive a taxa de serviço.\n\n• Reembolsos voltam para o mesmo cartão, e o prazo de crédito depende do banco. Valores que estavam apenas reservados são liberados pelo banco, normalmente em poucos dias.' },
   { title: '6. Conduta do Usuário', content: 'Você concorda em usar o JoggaHub apenas para fins legais. É proibido publicar conteúdo ofensivo, usar a plataforma para atividades fraudulentas ou fazer reservas falsas.' },
   { title: '7. Responsabilidades e Limitações', content: 'O JoggaHub atua como intermediário entre jogadores e quadras esportivas. Não somos responsáveis por lesões ou danos ocorridos durante os jogos.' },
   { title: '8. Propriedade Intelectual', content: 'Todo o conteúdo disponível no JoggaHub é propriedade do JoggaHub ou de seus fornecedores e está protegido por leis de direitos autorais.' },
@@ -24,8 +24,9 @@ const SECTIONS = [
 
 const POINTS = [
   'Idade mínima de 16 anos para usar a plataforma',
-  'Cancelamento com reembolso integral até 24h antes — após isso, sem reembolso',
-  'O valor é bloqueado no cartão e cobrado apenas quando a partida for confirmada',
+  'Desistência sem custo até 24h antes do início',
+  'O valor fica reservado no cartão e é cobrado perto do horário; com mais de 6 dias de antecedência, o cartão fica salvo e a reserva é feita 6 dias antes',
+  'Se o clube cancelar, você recebe tudo de volta',
   'Conduta respeitosa é obrigatória',
 ];
 
@@ -46,7 +47,7 @@ export default function Terms() {
             </View>
             <View className="flex-1">
               <Text className="text-xl font-bold mb-2 text-white">Termos de Uso do JoggaHub</Text>
-              <Text className="text-sm text-violet-100">Última atualização: 15 de julho de 2026</Text>
+              <Text className="text-sm text-violet-100">Última atualização: 9 de novembro de 2026</Text>
             </View>
           </View>
           <Text className="text-sm text-violet-50">Leia atentamente estes termos antes de utilizar nossos serviços.</Text>

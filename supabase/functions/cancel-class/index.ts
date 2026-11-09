@@ -3,6 +3,7 @@
 // marca as inscrições como canceladas e avisa os alunos.
 // Só o admin do clube do curso pode chamar.
 
+import { recordClubRefundFee } from '../_shared/clubFee.ts';
 import Stripe from 'https://esm.sh/stripe@14.21.0';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -55,6 +56,10 @@ serve(async (req) => {
           const pi = await stripe.paymentIntents.retrieve(row.payment_intent_id);
           if (pi.status === 'succeeded') {
             await stripe.refunds.create({ payment_intent: pi.id }, { idempotencyKey: `class-cancel-${row.enrollment_id}` });
+            await recordClubRefundFee(stripe, db, {
+              piId: pi.id, venueId: cls.venue_id, refKind: 'class', refId: cls.id,
+              what: `${cls.kind === 'day_use' ? 'day use' : 'curso'} ${cls.title}`,
+            });
           } else if (pi.status !== 'canceled') {
             await stripe.paymentIntents.cancel(pi.id);
           }

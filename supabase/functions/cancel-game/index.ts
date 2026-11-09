@@ -1,3 +1,4 @@
+import { recordClubRefundFee } from '../_shared/clubFee.ts';
 import { wallMs, wallNowMs } from '../_shared/checkout.ts';
 import Stripe from 'https://esm.sh/stripe@14.21.0';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
@@ -12,11 +13,14 @@ const corsHeaders = {
 const CANCEL_CUTOFF_HOURS = 24;
 
 // Cancel hold (requires_capture) or refund if already captured
-async function cancelOrReleasePi(stripe: Stripe, piId: string): Promise<void> {
+/** Libera a retenção (sem custo) ou reembolsa a cobrança. Diz qual dos dois. */
+async function cancelOrReleasePi(stripe: Stripe, piId: string): Promise<'released' | 'refunded'> {
   try {
     await stripe.paymentIntents.cancel(piId);
+    return 'released';
   } catch (_) {
     await stripe.refunds.create({ payment_intent: piId });
+    return 'refunded';
   }
 }
 
@@ -133,11 +137,18 @@ serve(async (req) => {
       ? await supabase.from('slots').select('court_id, start_time').eq('id', slotId).single()
       : { data: null };
 
+    // Clube cancelando: a taxa do Stripe de quem já foi cobrado sai do repasse
+    let clubVenueId: string | null = null;
+    const clubFee = (piId: string, how: 'released' | 'refunded') => how === 'refunded' && !isOrganizerCancelling
+      ? recordClubRefundFee(stripe, supabase, { piId, venueId: clubVenueId, refKind: 'game', refId: gameId, what: 'partida' })
+      : Promise.resolve();
+
     if (!isOrganizerCancelling) {
       if (!slotId || !slotData) {
         return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: corsHeaders });
       }
       const { data: courtData } = await supabase.from('courts').select('venue_id').eq('id', slotData.court_id ?? '').single();
+      clubVenueId = courtData?.venue_id ?? null;
       const { data: venueData } = await supabase.from('venues').select('admin_id').eq('id', courtData?.venue_id ?? '').single();
       if (venueData?.admin_id !== callerId) {
         return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: corsHeaders });
@@ -208,7 +219,7 @@ serve(async (req) => {
 
       if (paymentIntentId) {
         try {
-          await cancelOrReleasePi(stripe, paymentIntentId);
+          await clubFee(paymentIntentId, await cancelOrReleasePi(stripe, paymentIntentId));
           refunds.push({ name: 'Organizador', status: 'released' });
         } catch (e: any) {
           refunds.push({ name: 'Organizador', status: e.message ?? 'error' });
@@ -232,7 +243,7 @@ serve(async (req) => {
 
       for (const gp of playersWithPI ?? []) {
         try {
-          await cancelOrReleasePi(stripe, gp.stripe_payment_intent_id!);
+          await clubFee(gp.stripe_payment_intent_id!, await cancelOrReleasePi(stripe, gp.stripe_payment_intent_id!));
           refunds.push({ name: gp.player_name, status: 'released' });
         } catch (e: any) {
           console.error('[cancel-game] RELEASE FAILED — refund manually', gp.stripe_payment_intent_id, e);
@@ -253,7 +264,7 @@ serve(async (req) => {
               : orgSession.payment_intent?.id;
           }
           if (orgPI) {
-            await cancelOrReleasePi(stripe, orgPI);
+            await clubFee(orgPI, await cancelOrReleasePi(stripe, orgPI));
             refunds.push({ name: 'Organizador', status: 'released' });
           }
         } catch (e: any) {
