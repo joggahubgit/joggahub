@@ -135,7 +135,7 @@ export default function Privacy() {
         <View className="bg-purple-50 border border-purple-200 rounded-xl p-4">
           <Text className="font-semibold text-purple-900 mb-2 text-base">Encarregado de Dados (DPO)</Text>
           <Text className="text-sm text-purple-800">
-            <Text className="text-sm font-bold text-purple-800">E-mail:</Text> privacidade@joggahub.com
+            <Text className="text-sm font-bold text-purple-800">E-mail:</Text> info@joggahub.com
           </Text>
           <Text className="text-sm text-purple-800">
             <Text className="text-sm font-bold text-purple-800">Telefone:</Text> +353 83 085 9505

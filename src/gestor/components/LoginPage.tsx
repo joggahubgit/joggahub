@@ -61,7 +61,7 @@ export function LoginPage() {
 
           <p className="text-center text-xs text-gray-400 pt-2">
             Para cadastrar seu clube,{' '}
-            <a href="mailto:contato@joggahub.com" className="text-purple-600 hover:underline">
+            <a href="mailto:info@joggahub.com" className="text-purple-600 hover:underline">
               entre em contato com a JoggaHub
             </a>
           </p>

@@ -19,7 +19,7 @@ const SECTIONS = [
   { title: '8. Propriedade Intelectual', content: 'Todo o conteúdo disponível no JoggaHub é propriedade do JoggaHub ou de seus fornecedores e está protegido por leis de direitos autorais.' },
   { title: '9. Modificações dos Termos', content: 'Reservamo-nos o direito de modificar estes termos a qualquer momento. Alterações significativas serão notificadas através do aplicativo ou por e-mail.' },
   { title: '10. Lei Aplicável', content: 'Estes termos são regidos pelas leis da República Federativa do Brasil. Qualquer disputa será resolvida nos tribunais da comarca de São Paulo, SP.' },
-  { title: '11. Contato', content: 'Para questões sobre estes termos, entre em contato através do e-mail juridico@joggahub.com ou pelo telefone +353 83 085 9505.' },
+  { title: '11. Contato', content: 'Para questões sobre estes termos, entre em contato através do e-mail info@joggahub.com ou pelo telefone +353 83 085 9505.' },
 ];
 
 const POINTS = [
