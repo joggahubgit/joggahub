@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Ban, GraduationCap, Users } from 'lucide-react';
+import { brNow } from '@/app/lib/wallClock';
 
 /**
  * Shared time grid for the gestor agenda. Each column is one court on one
@@ -78,7 +79,7 @@ export function localDateStr(d: Date) {
 }
 
 function nowMinutes() {
-  const d = new Date();
+  const d = brNow();
   return d.getHours() * 60 + d.getMinutes();
 }
 
@@ -223,7 +224,7 @@ interface Props {
 export function ScheduleGrid({ columns, columnWidth, headerHeight, filter = 'all', maxHeight, scrollKey, netCourtPrice, onEmptyCellClick, onSlotClick }: Props) {
   const now = useNowMinutes();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const todayStr = localDateStr(new Date());
+  const todayStr = localDateStr(brNow());
 
   const blocks = useMemo(() => columns.map(c => buildBlocks(c.slots)), [columns]);
 

@@ -10,6 +10,7 @@ import {
 import { supabase } from '@/lib/supabase-gestor';
 import { GestorBookingDetail } from './GestorBookingDetail';
 import { ClassDetailModal } from './ClassesPanel';
+import { brNow } from '@/app/lib/wallClock';
 
 interface SimpleRevenueProps {
   venueId: string | null;
@@ -78,7 +79,7 @@ const wallDay = (iso: string) => `${iso.substring(8, 10)}/${iso.substring(5, 7)}
 const wallHour = (iso: string) => iso.substring(11, 16);
 
 export function SimpleRevenue({ venueId, onOpenAgenda }: SimpleRevenueProps) {
-  const now = new Date();
+  const now = brNow();
   const [month, setMonth] = useState({ y: now.getFullYear(), m: now.getMonth() });
   const [court, setCourt] = useState<string>('all');
   const [showCancelled, setShowCancelled] = useState(false);
@@ -367,7 +368,7 @@ function Kpi({ icon: Icon, tone, label, value, hint, onClick, active }: {
 // e o histórico, com a regra escrita para não criar expectativa errada.
 
 function nextMonday() {
-  const d = new Date();
+  const d = brNow();
   const add = ((8 - d.getDay()) % 7) || 7;
   d.setDate(d.getDate() + add);
   return d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' });

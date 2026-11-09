@@ -5,6 +5,7 @@ import { classLevelLabel, formatBRL, formatSessionDate } from '@/app/lib/classSc
 import { CreateClassModal } from './CreateClassModal';
 import { localDateStr } from './ScheduleGrid';
 import { AuthorizeLateCancel, inLateCancelWindow } from './AuthorizeLateCancel';
+import { brNow } from '@/app/lib/wallClock';
 
 interface ClassRow {
   id: string;
@@ -42,7 +43,7 @@ export function ClassesPanel({ venueId, openClassId, onOpenedClass }: Props) {
   const [showCreate, setShowCreate] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [flash, setFlash] = useState('');
-  const today = localDateStr(new Date());
+  const today = localDateStr(brNow());
 
   const load = useCallback(async () => {
     const { data, error } = await supabase

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Trash2, CheckCircle, Plus } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
+import { brNow } from '@/app/lib/wallClock';
 
 const DAY_NAMES = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 const WEEKDAYS = [1, 2, 3, 4, 5];
@@ -51,7 +52,7 @@ function countDays(from: string, to: string, dows: number[]) {
 }
 
 function localIso(offsetDays = 0) {
-  const d = new Date();
+  const d = brNow();
   d.setDate(d.getDate() + offsetDays);
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }

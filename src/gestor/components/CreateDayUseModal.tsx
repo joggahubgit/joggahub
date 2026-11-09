@@ -5,6 +5,7 @@ import { X, CheckCircle, AlertCircle, Sun } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
 import { classServiceFee, formatBRL, formatSessionDate } from '@/app/lib/classSchedule';
 import { localDateStr } from './ScheduleGrid';
+import { brNow } from '@/app/lib/wallClock';
 
 interface Props {
   venueId: string;
@@ -25,7 +26,7 @@ const label = 'text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.
 const toMin = (t: string) => Number(t.substring(0, 2)) * 60 + Number(t.substring(3, 5));
 
 export function CreateDayUseModal({ venueId, initialCourtId, initialDate, initialStart, onClose, onCreated }: Props) {
-  const today = localDateStr(new Date());
+  const today = localDateStr(brNow());
   const [courts, setCourts] = useState<Court[]>([]);
   const [courtId, setCourtId] = useState('');
   const [title, setTitle] = useState('Day use');

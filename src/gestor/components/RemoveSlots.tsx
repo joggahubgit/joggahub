@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
 import { classSlotIds } from './classSlots';
+import { brNow } from '@/app/lib/wallClock';
 
 interface Props {
   onClose: () => void;
@@ -30,12 +31,12 @@ const quickHours = [
 ];
 
 function isoToday() {
-  const d = new Date();
+  const d = brNow();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
 function isoOffset(days: number) {
-  const d = new Date();
+  const d = brNow();
   d.setDate(d.getDate() + days);
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }

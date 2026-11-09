@@ -24,6 +24,20 @@ export function realToWallMs(ms: number) {
 /** Horário gravado (wall clock) em ms, sem conversão de fuso. */
 export const wallMs = (iso: string) => Date.parse(`${iso.substring(0, 19)}Z`);
 
+/**
+ * "Agora" como Date cujos campos locais (getHours, getDate…) são a hora de
+ * Brasília, qualquer que seja o fuso do computador. Use no lugar de new Date()
+ * quando a tela precisa de "agora"/"hoje" do clube (agenda, calendário, prazos).
+ */
+export function brNow(): Date {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).formatToParts(new Date());
+  const p = Object.fromEntries(parts.map(x => [x.type, x.value]));
+  return new Date(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second);
+}
+
 /** "HH:MM" exactly as stored. */
 export function wallTime(iso: string) {
   return iso.substring(11, 16);

@@ -6,6 +6,7 @@ import {
   sessionsPayload, sortSessions, validateClassSessions, type ClassSession,
 } from '@/app/lib/classSchedule';
 import { localDateStr } from './ScheduleGrid';
+import { brNow } from '@/app/lib/wallClock';
 
 interface Props {
   venueId: string;
@@ -88,7 +89,7 @@ function MonthPicker({ selected, onToggle, today }: { selected: Set<string>; onT
 }
 
 export function CreateClassModal({ venueId, onClose, onCreated }: Props) {
-  const today = localDateStr(new Date());
+  const today = localDateStr(brNow());
   const [courts, setCourts] = useState<Court[]>([]);
   const [courtId, setCourtId] = useState('');
   const [title, setTitle] = useState('');

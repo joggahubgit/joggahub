@@ -12,6 +12,7 @@ import { ScheduleGrid, freeMinutesFrom, type GridColumn } from './ScheduleGrid';
 import { CLASSES_ENABLED } from '@/app/lib/features';
 import { CreateDayUseModal } from './CreateDayUseModal';
 import { ClassDetailModal } from './ClassesPanel';
+import { brNow } from '@/app/lib/wallClock';
 
 interface Props {
   venueId: string;
@@ -99,7 +100,7 @@ export function SmartBookingCalendar({ venueId, onNavigate, onOpenClass, initial
   const [courtSchedules, setCourtSchedules] = useState<CourtScheduleMap>({});
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('day');
-  const startDay = () => (initialDate ? new Date(`${initialDate}T12:00:00`) : new Date());
+  const startDay = () => (initialDate ? new Date(`${initialDate}T12:00:00`) : brNow());
   const [focusedDate, setFocusedDate] = useState(startDay);
   const [weekStart, setWeekStart] = useState(() => startOfWeek(startDay()));
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
@@ -127,7 +128,7 @@ export function SmartBookingCalendar({ venueId, onNavigate, onOpenClass, initial
     });
   }
 
-  const today = new Date();
+  const today = brNow();
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   const displayDays = viewMode === 'week' ? weekDays : [focusedDate];
   const displayCourts = selectedCourtId === 'all' ? courts : courts.filter(c => c.id === selectedCourtId);
@@ -315,7 +316,7 @@ export function SmartBookingCalendar({ venueId, onNavigate, onOpenClass, initial
   }
 
   function goToday() {
-    const now = new Date();
+    const now = brNow();
     setFocusedDate(now);
     setWeekStart(startOfWeek(now));
   }

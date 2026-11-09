@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { realToWallMs, wallMs, wallNowMs } from '../app/lib/wallClock';
+import { brNow, realToWallMs, wallMs, wallNowMs } from '../app/lib/wallClock';
 
 // Horários de partida são gravados na hora de Brasília ("20:00" fica "20:00+00").
 // O "agora" precisa estar na mesma convenção, senão tudo acontece 3h antes.
@@ -27,5 +27,11 @@ describe('agora em Brasília (wall clock)', () => {
     const diffH = (Date.now() - wallNowMs()) / 3600_000;
     expect(diffH).toBeGreaterThan(2.9);
     expect(diffH).toBeLessThan(3.1);
+  });
+
+  it('brNow: campos locais na hora de Brasília, em qualquer fuso do computador', () => {
+    const b = brNow();
+    const asWall = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate(), b.getHours(), b.getMinutes(), b.getSeconds());
+    expect(Math.abs(asWall - wallNowMs())).toBeLessThan(2000);
   });
 });

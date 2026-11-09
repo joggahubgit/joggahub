@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Check, Loader2, ChevronLeft } from 'lucide-react';
 import { supabase } from '@/lib/supabase-gestor';
 import { classSlotIds } from './classSlots';
+import { brNow } from '@/app/lib/wallClock';
 
 interface CreateAvailabilityProps {
   onClose: () => void;
@@ -50,7 +51,7 @@ function slotsInRange(start: string, end: string, duration: number): string[] {
 
 function getDatesForDays(from: string, weeks: number, dayIds: string[]): string[] {
   const dates: string[] = [];
-  const now = new Date();
+  const now = brNow();
   const start = new Date(from + 'T00:00:00');
   for (let i = 0; i < weeks * 7; i++) {
     const d = new Date(start);
@@ -111,7 +112,7 @@ export function CreateAvailability({ onClose, onSaved, venueId, prefill }: Creat
 
     setSaving(true);
     setError('');
-    const now = new Date();
+    const now = brNow();
     const dates = getDatesForDays(startDate, weeks, days);
     const rows: object[] = [];
 
@@ -175,7 +176,7 @@ export function CreateAvailability({ onClose, onSaved, venueId, prefill }: Creat
   async function saveSingle() {
     if (!courtId || !singleDate || !singleStart) { setError('Preencha todos os campos.'); return; }
     const startISO = `${singleDate}T${singleStart}:00`;
-    if (new Date(startISO) <= new Date()) { setError('Não é possível criar um horário no passado.'); return; }
+    if (new Date(startISO) <= brNow()) { setError('Não é possível criar um horário no passado.'); return; }
 
     setSaving(true);
     setError('');
