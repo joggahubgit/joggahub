@@ -9,7 +9,7 @@ import { classEnrolledEmail, sendEmail } from '../../lib/emailTemplates';
 import { CLASS_CAPTURE_HOURS, CLASS_LEAVE_HOURS, formatSessionDate, wallDateTimeLabel } from '../../lib/classSchedule';
 
 /** Email de confirmação para o próprio aluno (só na primeira vez que a inscrição é criada). */
-async function sendClassEmail(classId: string, sessionId: string) {
+async function sendClassEmail(classId: string, sessionId: string, scheduledHoldAt?: string) {
   try {
     const key = `class_email_${sessionId}`;
     if (localStorage.getItem(key)) return;
@@ -27,6 +27,7 @@ async function sendClassEmail(classId: string, sessionId: string) {
     await sendEmail(user.email, isDayUse ? 'Você está no day use! 🏐' : 'Inscrição confirmada no JoggaHub 🎓', classEnrolledEmail({
       dayUse: isDayUse,
       held: !!e?.payment_held,
+      holdOn: scheduledHoldAt ? wallDateTimeLabel(scheduledHoldAt) : undefined,
       chargeAt: first ? wallDateTimeLabel(first, CLASS_CAPTURE_HOURS) : undefined,
       leaveUntil: first ? wallDateTimeLabel(first, CLASS_LEAVE_HOURS) : undefined,
       title: cls.title,
@@ -43,7 +44,7 @@ async function sendClassEmail(classId: string, sessionId: string) {
 }
 
 type State = { kind: 'waiting' }
-  | { kind: 'done'; classId: string; dayUse: boolean; held: boolean; chargeAt?: string; leaveUntil?: string }
+  | { kind: 'done'; classId: string; dayUse: boolean; held: boolean; chargeAt?: string; leaveUntil?: string; holdOn?: string }
   | { kind: 'failed'; error: string };
 
 export default function ClassPaymentSuccess() {
@@ -70,11 +71,12 @@ export default function ClassPaymentSuccess() {
         const first = f?.starts_at as string | undefined;
         setState({
           kind: 'done', classId: data.classId, dayUse: k?.kind === 'day_use', held: !!en?.payment_held,
+          holdOn: data.scheduled?.holdAt ? wallDateTimeLabel(data.scheduled.holdAt) : undefined,
           chargeAt: first ? wallDateTimeLabel(first, CLASS_CAPTURE_HOURS) : undefined,
           leaveUntil: first ? wallDateTimeLabel(first, CLASS_LEAVE_HOURS) : undefined,
         });
         // Sempre na primeira confirmação nesta tela (o webhook pode ter criado a inscrição antes)
-        sendClassEmail(data.classId, sessionId!);
+        sendClassEmail(data.classId, sessionId!, data.scheduled?.holdAt);
         return;
       }
       if (data?.status === 'failed') { setState({ kind: 'failed', error: data.error ?? 'Não foi possível concluir a inscrição.' }); return; }
@@ -104,7 +106,9 @@ export default function ClassPaymentSuccess() {
             <p className="font-bold text-gray-900 text-xl">Inscrição confirmada!</p>
             <p className="text-sm text-gray-500 mt-1">{state.dayUse ? 'Você está dentro do day use. Bom jogo!' : 'Sua vaga está garantida em todas as aulas.'}</p>
             <div className="mt-4 bg-gray-50 rounded-2xl p-4 text-left text-sm text-gray-600 space-y-1">
-              {state.held
+              {state.holdOn
+                ? <p><b className="text-gray-900">Nada foi cobrado agora.</b> Seu cartão ficou salvo: em <b className="text-gray-900">{state.holdOn}</b> reservamos o valor, que é cobrado em <b className="text-gray-900">{state.chargeAt}</b>. Se o banco recusar, avisamos e você tem 24h para pagar.</p>
+                : state.held
                 ? <p>O valor está <b className="text-gray-900">reservado no seu cartão</b> e só será cobrado em <b className="text-gray-900">{state.chargeAt}</b>.</p>
                 : <p>O pagamento foi <b className="text-gray-900">cobrado no seu cartão</b>.</p>}
               {state.leaveUntil && <p>Desistência sem custo até <b className="text-gray-900">{state.leaveUntil}</b>, pelo app.</p>}

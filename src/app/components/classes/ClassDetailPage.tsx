@@ -4,6 +4,7 @@ import { ArrowLeft, GraduationCap, MapPin, CalendarDays, Users, CheckCircle, Ale
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import BottomNav from '../BottomNav';
+import ScheduledStatusBanner, { useMyScheduledPayment } from '../payments/ScheduledStatusBanner';
 import { CLASS_ENROLL_CUTOFF_HOURS, CLASS_LEAVE_HOURS, classLevelLabel, classPaymentPlan, classServiceFee, formatBRL, formatSessionDate } from '../../lib/classSchedule';
 
 interface ClassFull {
@@ -45,6 +46,7 @@ export default function ClassDetailPage() {
   const [error, setError] = useState('');
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [notice, setNotice] = useState('');
+  const myScheduled = useMyScheduledPayment({ classId: id }, enrollment?.status);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -142,13 +144,17 @@ export default function ClassDetailPage() {
             <div>
               <p className="font-semibold text-violet-900">Você está inscrito</p>
               <p className="text-sm text-violet-700">
-                {enrollment!.payment_held && plan
+                {myScheduled
+                  ? <>Inscrição garantida com o cartão salvo.</>
+                  : enrollment!.payment_held && plan
                   ? <>{formatBRL(Number(enrollment!.amount_paid) + Number(enrollment!.service_fee))} reservado no seu cartão. Cobrado só em <b>{plan.chargeAt}</b>.</>
                   : <>Pago {formatBRL(Number(enrollment!.amount_paid) + Number(enrollment!.service_fee))}. Até a primeira aula!</>}
               </p>
             </div>
           </div>
         )}
+
+        {enrolled && <ScheduledStatusBanner payment={myScheduled} />}
 
         <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3 text-sm text-gray-700">
           <p className="flex items-start gap-3"><MapPin className="w-5 h-5 text-gray-400 flex-shrink-0" />
@@ -176,7 +182,7 @@ export default function ClassDetailPage() {
 
         <div className="bg-white rounded-2xl border border-gray-200 p-5 text-sm space-y-2">
           <p className="flex items-center gap-2 font-semibold text-gray-900"><Info className="w-4 h-4 text-violet-600" />Como funciona</p>
-          <p className="text-gray-600">Você paga o curso inteiro pelo app e garante a vaga em todas as aulas. Como nas partidas, o valor fica reservado no cartão e só é cobrado {CLASS_ENROLL_CUTOFF_HOURS}h antes da primeira aula{plan ? <> (<b>{plan.chargeAt}</b>)</> : null}. Se você se inscrever com mais de 6 dias de antecedência, a cobrança é feita na hora.</p>
+          <p className="text-gray-600">Você paga o curso inteiro pelo app e garante a vaga em todas as aulas. Como nas partidas, o valor fica reservado no cartão e só é cobrado {CLASS_ENROLL_CUTOFF_HOURS}h antes da primeira aula{plan ? <> (<b>{plan.chargeAt}</b>)</> : null}. Se faltar mais de 6 dias, nada é cobrado agora: seu cartão fica salvo e o valor é reservado 6 dias antes{plan && !plan.hold ? <> (<b>{plan.holdOn}</b>)</> : null}.</p>
           <p className="text-gray-600">Desistiu? Sem custo até {LEAVE_REFUND_HOURS}h antes da primeira aula{plan ? <> (<b>{plan.leaveUntil}</b>)</> : null}. Se o clube cancelar o curso, você recebe tudo de volta.</p>
           <p className="text-gray-600">As inscrições fecham {CLASS_ENROLL_CUTOFF_HOURS}h antes da primeira aula.</p>
         </div>
@@ -220,7 +226,7 @@ export default function ClassDetailPage() {
                   <p className="text-xs text-gray-500 mb-2">
                     {plan.hold
                       ? <>O valor fica reservado no cartão e só é cobrado em <b className="text-gray-700">{plan.chargeAt}</b>. Desistência sem custo até {plan.leaveUntil}.</>
-                      : <>A primeira aula é daqui a mais de 6 dias, então o valor é cobrado na hora. Desistência com reembolso total até {plan.leaveUntil}.</>}
+                      : <>Nada é cobrado agora: seu cartão fica salvo. Em <b className="text-gray-700">{plan.holdOn}</b> reservamos o valor e ele é cobrado em {plan.chargeAt}. Desistência sem custo até {plan.leaveUntil}.</>}
                   </p>
                 )}
                 <button onClick={enroll} disabled={busy}

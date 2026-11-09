@@ -8,6 +8,8 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { calcFees } from '@/app/lib/checkout';
 import { getMinPlayersForSport, getMaxPlayersForSport } from '@/app/lib/gameConfig';
+import ScheduledHoldNotice from './payments/ScheduledHoldNotice';
+import { scheduledHold } from '../lib/classSchedule';
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('pt-BR', {
@@ -285,6 +287,9 @@ export default function PrivateGameReview() {
           </div>
         )}
 
+        <ScheduledHoldNotice startIso={`${date}T${time}`} amount={holdTotal}
+          chargeText={payMode === 'full' ? 'cobrado 24h antes da partida' : 'o valor final é cobrado 2h antes da partida'} />
+
         {/* Security badge */}
         <div className="bg-violet-50 rounded-2xl p-4 border border-violet-100">
           <div className="flex items-start gap-3">
@@ -325,7 +330,9 @@ export default function PrivateGameReview() {
           Você será redirecionado para a página segura do Stripe
         </p>
         <p className="text-center text-xs text-gray-400 -mt-1">
-          R$ {holdTotal.toFixed(2)} retidos agora · cobrança real {payMode === 'full' ? '24h antes' : '2h antes'}
+          {scheduledHold(`${date}T${time}`).scheduled
+            ? <>Cartão salvo agora · R$ {holdTotal.toFixed(2)} reservados em {scheduledHold(`${date}T${time}`).holdOn}</>
+            : <>R$ {holdTotal.toFixed(2)} retidos agora · cobrança real {payMode === 'full' ? '24h antes' : '2h antes'}</>}
         </p>
 
       </div>

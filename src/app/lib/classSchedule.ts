@@ -37,11 +37,32 @@ export function wallDateTimeLabel(iso: string, minusHours = 0) {
   return `${WEEKDAY_LABELS[new Date(d).getUTCDay()].toLowerCase()}, ${day}/${m} às ${d.substring(11, 16)}`;
 }
 
+/** "Agora" em Brasília na convenção dos horários gravados (wall clock), em ms. */
+export function wallNowBrMs() {
+  const s = new Date().toLocaleString('sv-SE', { timeZone: 'America/Sao_Paulo' }).replace(' ', 'T');
+  return Date.parse(`${s}Z`);
+}
+
+/**
+ * Reserva com mais de 6 dias de antecedência: o cartão fica salvo e o valor é
+ * reservado automaticamente 6 dias antes do início (holdOn). Vale para partidas,
+ * cursos e day use.
+ */
+export function scheduledHold(startIso: string, nowWallMs = wallNowBrMs()) {
+  const startMs = Date.parse(`${startIso.substring(0, 19)}Z`);
+  return {
+    scheduled: startMs - nowWallMs > CLASS_HOLD_MAX_DAYS * 24 * 3600_000,
+    holdOn: wallDateTimeLabel(startIso, CLASS_HOLD_MAX_DAYS * 24),
+  };
+}
+
 /** Como fica o pagamento para quem se inscreve agora (nowWallMs = "agora" em wall clock). */
 export function classPaymentPlan(firstStartIso: string, nowWallMs: number) {
   const firstMs = Date.parse(`${firstStartIso.substring(0, 19)}Z`);
   return {
     hold: firstMs - nowWallMs <= CLASS_HOLD_MAX_DAYS * 24 * 3600_000,
+    /** Quando o valor é reservado, se faltar mais de 6 dias (cartão salvo) */
+    holdOn: wallDateTimeLabel(firstStartIso, CLASS_HOLD_MAX_DAYS * 24),
     chargeAt: wallDateTimeLabel(firstStartIso, CLASS_CAPTURE_HOURS),
     leaveUntil: wallDateTimeLabel(firstStartIso, CLASS_LEAVE_HOURS),
   };

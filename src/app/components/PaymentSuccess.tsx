@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { notify, notifyGamePlayers } from '@/app/lib/notify';
 import { getMinPlayersForSport, getMaxPlayersForSport } from '@/app/lib/gameConfig';
 import { sendEmail, bookingConfirmedEmail } from '@/app/lib/emailTemplates';
+import { formatBRL, wallDateTimeLabel } from '@/app/lib/classSchedule';
 
 async function sendBookingConfirmedEmail(bodyText: string, details: Parameters<typeof bookingConfirmedEmail>[1]) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -51,6 +52,8 @@ export default function PaymentSuccess() {
   const joinerTeam = params.get('team') ?? '';
 
   const [createdGameId, setCreatedGameId] = useState('');
+  // Cartão salvo (reserva com mais de 6 dias): valor reservado depois
+  const [scheduled, setScheduled] = useState<{ holdAt: string; amount: number } | null>(null);
 
   const [privateGameId, setPrivateGameId] = useState('');
   const [copied, setCopied] = useState(false);
@@ -79,8 +82,9 @@ export default function PaymentSuccess() {
           const id: string = data.gameId ?? '';
           if (data.kind === 'private_game') setPrivateGameId(id);
           else setCreatedGameId(id);
+          if (data.scheduled) setScheduled({ holdAt: data.scheduled.holdAt, amount: Number(data.scheduled.amount) });
           if (data.created) {
-            const body =
+            const base =
               data.kind === 'private_game'
                 ? payMode === 'split'
                   ? 'Sua partida privada foi criada. Compartilhe o link com os outros jogadores para eles confirmarem a parte deles.'
@@ -92,6 +96,9 @@ export default function PaymentSuccess() {
                 : mode === 'join_other'
                 ? `${playerName} foi adicionado à partida com sucesso.`
                 : 'Você está inscrito na partida. Boa sorte!';
+            const body = data.scheduled
+              ? `${base} Nada foi cobrado agora: seu cartão ficou salvo e em ${wallDateTimeLabel(data.scheduled.holdAt)} reservamos ${formatBRL(Number(data.scheduled.amount))} no cartão. Se o banco recusar, avisamos e você tem 24h para pagar.`
+              : base;
             sendBookingConfirmedEmail(body, { courtName, venueName, date, time, endTime, price });
           }
           setDone(true);
@@ -550,11 +557,17 @@ export default function PaymentSuccess() {
               {date && <p className="text-gray-600 capitalize">{date}</p>}
               {time && <p className="text-gray-600">{time}{endTime ? ` – ${endTime}` : ''}</p>}
               <p className="text-gray-500 pt-1 border-t border-gray-200">{maxPlayers} jogadores · {payMode === 'split' ? 'Divisão' : 'Você pagou tudo'}</p>
-              {price && (
+              {price && !scheduled && (
                 <p className="font-bold text-violet-600">
                   R$ {parseFloat(price).toFixed(2)} pago
                 </p>
               )}
+            </div>
+          )}
+
+          {scheduled && (
+            <div className="bg-sky-50 border border-sky-200 rounded-2xl p-4 text-left text-sm text-sky-900 mb-4">
+              <b>Nada foi cobrado agora.</b> Seu cartão ficou salvo: em <b>{wallDateTimeLabel(scheduled.holdAt)}</b> reservamos {formatBRL(scheduled.amount)} no cartão. Se o banco recusar, avisamos e você tem 24h para pagar.
             </div>
           )}
 
@@ -608,7 +621,7 @@ export default function PaymentSuccess() {
         <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
           <CheckCircle className="w-9 h-9 text-green-600" />
         </div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Pagamento confirmado!</h1>
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">{scheduled ? 'Vaga garantida!' : 'Pagamento confirmado!'}</h1>
         <p className="text-gray-500 text-sm mb-8">
           {mode === 'organizer'
             ? 'Sua partida foi criada e está aberta para outros jogadores!'
@@ -616,6 +629,11 @@ export default function PaymentSuccess() {
             ? `${playerName} foi adicionado à partida com sucesso.`
             : 'Você está inscrito na partida. Boa sorte!'}
         </p>
+          {scheduled && (
+            <div className="bg-sky-50 border border-sky-200 rounded-2xl p-4 text-left text-sm text-sky-900 mb-4">
+              <b>Nada foi cobrado agora.</b> Seu cartão ficou salvo: em <b>{wallDateTimeLabel(scheduled.holdAt)}</b> reservamos {formatBRL(scheduled.amount)} no cartão. Se o banco recusar, avisamos e você tem 24h para pagar.
+            </div>
+          )}
         <button
           onClick={() => navigate(`/open-game/${createdGameId || gameId}`, { replace: true })}
           className="w-full bg-violet-600 text-white py-4 rounded-2xl font-bold hover:bg-violet-700 transition-colors"

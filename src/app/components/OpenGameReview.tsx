@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { X, Clock, Users, MapPin, ShieldCheck, ChevronDown, ChevronUp, Loader2, CheckCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { redirectToCheckout, calcFees } from '@/app/lib/checkout';
+import ScheduledHoldNotice from './payments/ScheduledHoldNotice';
 
 interface GameState {
   slotId: string;
@@ -195,6 +196,9 @@ export default function OpenGameReview() {
             </div>
           </div>
         </div>
+
+        <ScheduledHoldNotice startIso={`${state.date}T${state.time}`} amount={total}
+          chargeText="cobrado 2h antes da partida; pode ficar menor se mais jogadores entrarem" />
 
         {/* Cancellation policy */}
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">

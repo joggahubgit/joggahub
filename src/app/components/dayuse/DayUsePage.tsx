@@ -6,6 +6,7 @@ import { ArrowLeft, Sun, MapPin, Clock, Users, CheckCircle, AlertTriangle, Info,
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import BottomNav from '../BottomNav';
+import ScheduledStatusBanner, { useMyScheduledPayment } from '../payments/ScheduledStatusBanner';
 import { CLASS_ENROLL_CUTOFF_HOURS, classPaymentPlan, classServiceFee, formatBRL, formatSessionDate } from '../../lib/classSchedule';
 import { wallNowMs } from '../classes/ClassDetailPage';
 import { SPORT_LABELS } from './dayUse';
@@ -42,6 +43,7 @@ export default function DayUsePage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const myScheduled = useMyScheduledPayment({ classId: id }, enrollment?.status);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -174,7 +176,9 @@ export default function DayUsePage() {
             <div>
               <p className="font-semibold text-sky-900">Você está dentro!</p>
               <p className="text-sm text-sky-700">
-                {enrollment!.payment_held
+                {myScheduled
+                  ? <>Vaga garantida com o cartão salvo.</>
+                  : enrollment!.payment_held
                   ? <>{formatBRL(Number(enrollment!.amount_paid) + Number(enrollment!.service_fee))} reservado no seu cartão. Cobrado só em <b>{plan.chargeAt}</b>.</>
                   : `Pago ${formatBRL(Number(enrollment!.amount_paid) + Number(enrollment!.service_fee))}. Bom jogo!`}
               </p>
@@ -236,9 +240,11 @@ export default function DayUsePage() {
           </div>
         )}
 
+        {enrollment?.status === 'active' && <ScheduledStatusBanner payment={myScheduled} />}
+
         <div className="bg-white rounded-2xl border border-gray-200 p-5 text-sm space-y-2">
           <p className="flex items-center gap-2 font-semibold text-gray-900"><Info className="w-4 h-4 text-sky-600" />Como funciona</p>
-          <p className="text-gray-600">Jogo livre organizado pelo clube. Cada jogador paga {formatBRL(Number(du.price))} + taxa pelo app, como nas partidas de futevôlei: o valor fica reservado no cartão e só é cobrado 2h antes do início (<b>{plan.chargeAt}</b>). Se você entrar com mais de 6 dias de antecedência, a cobrança é feita na hora.</p>
+          <p className="text-gray-600">Jogo livre organizado pelo clube. Cada jogador paga {formatBRL(Number(du.price))} + taxa pelo app, como nas partidas de futevôlei: o valor fica reservado no cartão e só é cobrado 2h antes do início (<b>{plan.chargeAt}</b>). Se faltar mais de 6 dias, nada é cobrado agora: seu cartão fica salvo e o valor é reservado 6 dias antes{!plan.hold ? <> (<b>{plan.holdOn}</b>)</> : null}.</p>
           <p className="text-gray-600">Desistiu? Sem custo até {DAY_USE_LEAVE_HOURS}h antes do início (<b>{plan.leaveUntil}</b>). Se o clube cancelar, você também recebe tudo de volta.</p>
           <p className="text-gray-600">As entradas fecham {CLASS_ENROLL_CUTOFF_HOURS}h antes do início. Não conta para o ranking.</p>
         </div>
@@ -278,7 +284,7 @@ export default function DayUsePage() {
               <p className="text-xs text-gray-500 mb-2">
                 {plan.hold
                   ? <>O valor fica reservado no cartão e só é cobrado em <b className="text-gray-700">{plan.chargeAt}</b>. Desistência sem custo até {plan.leaveUntil}.</>
-                  : <>Faltam mais de 6 dias, então o valor é cobrado na hora. Desistência com reembolso total até {plan.leaveUntil}.</>}
+                  : <>Nada é cobrado agora: seu cartão fica salvo. Em <b className="text-gray-700">{plan.holdOn}</b> reservamos o valor e ele é cobrado em {plan.chargeAt}. Desistência sem custo até {plan.leaveUntil}.</>}
               </p>
               <button onClick={join} disabled={busy} className="w-full bg-sky-600 text-white py-3.5 rounded-xl font-bold hover:bg-sky-700 disabled:opacity-60">
                 {busy ? 'Abrindo pagamento…' : `Entrar no day use · ${formatBRL(total)}`}

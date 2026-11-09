@@ -57,13 +57,19 @@ interface ClassEmailDetails {
   chargeAt?: string;
   /** Ex.: "sex, 13/11 às 19:00" — limite para desistir sem custo */
   leaveUntil?: string;
+  /** Cartão salvo (mais de 6 dias): quando o valor será reservado */
+  holdOn?: string;
 }
 
 function classPaymentLines(d: ClassEmailDetails, color: string, start: string) {
-  const amount = d.held
+  const amount = d.holdOn
+    ? `<p style="margin:8px 0 0; font-weight:700; color:${color}; padding-top:8px; border-top:1px solid #e5e7eb;">Valor: R$ ${escapeHtml(d.total)} (nada cobrado ainda)</p>`
+    : d.held
     ? `<p style="margin:8px 0 0; font-weight:700; color:${color}; padding-top:8px; border-top:1px solid #e5e7eb;">Reservado no cartão: R$ ${escapeHtml(d.total)}</p>`
     : `<p style="margin:8px 0 0; font-weight:700; color:${color}; padding-top:8px; border-top:1px solid #e5e7eb;">Pago: R$ ${escapeHtml(d.total)}</p>`;
-  const when = d.held
+  const when = d.holdOn
+    ? `<p style="margin:0 0 8px; font-size:14px; line-height:1.6; color:#111827;"><b>Nada foi cobrado agora.</b> Seu cartão ficou salvo: em <b>${escapeHtml(d.holdOn)}</b> reservamos o valor no cartão, e ele é cobrado em <b>${escapeHtml(d.chargeAt ?? `2h antes ${start}`)}</b>. Se o banco recusar, avisamos e você tem 24h para pagar.</p>`
+    : d.held
     ? `<p style="margin:0 0 8px; font-size:14px; line-height:1.6; color:#111827;">O valor fica <b>reservado no seu cartão</b> e só é cobrado em <b>${escapeHtml(d.chargeAt ?? `2h antes ${start}`)}</b> (2h antes ${start}).</p>`
     : '';
   const leave = `<p style="margin:0; font-size:13px; line-height:1.6; color:#6b7280;">Desistência sem custo até ${d.leaveUntil ? `<b>${escapeHtml(d.leaveUntil)}</b>` : `24h antes ${start}`}, pelo app${d.held ? ': a reserva é liberada no cartão' : ': reembolso total'}. Se o clube cancelar, você recebe tudo de volta.</p>`;

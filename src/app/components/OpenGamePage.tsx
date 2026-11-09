@@ -3,6 +3,8 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { ArrowLeft, Share2, MessageCircle, Calendar, CheckCircle, Copy, Loader2, MapPin, Search, X, Crown, Trash2, Zap, Shield, Clock, Lock } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { redirectToCheckout, calcFees } from '@/app/lib/checkout';
+import ScheduledHoldNotice from './payments/ScheduledHoldNotice';
+import ScheduledStatusBanner, { useMyScheduledPayment } from './payments/ScheduledStatusBanner';
 import { PLAYER_CANCEL_CUTOFF_HOURS, CAPTURE_CUTOFF_HOURS, getMinPlayersForSport } from '@/app/lib/gameConfig';
 import GameResultSubmit from './GameResultSubmit';
 import BottomNav from './BottomNav';
@@ -74,7 +76,8 @@ export default function OpenGamePage() {
   const [leaving, setLeaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [gameStatus, setGameStatus] = useState<'scheduled' | 'confirmed_booking' | 'pending_results' | 'completed' | 'expired'>('scheduled');
-  const [gameStartTime, setGameStartTime] = useState<string | null>(null); // ISO UTC from slots.start_time
+  const [gameStartTime, setGameStartTime] = useState<string | null>(null);
+  const myScheduled = useMyScheduledPayment({ gameId: id }); // ISO UTC from slots.start_time
   const [withinCancelCutoff, setWithinCancelCutoff] = useState(false); // true = player cannot self-cancel
   const [withinJoinCutoff, setWithinJoinCutoff] = useState(false); // true = no new players allowed (< CAPTURE_CUTOFF_HOURS)
   const [isPrivate, setIsPrivate] = useState(false);
@@ -611,6 +614,9 @@ export default function OpenGamePage() {
             </button>
           </div>
         )}
+
+        {/* Cartão salvo: pagamento agendado / pendente (só para o próprio jogador) */}
+        {isEnrolled && <ScheduledStatusBanner payment={myScheduled} className="mx-5 mt-4" />}
 
         {/* Enrolled banner */}
         {isEnrolled && gameStatus === 'scheduled' && (
@@ -1183,6 +1189,11 @@ export default function OpenGamePage() {
                 </div>
               </div>
             </div>
+
+            {gameStartTime && (
+              <ScheduledHoldNotice className="mb-4" startIso={gameStartTime} amount={calcFees(pricePerPlayer).total}
+                chargeText="cobrado 2h antes da partida; pode ficar menor se mais jogadores entrarem" />
+            )}
 
             {joinError && (
               <p className="text-sm text-red-500 bg-red-50 rounded-xl px-4 py-3 mb-4 border border-red-100">{joinError}</p>
