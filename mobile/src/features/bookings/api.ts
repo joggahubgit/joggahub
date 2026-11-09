@@ -4,7 +4,7 @@
  * the same corrections are applied to the displayed status only.
  */
 import { supabase } from '@/lib/supabase';
-import { getMinPlayersForSport, PLAYER_CANCEL_CUTOFF_HOURS } from '@/lib/shared';
+import { getMinPlayersForSport, PLAYER_CANCEL_CUTOFF_HOURS, wallMs, wallNowMs } from '@/lib/shared';
 
 export type BookingType = 'slot' | 'game_organizer' | 'game_player';
 
@@ -24,7 +24,7 @@ export interface BookingItem {
   withinCancelCutoff: boolean;
 }
 
-const cutoff = (iso: string | null) => (iso ? new Date(iso).getTime() - Date.now() : Infinity) < PLAYER_CANCEL_CUTOFF_HOURS * 3_600_000;
+const cutoff = (iso: string | null) => (iso ? wallMs(iso) - wallNowMs() : Infinity) < PLAYER_CANCEL_CUTOFF_HOURS * 3_600_000;
 const unique = (xs: (string | null | undefined)[]) => [...new Set(xs.filter(Boolean) as string[])];
 
 async function namesFor(courtIds: string[]) {

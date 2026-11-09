@@ -8,6 +8,7 @@ import ScheduledStatusBanner, { useMyScheduledPayment } from './payments/Schedul
 import { PLAYER_CANCEL_CUTOFF_HOURS, CAPTURE_CUTOFF_HOURS, getMinPlayersForSport } from '@/app/lib/gameConfig';
 import GameResultSubmit from './GameResultSubmit';
 import BottomNav from './BottomNav';
+import { wallMs, wallNowMs } from '@/app/lib/wallClock';
 
 const SPORT_LABELS: Record<string, string> = {
   football: 'Society', society: 'Society', futsal: 'Futsal',
@@ -232,7 +233,7 @@ export default function OpenGamePage() {
         if (endTimeVal && !passed?.endTime) setEndTime(endTimeVal.substring(11, 16));
         if (slot?.start_time) {
           setGameStartTime(slot.start_time);
-          const msUntilStart = new Date(slot.start_time).getTime() - Date.now();
+          const msUntilStart = wallMs(slot.start_time) - wallNowMs();
           setWithinCancelCutoff(msUntilStart < PLAYER_CANCEL_CUTOFF_HOURS * 60 * 60 * 1000);
           setWithinJoinCutoff(msUntilStart < CAPTURE_CUTOFF_HOURS * 60 * 60 * 1000);
         }

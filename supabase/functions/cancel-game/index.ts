@@ -1,3 +1,4 @@
+import { wallMs, wallNowMs } from '../_shared/checkout.ts';
 import Stripe from 'https://esm.sh/stripe@14.21.0';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -145,7 +146,7 @@ serve(async (req) => {
 
     // ── Cutoff: organizer self-cancel is blocked within 24h of start; the venue admin can still act ──
     if (isOrganizerCancelling && slotData?.start_time) {
-      const hoursUntil = (new Date(slotData.start_time).getTime() - Date.now()) / (1000 * 60 * 60);
+      const hoursUntil = (wallMs(slotData.start_time) - wallNowMs()) / (1000 * 60 * 60);
       if (hoursUntil < CANCEL_CUTOFF_HOURS) {
         return new Response(
           JSON.stringify({ error: `Cancelamento não permitido dentro das ${CANCEL_CUTOFF_HOURS}h anteriores à partida. Entre em contato com o clube.` }),

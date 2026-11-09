@@ -36,6 +36,7 @@
  *   );
  */
 
+import { wallMs, wallNowMs } from '../_shared/checkout.ts';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -233,8 +234,8 @@ serve(async (req) => {
 
         if (!slot?.start_time) continue;
 
-        const now = Date.now();
-        const startMs = new Date(slot.start_time).getTime();
+        const now = wallNowMs();
+        const startMs = wallMs(slot.start_time);
         const hoursUntilStart = (startMs - now) / (1000 * 60 * 60);
 
         // Only act in the 2h window before start
@@ -352,8 +353,8 @@ serve(async (req) => {
         if (!slot?.start_time) continue;
 
         // Trigger at 2h before start
-        const cutoffMs = new Date(slot.start_time).getTime() - 2 * 60 * 60 * 1000;
-        if (Date.now() < cutoffMs) continue;
+        const cutoffMs = wallMs(slot.start_time) - 2 * 60 * 60 * 1000;
+        if (wallNowMs() < cutoffMs) continue;
 
         const N = game.current_players ?? 1;
         const courtPriceOpen: number = game.court_price ?? (game.price_per_player ?? 0) * 18;
@@ -459,8 +460,8 @@ serve(async (req) => {
         if (!slot?.start_time) continue;
 
         // Trigger at 24h before start
-        const cutoffMs = new Date(slot.start_time).getTime() - 24 * 60 * 60 * 1000;
-        if (Date.now() < cutoffMs) continue;
+        const cutoffMs = wallMs(slot.start_time) - 24 * 60 * 60 * 1000;
+        if (wallNowMs() < cutoffMs) continue;
 
         try {
           const piId = await organizerPi(stripeKeyFull, game);
@@ -532,8 +533,8 @@ serve(async (req) => {
         if (!slot?.start_time) continue;
 
         // Trigger at 2h before start (player entry closes + capture)
-        const cutoffMs = new Date(slot.start_time).getTime() - 2 * 60 * 60 * 1000;
-        if (Date.now() < cutoffMs) continue;
+        const cutoffMs = wallMs(slot.start_time) - 2 * 60 * 60 * 1000;
+        if (wallNowMs() < cutoffMs) continue;
 
         const baseline = resolveMinPlayers(game.sport_type ?? null);
 
@@ -643,7 +644,7 @@ serve(async (req) => {
       // Real end of the session (a 1h30 game's own slot ends after 30 min)
       const gameEnd = game.scheduled_end_at ?? slot?.end_time;
       if (!gameEnd) continue;
-      if (new Date() < new Date(gameEnd)) continue; // game hasn't ended yet
+      if (wallNowMs() < wallMs(gameEnd)) continue; // game hasn't ended yet
 
       const minPlayers = resolveMinPlayers(game.sport_type ?? null);
 
@@ -694,10 +695,10 @@ serve(async (req) => {
       }
 
       // Real end of the session, not the end of its first 30-min slot
-      const endTime = new Date(game.scheduled_end_at ?? slot.end_time);
+      const endTime = new Date(wallMs(game.scheduled_end_at ?? slot.end_time));
       const threshold = new Date(endTime.getTime() + PENDING_RESULTS_DELAY_MINUTES * 60 * 1000);
 
-      if (new Date() < threshold) continue; // not yet
+      if (wallNowMs() < threshold.getTime()) continue; // not yet
 
       // Transition status
       const { error: updateErr } = await supabase
@@ -759,10 +760,10 @@ serve(async (req) => {
         continue;
       }
 
-      const endTime = new Date(game.scheduled_end_at ?? slot.end_time);
+      const endTime = new Date(wallMs(game.scheduled_end_at ?? slot.end_time));
       const windowExpiry = new Date(endTime.getTime() + RESULT_WINDOW_HOURS * 60 * 60 * 1000);
 
-      if (new Date() < windowExpiry) continue; // window still open
+      if (wallNowMs() < windowExpiry.getTime()) continue; // window still open
 
       const { error: updateErr } = await supabase
         .from('games')

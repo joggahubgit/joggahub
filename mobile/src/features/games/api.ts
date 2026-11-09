@@ -5,7 +5,7 @@
  * the backend (cron / edge functions).
  */
 import { supabase } from '@/lib/supabase';
-import { CAPTURE_CUTOFF_HOURS, getMinPlayersForSport, PLAYER_CANCEL_CUTOFF_HOURS } from '@/lib/shared';
+import { CAPTURE_CUTOFF_HOURS, getMinPlayersForSport, PLAYER_CANCEL_CUTOFF_HOURS, wallMs, wallNowMs } from '@/lib/shared';
 
 const ACTIVE = ['scheduled', 'confirmed_booking'];
 
@@ -257,7 +257,7 @@ export async function fetchGameDetail(id: string): Promise<GameDetail | null> {
     endAt = endAt ?? slot?.end_time ?? null;
   }
 
-  const msUntilStart = startTime ? new Date(startTime).getTime() - Date.now() : Infinity;
+  const msUntilStart = startTime ? wallMs(startTime) - wallNowMs() : Infinity;
 
   const unavailable =
     game.status === 'cancelled' ? 'cancelled' : game.status === 'expired' || (game.current_players ?? 0) === 0 ? 'inactive' : null;

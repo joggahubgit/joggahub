@@ -9,7 +9,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import {
   METADATA_VERSION, UserError, assertReturnUrl, checkoutExpiresAt, corsHeaders, durationOrNull, json,
-  playerRule, round2, serviceFeeFor, wallAddMinutes, wallLabel, wallStart, withSessionId,
+  playerRule, round2, serviceFeeFor, wallAddMinutes, wallLabel, wallMs, wallNowMs, wallStart, withSessionId,
 } from '../_shared/checkout.ts';
 import { customerFor, scheduledCheckoutParams, shouldSchedule } from '../_shared/scheduled.ts';
 
@@ -69,7 +69,7 @@ serve(async (req) => {
     } else {
       throw new UserError('Horário não informado.');
     }
-    if (new Date(startTime).getTime() <= Date.now()) throw new UserError('Este horário já passou.');
+    if (wallMs(startTime) <= wallNowMs()) throw new UserError('Este horário já passou.');
 
     // The whole session must still be free.
     const startWall = wallStart(startTime);

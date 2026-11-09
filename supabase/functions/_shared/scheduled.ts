@@ -6,7 +6,8 @@
 // do início e, dali em diante, tudo segue igual a uma retenção feita na hora.
 
 import Stripe from 'https://esm.sh/stripe@14.21.0';
-import { METADATA_VERSION, checkoutExpiresAt } from './checkout.ts';
+import { METADATA_VERSION, checkoutExpiresAt, wallMs, wallNowMs } from './checkout.ts';
+export { wallMs, wallNowMs };
 
 // deno-lint-ignore no-explicit-any
 type Db = any;
@@ -15,12 +16,6 @@ export const HOLD_DAYS_BEFORE = 6;
 /** Prazo para o jogador pagar quando o banco recusa a retenção automática. */
 export const RETRY_HOURS = 24;
 
-/** "Agora" em Brasília na convenção dos horários gravados (wall clock). */
-export function wallNowMs() {
-  const s = new Date().toLocaleString('sv-SE', { timeZone: 'America/Sao_Paulo' }).replace(' ', 'T');
-  return new Date(`${s}Z`).getTime();
-}
-export const wallMs = (iso: string) => Date.parse(`${iso.substring(0, 19)}Z`);
 export const wallIso = (ms: number) => new Date(ms).toISOString().substring(0, 19);
 
 /** Mais de 6 dias até o início: agora só salva o cartão. */

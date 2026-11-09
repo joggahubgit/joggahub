@@ -52,6 +52,18 @@ export function wallAddMinutes(wall: string, minutes: number) {
   return d.toISOString().substring(0, 19);
 }
 
+/**
+ * "Agora" em Brasília na mesma convenção dos horários gravados (wall clock).
+ * NUNCA compare um horário gravado com Date.now(): o relógio UTC está 3h à
+ * frente de Brasília e tudo aconteceria 3h antes do prometido.
+ */
+export function wallNowMs() {
+  const s = new Date().toLocaleString('sv-SE', { timeZone: 'America/Sao_Paulo' }).replace(' ', 'T');
+  return Date.parse(`${s}Z`);
+}
+/** Horário gravado (wall clock, ex.: "2026-11-18T20:00:00+00:00") em ms, sem fuso. */
+export const wallMs = (iso: string) => Date.parse(`${iso.substring(0, 19)}Z`);
+
 export function wallLabel(startTime: string) {
   const [y, m, d] = startTime.substring(0, 10).split('-');
   return { date: `${d}/${m}/${y}`, time: startTime.substring(11, 16) };

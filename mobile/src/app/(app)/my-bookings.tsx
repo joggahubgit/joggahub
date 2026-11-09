@@ -12,7 +12,7 @@ import { MyClassesSection } from '@/features/classes/components';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { fetchMyBookings, type BookingItem } from '@/features/bookings/api';
-import { wallDate, wallTime } from '@/lib/shared';
+import { realToWallMs, wallDate, wallMs, wallTime } from '@/lib/shared';
 import palette from '../../../tailwind.palette';
 
 const PAGE = 10;
@@ -88,10 +88,11 @@ export default function MyBookings() {
     q.refetch();
   };
   // Captured once per load (like the web's `now`), keeping render pure.
-  const nowMs = q.dataUpdatedAt;
+  // "Agora" de Brasília (mesma convenção dos horários gravados), uma vez por carga
+  const nowMs = realToWallMs(q.dataUpdatedAt);
 
   const items = q.data ?? [];
-  const isUpcoming = (i: BookingItem) => ACTIVE.includes(i.status) && new Date(i.startTime).getTime() >= nowMs;
+  const isUpcoming = (i: BookingItem) => ACTIVE.includes(i.status) && wallMs(i.startTime) >= nowMs;
   const canCancel = (i: BookingItem) => i.type === 'slot' && isUpcoming(i) && !i.withinCancelCutoff;
   const upcoming = items.filter(isUpcoming);
   const past = items.filter(i => !isUpcoming(i));

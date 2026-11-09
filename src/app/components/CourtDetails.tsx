@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { wallMs, wallNowMs } from '@/app/lib/wallClock';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, MapPin, Star, Clock, Users, Share2, Heart, Phone, Mail, ChevronLeft, ChevronRight, GraduationCap, Loader2, Plus, Minus, Lock } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -317,8 +318,8 @@ const CourtDetails: React.FC = () => {
     gameBySlotId: Record<string, string>,
     fallbackPrice: number,
   ): SlotItem[] {
-    const now = new Date();
-    const futureSlots = allSlots.filter(s => new Date(s.start_time) > now);
+    const now = wallNowMs();
+    const futureSlots = allSlots.filter(s => wallMs(s.start_time) > now);
 
     const bookedIntervals = allSlots
       .filter(s => !s.is_available)

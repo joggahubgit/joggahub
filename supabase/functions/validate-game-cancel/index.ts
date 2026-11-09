@@ -17,6 +17,7 @@
  * by cancel-game / cancel-booking edge functions. This function only validates permission.
  */
 
+import { wallMs, wallNowMs } from '../_shared/checkout.ts';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -86,8 +87,9 @@ serve(async (req) => {
       return respond(200, { allowed: true });
     }
 
-    const startTime = new Date(slot.start_time); // stored in UTC by Supabase
-    const now = new Date();
+    // Horário gravado em wall clock (Brasília): compara com o "agora" de Brasília
+    const startTime = new Date(wallMs(slot.start_time));
+    const now = new Date(wallNowMs());
     const msUntilStart = startTime.getTime() - now.getTime();
     const hoursUntilStart = msUntilStart / (1000 * 60 * 60);
 

@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { getMinPlayersForSport, PLAYER_CANCEL_CUTOFF_HOURS } from '@/app/lib/gameConfig';
 import MyClassesSection from './classes/MyClassesSection';
+import { wallMs, wallNowMs } from '@/app/lib/wallClock';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -126,7 +127,7 @@ export default function MyBookings() {
         const slot = slotMap[b.slot_id];
         const court = courtMap[slot.court_id];
         const venue = court ? venueMap[court.venue_id] : null;
-        const msUntilStart = new Date(slot.start_time).getTime() - Date.now();
+        const msUntilStart = wallMs(slot.start_time) - wallNowMs();
         const withinCancelCutoff = msUntilStart < PLAYER_CANCEL_CUTOFF_HOURS * 60 * 60 * 1000;
         return {
           id: b.id,
@@ -212,7 +213,7 @@ export default function MyBookings() {
 
       // 12h cancel cutoff based on scheduled_at (= slot start_time)
       const msUntilStart = g.scheduled_at
-        ? new Date(g.scheduled_at).getTime() - Date.now()
+        ? wallMs(g.scheduled_at) - wallNowMs()
         : Infinity;
       const withinCancelCutoff = msUntilStart < PLAYER_CANCEL_CUTOFF_HOURS * 60 * 60 * 1000;
 
@@ -305,11 +306,11 @@ export default function MyBookings() {
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
-  const now = new Date();
+  const now = wallNowMs();
 
   function isUpcoming(item: Item) {
     const activeStatuses = ['confirmed', 'open', 'scheduled', 'confirmed_booking'];
-    return activeStatuses.includes(item.status) && new Date(item.startTime) >= now;
+    return activeStatuses.includes(item.status) && wallMs(item.startTime) >= now;
   }
 
   function canCancel(item: Item) {

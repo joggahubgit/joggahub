@@ -6,6 +6,24 @@
  * text instead, like the rest of the app does with substring(11, 16).
  */
 
+/**
+ * "Agora" em Brasília na mesma convenção dos horários gravados, em ms.
+ * Compare horários de partida/slot com isto, NUNCA com Date.now(): o relógio
+ * UTC está 3h à frente e tudo aconteceria 3h antes do prometido.
+ */
+export function wallNowMs() {
+  return realToWallMs(Date.now());
+}
+
+/** Um instante real (ms, ex.: Date.now()) no relógio de Brasília (wall clock). */
+export function realToWallMs(ms: number) {
+  const s = new Date(ms).toLocaleString('sv-SE', { timeZone: 'America/Sao_Paulo' }).replace(' ', 'T');
+  return Date.parse(`${s}Z`);
+}
+
+/** Horário gravado (wall clock) em ms, sem conversão de fuso. */
+export const wallMs = (iso: string) => Date.parse(`${iso.substring(0, 19)}Z`);
+
 /** "HH:MM" exactly as stored. */
 export function wallTime(iso: string) {
   return iso.substring(11, 16);

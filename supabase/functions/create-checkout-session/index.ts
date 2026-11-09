@@ -12,7 +12,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import {
   CAPTURE_CUTOFF_HOURS, METADATA_VERSION, SPORT_LABELS, UserError, assertReturnUrl, checkoutExpiresAt,
-  corsHeaders, durationOrNull, json, playerRule, round2, serviceFeeFor, wallLabel, withSessionId,
+  corsHeaders, durationOrNull, json, playerRule, round2, serviceFeeFor, wallLabel, wallMs, wallNowMs, withSessionId,
 } from '../_shared/checkout.ts';
 import { customerFor, scheduledCheckoutParams, shouldSchedule } from '../_shared/scheduled.ts';
 
@@ -56,7 +56,7 @@ serve(async (req) => {
         .eq('id', body.slotId).maybeSingle();
       if (!slot) throw new UserError('Horário não encontrado.');
       if (!slot.is_available) throw new UserError('Este horário já foi reservado.');
-      if (new Date(slot.start_time).getTime() <= Date.now()) throw new UserError('Este horário já passou.');
+      if (wallMs(slot.start_time) <= wallNowMs()) throw new UserError('Este horário já passou.');
       const { data: activeGame } = await db.from('games').select('id').eq('slot_id', slot.id)
         .not('status', 'in', '("expired","cancelled")').maybeSingle();
       if (activeGame) throw new UserError('Este horário já tem uma partida.');
@@ -106,8 +106,8 @@ serve(async (req) => {
           const { data: target } = await db.from('profiles').select('id').eq('id', playerId).maybeSingle();
           if (!target) throw new UserError('Jogador não encontrado.');
         }
-        const cutoff = new Date(startTime).getTime() - CAPTURE_CUTOFF_HOURS * 3600_000;
-        if (Date.now() >= cutoff) throw new UserError('As inscrições para esta partida já fecharam.');
+        const cutoff = wallMs(startTime) - CAPTURE_CUTOFF_HOURS * 3600_000;
+        if (wallNowMs() >= cutoff) throw new UserError('As inscrições para esta partida já fecharam.');
 
         const { data: roster } = await db.from('game_players').select('player_id, team').eq('game_id', game.id);
         if ((roster ?? []).some((p: { player_id: string }) => p.player_id === playerId)) {

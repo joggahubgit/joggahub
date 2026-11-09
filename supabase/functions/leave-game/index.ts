@@ -9,7 +9,7 @@
 import Stripe from 'https://esm.sh/stripe@14.21.0';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { SPORT_LABELS, UserError, corsHeaders, json, playerRule } from '../_shared/checkout.ts';
+import { SPORT_LABELS, UserError, corsHeaders, json, playerRule, wallMs, wallNowMs } from '../_shared/checkout.ts';
 
 const CANCEL_CUTOFF_HOURS = 24;
 
@@ -102,7 +102,7 @@ serve(async (req) => {
       const { data: slot } = await db.from('slots').select('start_time').eq('id', game.slot_id).maybeSingle();
       start = slot?.start_time ?? start;
     }
-    if (start && (new Date(start).getTime() - Date.now()) / 3600_000 < CANCEL_CUTOFF_HOURS) {
+    if (start && (wallMs(start) - wallNowMs()) / 3600_000 < CANCEL_CUTOFF_HOURS) {
       throw new UserError(`Cancelamento não permitido dentro das ${CANCEL_CUTOFF_HOURS}h anteriores à partida`);
     }
 

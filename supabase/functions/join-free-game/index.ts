@@ -4,7 +4,7 @@
 // Replaces the browser inserting into game_players directly.
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { CAPTURE_CUTOFF_HOURS, UserError, corsHeaders, json, playerRule } from '../_shared/checkout.ts';
+import { CAPTURE_CUTOFF_HOURS, UserError, corsHeaders, json, playerRule, wallMs, wallNowMs } from '../_shared/checkout.ts';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -41,7 +41,7 @@ serve(async (req) => {
       const { data: slot } = await db.from('slots').select('start_time').eq('id', game.slot_id).maybeSingle();
       start = slot?.start_time ?? start;
     }
-    if (start && Date.now() >= new Date(start).getTime() - CAPTURE_CUTOFF_HOURS * 3600_000) {
+    if (start && wallNowMs() >= wallMs(start) - CAPTURE_CUTOFF_HOURS * 3600_000) {
       throw new UserError('As entradas para esta partida já fecharam.');
     }
 

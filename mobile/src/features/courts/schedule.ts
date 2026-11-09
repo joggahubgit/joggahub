@@ -7,6 +7,8 @@
  * Times are wall-clock "HH:MM" read straight from the stored text — never
  * converted through the device timezone (see wallClock.ts).
  */
+import { wallMs, wallNowMs } from '@/lib/shared';
+
 export interface RawSlot {
   id: string;
   start_time: string;
@@ -45,9 +47,9 @@ export function buildSlotGrid(opts: {
   gameBySlotId: Record<string, string>;
   now?: Date;
 }): SlotItem[] {
-  const now = opts.now ?? new Date();
+  const now = opts.now ? opts.now.getTime() : wallNowMs();
   // Same "future" test as the web, so both apps list identical slots.
-  const future = opts.slots.filter(s => new Date(s.start_time) > now);
+  const future = opts.slots.filter(s => wallMs(s.start_time) > now);
 
   const booked = opts.slots
     .filter(s => !s.is_available)

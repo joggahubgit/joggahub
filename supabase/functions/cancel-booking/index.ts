@@ -1,3 +1,4 @@
+import { wallMs, wallNowMs } from '../_shared/checkout.ts';
 import Stripe from 'https://esm.sh/stripe@14.21.0';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -141,7 +142,7 @@ serve(async (req) => {
     // ── Booking without a game (legacy slot booking) ──
     if (byOwner && booking.slot_id) {
       const { data: s0 } = await supabase.from('slots').select('start_time').eq('id', booking.slot_id).maybeSingle();
-      if (s0?.start_time && (new Date(s0.start_time).getTime() - Date.now()) / 3600_000 < CANCEL_CUTOFF_HOURS) {
+      if (s0?.start_time && (wallMs(s0.start_time) - wallNowMs()) / 3600_000 < CANCEL_CUTOFF_HOURS) {
         throw new Error(`Cancelamento não permitido dentro das ${CANCEL_CUTOFF_HOURS}h anteriores ao horário. Entre em contato com o clube.`);
       }
     }
