@@ -8,6 +8,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { CheckCircle, ChevronDown, ChevronUp, Clock, Lock, MapPin, ShieldCheck, Users, X } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { calcFees, startCheckout } from '@/features/payments/checkout';
+import { ScheduledHoldNotice } from '@/features/payments/scheduled';
 import { supabase } from '@/lib/supabase';
 import palette from '../../../tailwind.palette';
 
@@ -210,6 +211,8 @@ export default function JoinGameReview() {
             )}
           </View>
         </View>
+
+        {!!p.date && !!p.time && <ScheduledHoldNotice startIso={`${p.date}T${p.time}`} amount={total} chargeText="cobrado 2h antes da partida; pode ficar menor se mais jogadores entrarem" />}
 
         {/* Cancellation policy */}
         <View className="bg-white rounded-2xl border border-gray-200 overflow-hidden">

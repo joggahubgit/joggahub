@@ -14,7 +14,7 @@ import { CLASS_CAPTURE_HOURS, CLASS_LEAVE_HOURS, wallDateTimeLabel } from '@/lib
 import palette from '../../../../tailwind.palette';
 
 type State = { kind: 'waiting' }
-  | { kind: 'done'; classId: string; held: boolean; chargeAt?: string; leaveUntil?: string }
+  | { kind: 'done'; classId: string; held: boolean; chargeAt?: string; leaveUntil?: string; holdOn?: string }
   | { kind: 'failed'; error: string };
 
 export default function ClassPaymentScreen() {
@@ -43,11 +43,12 @@ export default function ClassPaymentScreen() {
           const first = f?.starts_at as string | undefined;
           setState({
             kind: 'done', classId: data.classId, held: !!en?.payment_held,
+            holdOn: data.scheduled?.holdAt ? wallDateTimeLabel(data.scheduled.holdAt) : undefined,
             chargeAt: first ? wallDateTimeLabel(first, CLASS_CAPTURE_HOURS) : undefined,
             leaveUntil: first ? wallDateTimeLabel(first, CLASS_LEAVE_HOURS) : undefined,
           });
           qc.invalidateQueries();
-          sendClassEmail(data.classId, sessionId);
+          sendClassEmail(data.classId, sessionId, data.scheduled?.holdAt);
           return;
         }
         if (data?.status === 'failed') {
@@ -83,7 +84,9 @@ export default function ClassPaymentScreen() {
             <Text className="text-sm text-gray-500 mt-1 text-center">Sua vaga está garantida em todas as aulas.</Text>
             <View className="mt-4 bg-gray-50 rounded-2xl p-4 w-full gap-1">
               <Text className="text-sm text-gray-600">
-                {state.held
+                {state.holdOn
+                  ? <><Text className="text-sm font-bold text-gray-900">Nada foi cobrado agora.</Text> Seu cartão ficou salvo: em <Text className="text-sm font-bold text-gray-900">{state.holdOn}</Text> reservamos o valor, que é cobrado em <Text className="text-sm font-bold text-gray-900">{state.chargeAt}</Text>. Se o banco recusar, avisamos e você tem 24h para pagar.</>
+                  : state.held
                   ? <>O valor está <Text className="text-sm font-bold text-gray-900">reservado no seu cartão</Text> e só será cobrado em <Text className="text-sm font-bold text-gray-900">{state.chargeAt}</Text>.</>
                   : <>O pagamento foi <Text className="text-sm font-bold text-gray-900">cobrado no seu cartão</Text>.</>}
               </Text>

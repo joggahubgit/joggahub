@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { CheckCircle, ChevronDown, ChevronUp, Clock, MapPin, ShieldCheck, Users, X } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { calcFees, startCheckout } from '@/features/payments/checkout';
+import { ScheduledHoldNotice } from '@/features/payments/scheduled';
 import palette from '../../../tailwind.palette';
 
 type Params = {
@@ -144,6 +145,8 @@ export default function OpenGameReview() {
             <Text className="text-2xl font-bold text-violet-600">R$ {total.toFixed(2)}</Text>
           </View>
         </View>
+
+        {!!p.date && !!p.time && <ScheduledHoldNotice startIso={`${p.date}T${p.time}`} amount={total} chargeText="cobrado 2h antes da partida; pode ficar menor se mais jogadores entrarem" />}
 
         {/* Cancellation policy */}
         <View className="bg-white rounded-2xl border border-gray-200 overflow-hidden">

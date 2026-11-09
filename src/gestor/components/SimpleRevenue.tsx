@@ -21,7 +21,7 @@ type Kind = 'partida_fechada' | 'partida_aberta' | 'day_use' | 'aula' | 'reserva
 type ShownKind = Exclude<Kind, 'reserva'>;
 /** Reserva antiga (sem partida ligada) aparece como partida fechada. */
 const shownKind = (k: Kind): ShownKind => (k === 'reserva' ? 'partida_fechada' : k);
-type Status = 'recebido' | 'a_cobrar' | 'reservado' | 'pendente' | 'aguardando' | 'cancelado';
+type Status = 'recebido' | 'a_cobrar' | 'reservado' | 'agendado' | 'pendente' | 'aguardando' | 'cancelado';
 
 interface Entry {
   kind: Kind; ref_id: string; event_at: string; court_id: string; court_name: string;
@@ -61,13 +61,14 @@ const STATUS: Record<Status, { label: string; pill: string; stripe: string }> = 
   recebido:   { label: 'Pago',                     pill: 'bg-green-100 text-green-700',  stripe: 'Bem-sucedido' },
   a_cobrar:   { label: 'Retido · será cobrado',    pill: 'bg-teal-100 text-teal-700',    stripe: 'Não capturado' },
   reservado:  { label: 'Retido · pode cancelar',   pill: 'bg-blue-100 text-blue-700',    stripe: 'Não capturado' },
+  agendado:   { label: 'Agendado · cartão salvo',  pill: 'bg-sky-100 text-sky-700',      stripe: 'Ainda não criado (retém 6 dias antes)' },
   pendente:   { label: 'Aguardando pagamento',     pill: 'bg-amber-100 text-amber-700',  stripe: '—' },
   aguardando: { label: 'Aguardando jogadores',     pill: 'bg-orange-100 text-orange-700', stripe: 'Não capturado' },
   cancelado:  { label: 'Cancelado / reembolsado',  pill: 'bg-gray-100 text-gray-500',    stripe: 'Cancelado / Reembolsado' },
 };
 type Filter = 'recebido' | 'a_cobrar' | 'reservado' | 'aguardando_all' | null;
 const FILTER_STATUSES: Record<Exclude<Filter, null>, Status[]> = {
-  recebido: ['recebido'], a_cobrar: ['a_cobrar'], reservado: ['reservado'], aguardando_all: ['pendente', 'aguardando'],
+  recebido: ['recebido'], a_cobrar: ['a_cobrar'], reservado: ['reservado'], aguardando_all: ['pendente', 'aguardando', 'agendado'],
 };
 
 const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -120,7 +121,7 @@ export function SimpleRevenue({ venueId, onOpenAgenda }: SimpleRevenueProps) {
   const received = sum(['recebido']);
   const toCharge = sum(['a_cobrar']);
   const reserved = sum(['reservado']);
-  const waiting = sum(['pendente', 'aguardando']);
+  const waiting = sum(['pendente', 'aguardando', 'agendado']);
   const potential = capacity.reduce((s, c) => s + Number(c.potential), 0);
 
   const byKind = (Object.keys(KIND) as ShownKind[]).map(k => {
@@ -199,7 +200,7 @@ export function SimpleRevenue({ venueId, onOpenAgenda }: SimpleRevenueProps) {
             <Kpi icon={Wallet} tone="blue" label="Retido · pode cancelar" value={reserved} active={filter === 'reservado'} onClick={() => pick('reservado')}
               hint="O jogador ainda pode cancelar até 24h antes · no Stripe: Não capturado" />
             <Kpi icon={Clock} tone="amber" label="Aguardando" value={waiting} active={filter === 'aguardando_all'} onClick={() => pick('aguardando_all')}
-              hint="Pagamento do jogador ou mínimo de jogadores" />
+              hint="Pagamento do jogador, mínimo de jogadores ou cartão salvo (o valor é reservado 6 dias antes)" />
             <Kpi icon={TrendingUp} tone="gray" label="Potencial" value={potential} hint="Horários livres que você criou, se forem vendidos" />
           </div>
 

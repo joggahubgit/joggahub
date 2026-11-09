@@ -161,6 +161,8 @@ export default function NotificationsScreen() {
               key={n.id}
               onPress={() => {
                 readOne(n.id);
+                // Banco recusou a retenção automática: abre o "Pagar agora"
+                if ((n.type as string) === 'payment_failed') { router.push('/pagamento-pendente' as never); return; }
                 if (!n.game_id) return;
                 if (n.type === 'chat_message') router.push({ pathname: '/game-chat/[id]', params: { id: n.game_id } });
                 else router.push({ pathname: '/game/[id]', params: { id: n.game_id } });

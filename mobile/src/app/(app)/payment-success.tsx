@@ -11,6 +11,7 @@ import { CheckCircle, Share2 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { supabase } from '@/lib/supabase';
 import { getEnv } from '@/lib/env';
+import { formatBRL, wallDateTimeLabel } from '@/lib/shared';
 import palette from '../../../tailwind.palette';
 
 type Params = {
@@ -27,7 +28,7 @@ type Params = {
   playerName?: string;
 };
 
-type Result = { kind: string; gameId: string | null };
+type Result = { kind: string; gameId: string | null; scheduled?: { holdAt: string; amount: number } | null };
 
 const POLL_MS = 1500;
 const DEADLINE_MS = 30_000;
@@ -56,7 +57,7 @@ export default function PaymentSuccess() {
         const { data } = await supabase.functions.invoke('finalize-checkout', { body: { sessionId } });
         if (cancelled) return;
         if (data?.status === 'done') {
-          setResult({ kind: data.kind, gameId: data.gameId ?? null });
+          setResult({ kind: data.kind, gameId: data.gameId ?? null, scheduled: data.scheduled ?? null });
           // Lists that show this purchase must refetch.
           qc.invalidateQueries();
           return;
@@ -138,7 +139,15 @@ export default function PaymentSuccess() {
                     {p.maxPlayers ? `${p.maxPlayers} jogadores · ` : ''}{split ? 'Divisão' : 'Você pagou tudo'}
                   </Text>
                 </View>
-                {!!p.price && <Text className="font-bold text-violet-600 text-sm">R$ {Number(p.price).toFixed(2)} retidos no cartão</Text>}
+                {!!p.price && !result.scheduled && <Text className="font-bold text-violet-600 text-sm">R$ {Number(p.price).toFixed(2)} retidos no cartão</Text>}
+              </View>
+            )}
+            {!!result.scheduled && (
+              <View className="bg-sky-50 border border-sky-200 rounded-2xl p-4">
+                <Text className="text-sm text-sky-900">
+                  <Text className="text-sm font-bold text-sky-900">Nada foi cobrado agora.</Text> Seu cartão ficou salvo: em{' '}
+                  <Text className="text-sm font-bold text-sky-900">{wallDateTimeLabel(result.scheduled.holdAt)}</Text> reservamos {formatBRL(Number(result.scheduled.amount))} no cartão. Se o banco recusar, avisamos e você tem 24h para pagar.
+                </Text>
               </View>
             )}
             {shareUrl && (
@@ -181,8 +190,16 @@ export default function PaymentSuccess() {
         <View className="w-16 h-16 bg-green-100 rounded-full items-center justify-center mb-4">
           <CheckCircle size={36} color={palette.green['600']} />
         </View>
-        <Text className="text-2xl font-bold text-gray-900 mb-2">Pagamento confirmado!</Text>
-        <Text className="text-gray-500 text-sm mb-8 text-center">{message}</Text>
+        <Text className="text-2xl font-bold text-gray-900 mb-2">{result.scheduled ? 'Vaga garantida!' : 'Pagamento confirmado!'}</Text>
+        <Text className={`text-gray-500 text-sm text-center ${result.scheduled ? 'mb-4' : 'mb-8'}`}>{message}</Text>
+        {!!result.scheduled && (
+          <View className="bg-sky-50 border border-sky-200 rounded-2xl p-4 mb-6 w-full">
+            <Text className="text-sm text-sky-900">
+              <Text className="text-sm font-bold text-sky-900">Nada foi cobrado agora.</Text> Seu cartão ficou salvo: em{' '}
+              <Text className="text-sm font-bold text-sky-900">{wallDateTimeLabel(result.scheduled.holdAt)}</Text> reservamos {formatBRL(Number(result.scheduled.amount))} no cartão. Se o banco recusar, avisamos e você tem 24h para pagar.
+            </Text>
+          </View>
+        )}
         {result.gameId ? (
           <Pressable onPress={() => openGame(result.gameId!)} className="w-full bg-violet-600 py-4 rounded-2xl items-center active:bg-violet-700">
             <Text className="text-white font-bold text-base">Ver partida</Text>

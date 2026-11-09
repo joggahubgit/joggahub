@@ -12,6 +12,7 @@ import {
 } from '@/features/classes/api';
 import { CLASS_ENROLL_CUTOFF_HOURS, classLevelLabel, classPaymentPlan, classServiceFee, formatBRL, formatSessionDate } from '@/lib/shared';
 import { confirmAction } from '@/lib/confirm';
+import { ScheduledStatusBanner, useMyScheduledPayment } from '@/features/payments/scheduled';
 import palette from '../../../../tailwind.palette';
 
 export default function ClassDetailScreen() {
@@ -23,6 +24,7 @@ export default function ClassDetailScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const { payment: myScheduled, refresh: refreshScheduled } = useMyScheduledPayment({ classId: id }, notice);
 
   function goBack() {
     if (router.canGoBack()) router.back();
@@ -124,6 +126,7 @@ export default function ClassDetailScreen() {
               <Text className="text-green-800 text-sm flex-1">{notice}</Text>
             </View>
           )}
+          <ScheduledStatusBanner payment={myScheduled} onPaid={refreshScheduled} />
           {enrolled && (
             <View className="bg-violet-50 border border-violet-200 rounded-2xl p-4 flex-row gap-3">
               <CheckCircle size={20} color={palette.violet['600']} />
@@ -184,7 +187,7 @@ export default function ClassDetailScreen() {
             </View>
             <Text className="text-sm text-gray-600">
               Você paga o curso inteiro pelo app e garante a vaga em todas as aulas. Como nas partidas, o valor fica reservado no cartão e só é cobrado {CLASS_ENROLL_CUTOFF_HOURS}h antes da primeira aula
-              {plan ? <> (<Text className="text-sm font-bold text-gray-700">{plan.chargeAt}</Text>)</> : null}. Se você se inscrever com mais de 6 dias de antecedência, a cobrança é feita na hora.
+              {plan ? <> (<Text className="text-sm font-bold text-gray-700">{plan.chargeAt}</Text>)</> : null}. Se faltar mais de 6 dias, nada é cobrado agora: seu cartão fica salvo e o valor é reservado 6 dias antes{plan && !plan.hold ? <> (<Text className="text-sm font-bold text-gray-700">{plan.holdOn}</Text>)</> : null}.
             </Text>
             <Text className="text-sm text-gray-600">
               Desistiu? Sem custo até {LEAVE_REFUND_HOURS}h antes da primeira aula
@@ -228,7 +231,7 @@ export default function ClassDetailScreen() {
                   <Text className="text-xs text-gray-500 mb-2">
                     {plan.hold
                       ? <>O valor fica reservado no cartão e só é cobrado em <Text className="text-xs font-bold text-gray-700">{plan.chargeAt}</Text>. Desistência sem custo até {plan.leaveUntil}.</>
-                      : <>A primeira aula é daqui a mais de 6 dias, então o valor é cobrado na hora. Desistência com reembolso total até {plan.leaveUntil}.</>}
+                      : <>Nada é cobrado agora: seu cartão fica salvo. Em <Text className="text-xs font-bold text-gray-700">{plan.holdOn}</Text> reservamos o valor e ele é cobrado em {plan.chargeAt}. Desistência sem custo até {plan.leaveUntil}.</>}
                   </Text>
                 )}
                 <Pressable onPress={enroll} disabled={busy} className={`bg-violet-600 py-3.5 rounded-xl items-center ${busy ? 'opacity-60' : ''}`}>

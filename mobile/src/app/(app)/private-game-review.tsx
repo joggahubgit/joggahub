@@ -6,6 +6,7 @@ import { ArrowLeft, CalendarDays, ChevronRight, Clock, CreditCard, Lock, MapPin,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@/components/ui/Text';
 import { calcFees, startCheckout } from '@/features/payments/checkout';
+import { ScheduledHoldNotice } from '@/features/payments/scheduled';
 import { getMaxPlayersForSport, getMinPlayersForSport } from '@/lib/shared';
 import palette from '../../../tailwind.palette';
 
@@ -195,6 +196,11 @@ export default function PrivateGameReview() {
               </Text>
             )}
           </View>
+
+          {!!p.date && !!p.time && (
+            <ScheduledHoldNotice startIso={`${p.date}T${p.time}`} amount={holdTotal}
+              chargeText={p.payMode === 'split' ? 'o valor final é cobrado 2h antes da partida' : 'cobrado 24h antes da partida'} />
+          )}
 
           {/* Security badge */}
           <View className="bg-violet-50 rounded-2xl p-4 border border-violet-100 flex-row items-start gap-3">

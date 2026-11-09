@@ -16,6 +16,7 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import { fetchGameDetail, type GameDetail, type GamePlayer } from '@/features/games/api';
 import { GameResultSubmit } from '@/features/results/GameResultSubmit';
 import { calcFees, startCheckout } from '@/features/payments/checkout';
+import { ScheduledHoldNotice, ScheduledStatusBanner, useMyScheduledPayment } from '@/features/payments/scheduled';
 import { getEnv } from '@/lib/env';
 import { supabase } from '@/lib/supabase';
 import { confirmAction } from '@/lib/confirm';
@@ -82,6 +83,7 @@ export default function OpenGamePage() {
   const [copied, setCopied] = useState(false);
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState('');
+  const { payment: myScheduled, refresh: refreshScheduled } = useMyScheduledPayment({ gameId: id });
   const [pendingTeam, setPendingTeam] = useState<'a' | 'b'>('a');
   const [busy, setBusy] = useState(false);
   const [showAddPlayer, setShowAddPlayer] = useState(false);
@@ -533,6 +535,8 @@ export default function OpenGamePage() {
           )}
         </View>
 
+        <ScheduledStatusBanner payment={myScheduled} onPaid={refreshScheduled} className="mx-5 mt-3" />
+
         {!!joinError && (
           <View className="mx-5 mt-3 bg-red-50 rounded-xl px-4 py-3 border border-red-100">
             <Text className="text-sm text-red-500">{joinError}</Text>
@@ -758,6 +762,10 @@ export default function OpenGamePage() {
             </View>
           </View>
         </View>
+        {!withinJoinCutoff && !!g.scheduledAt && (
+          <ScheduledHoldNotice className="mb-4" startIso={g.scheduledAt} amount={joinFees.total}
+            chargeText="cobrado 2h antes da partida; pode ficar menor se mais jogadores entrarem" />
+        )}
         {withinJoinCutoff ? (
           <View className="w-full flex-row items-center justify-center gap-2 bg-gray-100 py-4 rounded-2xl">
             <Shield size={16} color={palette.gray['500']} />

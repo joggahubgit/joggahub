@@ -6,7 +6,7 @@ import { CLASS_CAPTURE_HOURS, CLASS_LEAVE_HOURS, classEnrolledEmail, formatSessi
 
 const sent = new Set<string>();
 
-export async function sendClassEmail(classId: string, sessionId: string) {
+export async function sendClassEmail(classId: string, sessionId: string, scheduledHoldAt?: string) {
   if (sent.has(sessionId)) return;
   sent.add(sessionId);
   try {
@@ -23,6 +23,7 @@ export async function sendClassEmail(classId: string, sessionId: string) {
     const first = s?.[0]?.starts_at;
     const html = classEnrolledEmail({
       held: !!e?.payment_held,
+      holdOn: scheduledHoldAt ? wallDateTimeLabel(scheduledHoldAt) : undefined,
       chargeAt: first ? wallDateTimeLabel(first, CLASS_CAPTURE_HOURS) : undefined,
       leaveUntil: first ? wallDateTimeLabel(first, CLASS_LEAVE_HOURS) : undefined,
       title: cls.title,
